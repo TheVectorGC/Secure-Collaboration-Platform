@@ -1,1 +1,40 @@
-spring.application.name=identity-service
+spring:
+  application:
+    name: identity-service
+  datasource:
+    url: jdbc:postgresql://localhost:5432/identity_db
+    username: identity_user
+    password: identity_password
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+  cloud:
+    vault:
+      enabled: true
+      uri: http://localhost:8200
+      token: ${VAULT_TOKEN:root}
+      kv:
+        enabled: false
+
+application:
+  security:
+    jwt:
+      issuer: identity-service
+      key-name: identity-service-jwt-ed25519
+      access-token-expiration: 15m
+    refresh-token:
+      expiration: 30d
+  initial-admin:
+    enabled: true
+    username: admin
+    email: admin@company.local
+    password: ${INITIAL_ADMIN_PASSWORD:InitialPassword123!}
+    first-name: System
+    last-name: Administrator
+
+logging:
+  level:
+    dev.identity-service: INFO

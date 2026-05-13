@@ -1,0 +1,11 @@
+databaseChangeLog:
+  - include:
+      file: db/changelog/changes/001-create-accounts-table.yaml
+  - include:
+      file: db/changelog/changes/002-create-profiles-table.yaml
+  - include:
+      file: db/changelog/changes/003-create-account-registrations-table.yaml
+  - include:
+      file: db/changelog/changes/004-create-devices-table.yaml
+  - include:
+      file: db/changelog/changes/005-create-auth-sessions-table.yaml

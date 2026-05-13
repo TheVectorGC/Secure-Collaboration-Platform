@@ -1,0 +1,81 @@
+databaseChangeLog:
+  - changeSet:
+      id: 004-create-devices-table
+      author: identity-service
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            tableExists:
+              tableName: devices
+      changes:
+        - createTable:
+            tableName: devices
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+
+              - column:
+                  name: account_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: device_name
+                  type: VARCHAR(100)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: platform
+                  type: VARCHAR(32)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: status
+                  type: VARCHAR(32)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: client_version
+                  type: VARCHAR(50)
+
+              - column:
+                  name: last_seen_at
+                  type: TIMESTAMP WITH TIME ZONE
+
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+
+        - addForeignKeyConstraint:
+            baseTableName: devices
+            baseColumnNames: account_id
+            constraintName: fk_devices_accounts
+            referencedTableName: accounts
+            referencedColumnNames: id
+            onDelete: CASCADE
+
+        - createIndex:
+            tableName: devices
+            indexName: idx_devices_account_id
+            columns:
+              - column:
+                  name: account_id
+
+        - createIndex:
+            tableName: devices
+            indexName: idx_devices_account_status
+            columns:
+              - column:
+                  name: account_id
+              - column:
+                  name: status

@@ -1,0 +1,131 @@
+databaseChangeLog:
+  - changeSet:
+      id: 005-create-auth-sessions-table
+      author: identity-service
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            tableExists:
+              tableName: auth_sessions
+      changes:
+        - createTable:
+            tableName: auth_sessions
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+
+              - column:
+                  name: account_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: device_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: refresh_token_hash
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: token_family_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: status
+                  type: VARCHAR(32)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: issued_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: last_used_at
+                  type: TIMESTAMP WITH TIME ZONE
+
+              - column:
+                  name: expires_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: rotated_at
+                  type: TIMESTAMP WITH TIME ZONE
+
+              - column:
+                  name: replaced_by_session_id
+                  type: UUID
+
+        - addForeignKeyConstraint:
+            baseTableName: auth_sessions
+            baseColumnNames: account_id
+            constraintName: fk_auth_sessions_accounts
+            referencedTableName: accounts
+            referencedColumnNames: id
+            onDelete: CASCADE
+
+        - addForeignKeyConstraint:
+            baseTableName: auth_sessions
+            baseColumnNames: device_id
+            constraintName: fk_auth_sessions_devices
+            referencedTableName: devices
+            referencedColumnNames: id
+            onDelete: CASCADE
+
+        - addForeignKeyConstraint:
+            baseTableName: auth_sessions
+            baseColumnNames: replaced_by_session_id
+            constraintName: fk_auth_sessions_replaced_by_session
+            referencedTableName: auth_sessions
+            referencedColumnNames: id
+            onDelete: SET NULL
+
+        - createIndex:
+            tableName: auth_sessions
+            indexName: idx_auth_sessions_refresh_token_hash
+            columns:
+              - column:
+                  name: refresh_token_hash
+
+        - createIndex:
+            tableName: auth_sessions
+            indexName: idx_auth_sessions_account_device_status
+            columns:
+              - column:
+                  name: account_id
+              - column:
+                  name: device_id
+              - column:
+                  name: status
+
+        - createIndex:
+            tableName: auth_sessions
+            indexName: idx_auth_sessions_device_status
+            columns:
+              - column:
+                  name: device_id
+              - column:
+                  name: status
+
+        - createIndex:
+            tableName: auth_sessions
+            indexName: idx_auth_sessions_token_family_id
+            columns:
+              - column:
+                  name: token_family_id
