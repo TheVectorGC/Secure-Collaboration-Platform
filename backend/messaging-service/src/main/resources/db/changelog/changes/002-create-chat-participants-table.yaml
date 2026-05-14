@@ -1,0 +1,77 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-create-chat-participants-table
+      author: messaging-service
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            tableExists:
+              tableName: chat_participants
+      changes:
+        - createTable:
+            tableName: chat_participants
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: chat_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: account_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: role
+                  type: VARCHAR(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: VARCHAR(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: joined_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: last_read_message_id
+                  type: UUID
+              - column:
+                  name: last_read_at
+                  type: TIMESTAMP WITH TIME ZONE
+        - addForeignKeyConstraint:
+            baseTableName: chat_participants
+            baseColumnNames: chat_id
+            constraintName: fk_chat_participants_chats
+            referencedTableName: chats
+            referencedColumnNames: id
+            onDelete: CASCADE
+        - addUniqueConstraint:
+            tableName: chat_participants
+            columnNames: chat_id, account_id
+            constraintName: uq_chat_participants_chat_account
+        - createIndex:
+            tableName: chat_participants
+            indexName: idx_chat_participants_account_status
+            columns:
+              - column:
+                  name: account_id
+              - column:
+                  name: status
+        - createIndex:
+            tableName: chat_participants
+            indexName: idx_chat_participants_chat_status
+            columns:
+              - column:
+                  name: chat_id
+              - column:
+                  name: status

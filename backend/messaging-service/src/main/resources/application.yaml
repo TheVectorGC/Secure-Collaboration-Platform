@@ -1,1 +1,36 @@
-spring.application.name=messaging-service
+server:
+  port: ${SERVER_PORT:8083}
+
+spring:
+  application:
+    name: messaging-service
+
+  datasource:
+    url: ${POSTGRES_URL:jdbc:postgresql://localhost:5432/messaging_db}
+    username: ${POSTGRES_USER:messaging_user}
+    password: ${POSTGRES_PASSWORD:messaging_password}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+
+  cloud:
+    vault:
+      uri: ${VAULT_URI:http://localhost:8200}
+      token: ${VAULT_TOKEN:root}
+      kv:
+        enabled: false
+
+application:
+  security:
+    jwt:
+      issuer: ${JWT_ISSUER:identity-service}
+      key-name: ${JWT_KEY_NAME:identity-service-jwt-ed25519}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html

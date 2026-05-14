@@ -1,0 +1,9 @@
+databaseChangeLog:
+  - include:
+      file: db/changelog/changes/001-create-chats-table.yaml
+  - include:
+      file: db/changelog/changes/002-create-chat-participants-table.yaml
+  - include:
+      file: db/changelog/changes/003-create-messages-table.yaml
+  - include:
+      file: db/changelog/changes/004-create-message-delivery-states-table.yaml
