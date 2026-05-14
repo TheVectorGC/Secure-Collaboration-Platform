@@ -1,4 +1,4 @@
-package dev.messagingservice.config;
+package dev.messagingservice.config.properties;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 

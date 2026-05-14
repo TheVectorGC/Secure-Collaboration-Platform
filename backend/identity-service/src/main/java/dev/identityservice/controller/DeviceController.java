@@ -1,6 +1,7 @@
 package dev.identityservice.controller;
 
 import dev.identityservice.model.dto.response.DeviceResponseDto;
+import dev.identityservice.model.dto.response.InternalDeviceResponseDto;
 import dev.identityservice.service.DeviceService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -33,10 +34,15 @@ public class DeviceController {
 
     @DeleteMapping("/{deviceId}")
     public ResponseEntity<Void> revokeCurrentAccountDevice(
-            Principal principal,
-            @PathVariable UUID deviceId
+        Principal principal,
+        @PathVariable UUID deviceId
     ) {
         deviceService.revokeCurrentAccountDevice(principal.getName(), deviceId);
         return new ResponseEntity<>(HttpStatus.OK);
+    }
+
+    @GetMapping("/{deviceId}/internal")
+    public ResponseEntity<InternalDeviceResponseDto> getInternalDevice(@PathVariable UUID deviceId) {
+        return ResponseEntity.ok(deviceService.getInternalDevice(deviceId));
     }
 }

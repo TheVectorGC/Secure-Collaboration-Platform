@@ -6,6 +6,7 @@ import dev.identityservice.exception.DeviceRegistrationException;
 import dev.identityservice.exception.DeviceRevokedException;
 import dev.identityservice.model.dto.request.LoginRequestDto;
 import dev.identityservice.model.dto.response.DeviceResponseDto;
+import dev.identityservice.model.dto.response.InternalDeviceResponseDto;
 import dev.identityservice.model.entity.AccountEntity;
 import dev.identityservice.model.entity.AuthSessionEntity;
 import dev.identityservice.model.entity.DeviceEntity;
@@ -45,21 +46,30 @@ public class DeviceServiceImpl implements DeviceService {
     @Transactional(readOnly = true)
     public List<DeviceResponseDto> getCurrentAccountDevices(String username) {
         AccountEntity accountEntity = accountRepository.findByUsername(username)
-                .orElseThrow(() -> new AccountNotFoundException("Account with username '" + username + "' not found."));
+            .orElseThrow(() -> new AccountNotFoundException("Account with username '" + username + "' not found."));
 
         return deviceRepository.findByAccountId(accountEntity.getId()).stream()
-                .map(this::mapToDeviceResponseDto)
-                .toList();
+            .map(this::mapToDeviceResponseDto)
+            .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public InternalDeviceResponseDto getInternalDevice(UUID deviceId) {
+        DeviceEntity deviceEntity = deviceRepository.findById(deviceId)
+            .orElseThrow(() -> new DeviceNotFoundException("Device with ID '" + deviceId + "' not found."));
+
+        return mapToInternalDeviceResponseDto(deviceEntity);
     }
 
     @Override
     @Transactional
     public void revokeCurrentAccountDevice(String username, UUID deviceId) {
         AccountEntity accountEntity = accountRepository.findByUsername(username)
-                .orElseThrow(() -> new AccountNotFoundException("Account with username '" + username + "' not found."));
+            .orElseThrow(() -> new AccountNotFoundException("Account with username '" + username + "' not found."));
 
         DeviceEntity deviceEntity = deviceRepository.findByIdAndAccountId(deviceId, accountEntity.getId())
-                .orElseThrow(() -> new DeviceNotFoundException("Device with ID '" + deviceId + "' not found."));
+            .orElseThrow(() -> new DeviceNotFoundException("Device with ID '" + deviceId + "' not found."));
 
         if (deviceEntity.getStatus() == DeviceStatus.REVOKED) {
             log.info("Device is already revoked. Device ID: {}.", deviceId);
@@ -78,8 +88,8 @@ public class DeviceServiceImpl implements DeviceService {
     @Transactional
     public void revokeDeviceSessions(UUID deviceId) {
         List<AuthSessionEntity> activeSessions = authSessionRepository.findByDeviceIdAndStatus(
-                deviceId,
-                AuthSessionStatus.ACTIVE
+            deviceId,
+            AuthSessionStatus.ACTIVE
         );
 
         activeSessions.forEach(authSessionEntity -> authSessionEntity.setStatus(AuthSessionStatus.REVOKED));
@@ -88,10 +98,10 @@ public class DeviceServiceImpl implements DeviceService {
 
     private DeviceEntity resolveExistingDevice(AccountEntity accountEntity, LoginRequestDto loginRequestDto) {
         DeviceEntity deviceEntity = deviceRepository.findByIdAndAccountId(
-                        loginRequestDto.deviceId(),
-                        accountEntity.getId()
-                )
-                .orElseThrow(() -> new DeviceNotFoundException("Device with ID '" + loginRequestDto.deviceId() + "' not found."));
+                loginRequestDto.deviceId(),
+                accountEntity.getId()
+            )
+            .orElseThrow(() -> new DeviceNotFoundException("Device with ID '" + loginRequestDto.deviceId() + "' not found."));
 
         if (deviceEntity.getStatus() == DeviceStatus.REVOKED) {
             throw new DeviceRevokedException("Device has been revoked.");
@@ -114,14 +124,14 @@ public class DeviceServiceImpl implements DeviceService {
         OffsetDateTime now = OffsetDateTime.now();
 
         DeviceEntity deviceEntity = DeviceEntity.builder()
-                .accountId(accountEntity.getId())
-                .deviceName(loginRequestDto.deviceName().trim())
-                .platform(loginRequestDto.platform())
-                .status(DeviceStatus.ACTIVE)
-                .clientVersion(trimToNull(loginRequestDto.clientVersion()))
-                .lastSeenAt(now)
-                .createdAt(now)
-                .build();
+            .accountId(accountEntity.getId())
+            .deviceName(loginRequestDto.deviceName().trim())
+            .platform(loginRequestDto.platform())
+            .status(DeviceStatus.ACTIVE)
+            .clientVersion(trimToNull(loginRequestDto.clientVersion()))
+            .lastSeenAt(now)
+            .createdAt(now)
+            .build();
 
         DeviceEntity savedDeviceEntity = deviceRepository.save(deviceEntity);
 
@@ -142,13 +152,21 @@ public class DeviceServiceImpl implements DeviceService {
 
     private DeviceResponseDto mapToDeviceResponseDto(DeviceEntity deviceEntity) {
         return new DeviceResponseDto(
-                deviceEntity.getId(),
-                deviceEntity.getDeviceName(),
-                deviceEntity.getPlatform(),
-                deviceEntity.getStatus(),
-                deviceEntity.getClientVersion(),
-                deviceEntity.getLastSeenAt(),
-                deviceEntity.getCreatedAt()
+            deviceEntity.getId(),
+            deviceEntity.getDeviceName(),
+            deviceEntity.getPlatform(),
+            deviceEntity.getStatus(),
+            deviceEntity.getClientVersion(),
+            deviceEntity.getLastSeenAt(),
+            deviceEntity.getCreatedAt()
+        );
+    }
+
+    private InternalDeviceResponseDto mapToInternalDeviceResponseDto(DeviceEntity deviceEntity) {
+        return new InternalDeviceResponseDto(
+            deviceEntity.getId(),
+            deviceEntity.getAccountId(),
+            deviceEntity.getStatus()
         );
     }
 

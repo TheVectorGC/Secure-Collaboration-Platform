@@ -18,6 +18,8 @@ import dev.messagingservice.repository.ChatRepository;
 import dev.messagingservice.repository.MessageDeliveryStateRepository;
 import dev.messagingservice.repository.MessageRepository;
 import dev.messagingservice.service.MessageService;
+import dev.messagingservice.service.MessagingEventFactory;
+import dev.messagingservice.service.MessagingEventPublisher;
 import java.time.OffsetDateTime;
 import java.util.Comparator;
 import java.util.List;
@@ -37,6 +39,8 @@ public class MessageServiceImpl implements MessageService {
     private final ChatParticipantRepository chatParticipantRepository;
     private final MessageRepository messageRepository;
     private final MessageDeliveryStateRepository messageDeliveryStateRepository;
+    private final MessagingEventPublisher messagingEventPublisher;
+    private final MessagingEventFactory messagingEventFactory;
 
     @Override
     @Transactional
@@ -66,8 +70,10 @@ public class MessageServiceImpl implements MessageService {
             .build();
 
         MessageEntity savedMessageEntity = messageRepository.save(messageEntity);
-        createDeliveryStates(savedMessageEntity, currentAccountId, now);
+        List<UUID> recipientAccountIds = createDeliveryStates(savedMessageEntity, currentAccountId);
         updateChatTimestamp(chatId, now);
+
+        publishMessageCreatedEvent(savedMessageEntity, recipientAccountIds);
 
         log.info("Message created. Message ID: {}, chat ID: {}.", savedMessageEntity.getId(), chatId);
         return mapToMessageResponseDto(savedMessageEntity, messageDeliveryStateRepository.findByMessageId(savedMessageEntity.getId()));
@@ -109,6 +115,8 @@ public class MessageServiceImpl implements MessageService {
             deliveryStateEntity.setStatus(MessageDeliveryStatus.DELIVERED);
             deliveryStateEntity.setDeliveredAt(OffsetDateTime.now());
             messageDeliveryStateRepository.save(deliveryStateEntity);
+
+            publishMessageDeliveredEvent(chatId, messageId, currentAccountId, messageEntity.getSenderAccountId());
         }
     }
 
@@ -134,6 +142,10 @@ public class MessageServiceImpl implements MessageService {
         participantEntity.setLastReadMessageId(messageEntity.getId());
         participantEntity.setLastReadAt(now);
         chatParticipantRepository.save(participantEntity);
+
+        if (!messageEntity.getSenderAccountId().equals(currentAccountId)) {
+            publishMessageReadEvent(chatId, messageEntity.getId(), currentAccountId, messageEntity.getSenderAccountId());
+        }
     }
 
     private void validateActiveParticipant(UUID chatId, UUID accountId) {
@@ -159,7 +171,7 @@ public class MessageServiceImpl implements MessageService {
         return messageEntity;
     }
 
-    private void createDeliveryStates(MessageEntity messageEntity, UUID senderAccountId, OffsetDateTime now) {
+    private List<UUID> createDeliveryStates(MessageEntity messageEntity, UUID senderAccountId) {
         List<ChatParticipantEntity> activeParticipants = chatParticipantRepository.findByChatIdAndStatus(
             messageEntity.getChatId(),
             ChatParticipantStatus.ACTIVE
@@ -175,6 +187,10 @@ public class MessageServiceImpl implements MessageService {
             .toList();
 
         messageDeliveryStateRepository.saveAll(deliveryStateEntities);
+
+        return deliveryStateEntities.stream()
+            .map(MessageDeliveryStateEntity::getAccountId)
+            .toList();
     }
 
     private void updateChatTimestamp(UUID chatId, OffsetDateTime now) {
@@ -182,6 +198,34 @@ public class MessageServiceImpl implements MessageService {
             .orElseThrow(() -> new ChatNotFoundException("Chat with ID '" + chatId + "' not found."));
         chatEntity.setUpdatedAt(now);
         chatRepository.save(chatEntity);
+    }
+
+    private void publishMessageCreatedEvent(MessageEntity savedMessageEntity, List<UUID> recipientAccountIds) {
+        messagingEventPublisher.publish(
+            messagingEventFactory.createMessageCreatedEvent(savedMessageEntity, recipientAccountIds)
+        );
+    }
+
+    private void publishMessageDeliveredEvent(UUID chatId, UUID messageId, UUID deliveredByAccountId, UUID senderAccountId) {
+        messagingEventPublisher.publish(
+            messagingEventFactory.createMessageDeliveredEvent(
+                chatId,
+                messageId,
+                deliveredByAccountId,
+                List.of(senderAccountId)
+            )
+        );
+    }
+
+    private void publishMessageReadEvent(UUID chatId, UUID messageId, UUID readByAccountId, UUID senderAccountId) {
+        messagingEventPublisher.publish(
+            messagingEventFactory.createMessageReadEvent(
+                chatId,
+                messageId,
+                readByAccountId,
+                List.of(senderAccountId)
+            )
+        );
     }
 
     private MessageResponseDto mapToMessageResponseDto(MessageEntity messageEntity, List<MessageDeliveryStateEntity> deliveryStateEntities) {

@@ -1,5 +1,6 @@
 package dev.realtimegateway.listener;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.realtimegateway.model.event.MessagingEventDto;
 import dev.realtimegateway.service.RealtimeDeliveryService;
 import lombok.RequiredArgsConstructor;
@@ -12,18 +13,30 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class MessagingEventKafkaListener {
     private final RealtimeDeliveryService realtimeDeliveryService;
+    private final ObjectMapper objectMapper;
 
     @KafkaListener(
-        topics = "#{@kafkaTopicsProperties.messagingEvents()}",
-        groupId = "${spring.kafka.consumer.group-id}"
+            topics = "${application.kafka.topics.messaging-events}",
+            groupId = "${spring.kafka.consumer.group-id}"
     )
-    public void handleMessagingEvent(MessagingEventDto messagingEventDto) {
-        log.info(
-            "Received messaging event. Type: {}, event ID: {}, chat ID: {}.",
-            messagingEventDto.eventType(),
-            messagingEventDto.eventId(),
-            messagingEventDto.chatId()
-        );
-        realtimeDeliveryService.deliverMessagingEvent(messagingEventDto);
+    public void handleMessagingEvent(String serializedMessagingEvent) {
+        try {
+            MessagingEventDto messagingEventDto = objectMapper.readValue(
+                    serializedMessagingEvent,
+                    MessagingEventDto.class
+            );
+
+            log.info(
+                    "Received messaging event. Type: {}, event ID: {}, chat ID: {}.",
+                    messagingEventDto.eventType(),
+                    messagingEventDto.eventId(),
+                    messagingEventDto.chatId()
+            );
+
+            realtimeDeliveryService.deliverMessagingEvent(messagingEventDto);
+        }
+        catch (Exception exception) {
+            log.warn("Failed to handle messaging event: {}.", serializedMessagingEvent, exception);
+        }
     }
 }

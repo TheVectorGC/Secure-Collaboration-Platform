@@ -22,45 +22,73 @@ import org.springframework.web.filter.OncePerRequestFilter;
 @Component
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
-
     private final JwtTokenService jwtTokenService;
+    private final AuthenticationErrorResponseWriter authenticationErrorResponseWriter;
 
     @Lazy
     private final UserDetailsService userDetailsService;
 
     @Override
     protected void doFilterInternal(
-        HttpServletRequest request,
-        @NonNull HttpServletResponse response,
-        @NonNull FilterChain filterChain
+            HttpServletRequest request,
+            @NonNull HttpServletResponse response,
+            @NonNull FilterChain filterChain
     ) throws ServletException, IOException {
         String requestTokenHeader = request.getHeader("Authorization");
-        String username = null;
-        String jwtToken = null;
 
-        if (requestTokenHeader != null && requestTokenHeader.startsWith("Bearer ")) {
-            jwtToken = requestTokenHeader.substring(7);
-            try {
-                username = jwtTokenService.extractUsername(jwtToken);
-            }
-            catch (RuntimeException exception) {
-                log.warn("JWT token is invalid: {}.", exception.getMessage());
-            }
+        if (requestTokenHeader == null || !requestTokenHeader.startsWith("Bearer ")) {
+            filterChain.doFilter(request, response);
+            return;
         }
 
-        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+        String jwtToken = requestTokenHeader.substring(7);
 
-            if (jwtTokenService.validateToken(jwtToken, userDetails)) {
+        try {
+            String username = jwtTokenService.extractUsername(jwtToken);
+
+            if (username == null || username.isBlank()) {
+                SecurityContextHolder.clearContext();
+                authenticationErrorResponseWriter.writeUnauthorized(
+                        request,
+                        response,
+                        "Access token is invalid or expired."
+                );
+                return;
+            }
+
+            if (SecurityContextHolder.getContext().getAuthentication() == null) {
+                UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+
+                if (!jwtTokenService.validateToken(jwtToken, userDetails)) {
+                    SecurityContextHolder.clearContext();
+                    authenticationErrorResponseWriter.writeUnauthorized(
+                            request,
+                            response,
+                            "Access token is invalid or expired."
+                    );
+                    return;
+                }
+
                 UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(
-                    userDetails,
-                    null,
-                    userDetails.getAuthorities()
+                        userDetails,
+                        null,
+                        userDetails.getAuthorities()
                 );
                 authenticationToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authenticationToken);
             }
         }
+        catch (RuntimeException exception) {
+            log.warn("JWT token is invalid: {}.", exception.getMessage());
+            SecurityContextHolder.clearContext();
+            authenticationErrorResponseWriter.writeUnauthorized(
+                    request,
+                    response,
+                    "Access token is invalid or expired."
+            );
+            return;
+        }
+
         filterChain.doFilter(request, response);
     }
 }

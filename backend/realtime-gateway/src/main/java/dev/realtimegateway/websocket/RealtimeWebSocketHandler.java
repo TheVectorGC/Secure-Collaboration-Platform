@@ -26,12 +26,19 @@ public class RealtimeWebSocketHandler extends TextWebSocketHandler {
         }
         catch (RuntimeException exception) {
             log.warn("WebSocket authentication failed. Session ID: {}.", webSocketSession.getId(), exception);
-            webSocketSession.close(CloseStatus.POLICY_VIOLATION.withReason("Authentication failed."));
+
+            if (webSocketSession.isOpen()) {
+                webSocketSession.close(CloseStatus.POLICY_VIOLATION.withReason("Authentication failed."));
+            }
         }
     }
 
     @Override
     protected void handleTextMessage(WebSocketSession webSocketSession, TextMessage textMessage) throws Exception {
+        if (!webSocketSession.isOpen()) {
+            return;
+        }
+
         if ("ping".equalsIgnoreCase(textMessage.getPayload())) {
             webSocketSession.sendMessage(new TextMessage("pong"));
         }
@@ -46,6 +53,9 @@ public class RealtimeWebSocketHandler extends TextWebSocketHandler {
     public void handleTransportError(WebSocketSession webSocketSession, Throwable exception) throws Exception {
         log.warn("WebSocket transport error. Session ID: {}.", webSocketSession.getId(), exception);
         connectionRegistry.unregister(webSocketSession);
-        webSocketSession.close(CloseStatus.SERVER_ERROR);
+
+        if (webSocketSession.isOpen()) {
+            webSocketSession.close(CloseStatus.SERVER_ERROR);
+        }
     }
 }

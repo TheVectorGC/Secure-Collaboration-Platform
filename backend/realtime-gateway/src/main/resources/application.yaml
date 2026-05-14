@@ -19,11 +19,7 @@ spring:
       group-id: ${KAFKA_CONSUMER_GROUP_ID:realtime-gateway}
       auto-offset-reset: latest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
-      properties:
-        spring.json.trusted.packages: dev.realtimegateway.model.event
-        spring.json.use.type.headers: false
-        spring.json.value.default.type: dev.realtimegateway.model.event.MessagingEventDto
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
 
 application:
   security:
@@ -42,6 +38,7 @@ application:
 logging:
   level:
     dev.realtimegateway: INFO
+    org.springframework.kafka: INFO
 
 springdoc:
   swagger-ui:

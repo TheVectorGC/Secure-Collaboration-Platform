@@ -1,20 +1,27 @@
+server:
+  port: ${SERVER_PORT:8085}
+
 spring:
   application:
     name: identity-service
+
   datasource:
-    url: jdbc:postgresql://localhost:5432/identity_db
-    username: identity_user
-    password: identity_password
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/identity_db}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+
   jpa:
     hibernate:
       ddl-auto: validate
     open-in-view: false
+
   liquibase:
     change-log: classpath:db/changelog/db.changelog-master.yaml
+
   cloud:
     vault:
       enabled: true
-      uri: http://localhost:8200
+      uri: ${VAULT_URI:http://localhost:8200}
       token: ${VAULT_TOKEN:root}
       kv:
         enabled: false
@@ -22,19 +29,25 @@ spring:
 application:
   security:
     jwt:
-      issuer: identity-service
-      key-name: identity-service-jwt-ed25519
-      access-token-expiration: 15m
+      issuer: ${JWT_ISSUER:identity-service}
+      key-name: ${JWT_KEY_NAME:identity-service-jwt-ed25519}
+      access-token-expiration: ${ACCESS_TOKEN_EXPIRATION:15m}
+
     refresh-token:
-      expiration: 30d
+      expiration: ${REFRESH_TOKEN_EXPIRATION:30d}
+
   initial-admin:
-    enabled: true
-    username: admin
-    email: admin@company.local
+    enabled: ${INITIAL_ADMIN_ENABLED:true}
+    username: ${INITIAL_ADMIN_USERNAME:admin}
+    email: ${INITIAL_ADMIN_EMAIL:admin@company.local}
     password: ${INITIAL_ADMIN_PASSWORD:InitialPassword123!}
-    first-name: System
-    last-name: Administrator
+    first-name: ${INITIAL_ADMIN_FIRST_NAME:System}
+    last-name: ${INITIAL_ADMIN_LAST_NAME:Administrator}
 
 logging:
   level:
-    dev.identity-service: INFO
+    dev.identityservice: INFO
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html

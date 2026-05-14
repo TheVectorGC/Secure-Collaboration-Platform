@@ -1,0 +1,20 @@
+services:
+  messaging-postgres:
+    image: postgres:17
+    container_name: messaging-postgres
+    ports:
+      - "5435:5432"
+    environment:
+      POSTGRES_DB: messaging_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - messaging-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U messaging_user -d messaging_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  messaging-postgres-data:

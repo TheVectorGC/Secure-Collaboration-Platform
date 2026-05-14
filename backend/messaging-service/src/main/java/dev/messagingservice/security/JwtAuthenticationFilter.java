@@ -23,12 +23,13 @@ import org.springframework.web.filter.OncePerRequestFilter;
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtTokenService jwtTokenService;
+    private final AuthenticationErrorResponseWriter authenticationErrorResponseWriter;
 
     @Override
     protected void doFilterInternal(
-        HttpServletRequest request,
-        @NonNull HttpServletResponse response,
-        @NonNull FilterChain filterChain
+            HttpServletRequest request,
+            @NonNull HttpServletResponse response,
+            @NonNull FilterChain filterChain
     ) throws ServletException, IOException {
         String requestTokenHeader = request.getHeader("Authorization");
 
@@ -40,13 +41,23 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String jwtToken = requestTokenHeader.substring(7);
 
         try {
-            if (SecurityContextHolder.getContext().getAuthentication() == null && jwtTokenService.validateToken(jwtToken)) {
+            if (SecurityContextHolder.getContext().getAuthentication() == null) {
+                if (!jwtTokenService.validateToken(jwtToken)) {
+                    SecurityContextHolder.clearContext();
+                    authenticationErrorResponseWriter.writeUnauthorized(
+                            request,
+                            response,
+                            "Access token is invalid or expired."
+                    );
+                    return;
+                }
+
                 Map<String, Object> claims = jwtTokenService.extractClaims(jwtToken);
                 AccountPrincipal accountPrincipal = buildAccountPrincipal(claims);
                 UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(
-                    accountPrincipal,
-                    null,
-                    accountPrincipal.getAuthorities()
+                        accountPrincipal,
+                        null,
+                        accountPrincipal.getAuthorities()
                 );
                 authenticationToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authenticationToken);
@@ -54,6 +65,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
         catch (RuntimeException exception) {
             log.warn("JWT token is invalid: {}.", exception.getMessage());
+            SecurityContextHolder.clearContext();
+            authenticationErrorResponseWriter.writeUnauthorized(
+                    request,
+                    response,
+                    "Access token is invalid or expired."
+            );
+            return;
         }
 
         filterChain.doFilter(request, response);
@@ -64,8 +82,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String username = String.valueOf(claims.get("sub"));
         Object rolesClaim = claims.get("roles");
         List<String> roles = rolesClaim instanceof List<?> roleList
-            ? roleList.stream().map(String::valueOf).toList()
-            : List.of();
+                ? roleList.stream().map(String::valueOf).toList()
+                : List.of();
 
         return new AccountPrincipal(accountId, username, roles);
     }

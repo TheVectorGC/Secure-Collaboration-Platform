@@ -1,8 +1,9 @@
 package dev.messagingservice.config;
 
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@EnableConfigurationProperties(JwtProperties.class)
-public class ApplicationPropertiesConfig {}
+@ConfigurationPropertiesScan(basePackages = "dev.messagingservice.config.properties")
+public class ApplicationPropertiesConfig {
+}

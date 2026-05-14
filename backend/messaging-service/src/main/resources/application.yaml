@@ -1,14 +1,14 @@
 server:
-  port: ${SERVER_PORT:8083}
+  port: ${SERVER_PORT:8087}
 
 spring:
   application:
     name: messaging-service
 
   datasource:
-    url: ${POSTGRES_URL:jdbc:postgresql://localhost:5432/messaging_db}
-    username: ${POSTGRES_USER:messaging_user}
-    password: ${POSTGRES_PASSWORD:messaging_password}
+    url: ${DB_URL:jdbc:postgresql://localhost:5435/messaging_db}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
 
   jpa:
     hibernate:
@@ -20,16 +20,29 @@ spring:
 
   cloud:
     vault:
+      enabled: true
       uri: ${VAULT_URI:http://localhost:8200}
       token: ${VAULT_TOKEN:root}
       kv:
         enabled: false
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
 
 application:
   security:
     jwt:
       issuer: ${JWT_ISSUER:identity-service}
       key-name: ${JWT_KEY_NAME:identity-service-jwt-ed25519}
+
+  kafka:
+    topics:
+      messaging-events: ${MESSAGING_EVENTS_TOPIC:messaging.events}
+
+logging:
+  level:
+    dev.messagingservice: INFO
+    org.springframework.kafka: INFO
 
 springdoc:
   swagger-ui:

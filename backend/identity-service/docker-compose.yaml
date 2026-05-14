@@ -1,0 +1,70 @@
+services:
+  identity-postgres:
+    image: postgres:17
+    container_name: identity-postgres
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: identity_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - identity-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U identity_user -d identity_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  identity-vault:
+    image: hashicorp/vault:1.17
+    container_name: identity-vault
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: root
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+    cap_add:
+      - IPC_LOCK
+    command: server -dev
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8200/v1/sys/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  identity-vault-init:
+    image: hashicorp/vault:1.17
+    container_name: identity-vault-init
+    depends_on:
+      identity-vault:
+        condition: service_healthy
+    environment:
+      VAULT_ADDR: http://identity-vault:8200
+      VAULT_TOKEN: root
+      JWT_TRANSIT_KEY_NAME: identity-service-jwt-ed25519
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        set -eu
+
+        echo "Configuring Vault transit engine..."
+
+        if ! vault secrets list -format=json | grep -q '"transit/"'; then
+          vault secrets enable transit
+        else
+          echo "Transit engine already enabled."
+        fi
+
+        if vault read "transit/keys/$${JWT_TRANSIT_KEY_NAME}" >/dev/null 2>&1; then
+          echo "Transit key $${JWT_TRANSIT_KEY_NAME} already exists."
+        else
+          vault write -f "transit/keys/$${JWT_TRANSIT_KEY_NAME}" type=ed25519 exportable=false allow_plaintext_backup=false
+          echo "Transit key $${JWT_TRANSIT_KEY_NAME} created."
+        fi
+
+        echo "Vault initialization completed."
+
+volumes:
+  identity-postgres-data:
