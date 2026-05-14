@@ -1,0 +1,20 @@
+services:
+  crypto-postgres:
+    image: postgres:17
+    container_name: crypto-postgres
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_DB: crypto_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - crypto-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crypto_user -d crypto_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  crypto-postgres-data:
