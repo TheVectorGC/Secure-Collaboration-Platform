@@ -1,1 +1,54 @@
-spring.application.name=realtime-gateway
+server:
+  port: ${SERVER_PORT:8088}
+
+spring:
+  application:
+    name: realtime-gateway
+
+  cloud:
+    vault:
+      enabled: true
+      uri: ${VAULT_URI:http://localhost:8200}
+      token: ${VAULT_TOKEN:root}
+      kv:
+        enabled: false
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP_ID:realtime-gateway}
+      auto-offset-reset: latest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: dev.realtimegateway.model.event
+        spring.json.use.type.headers: false
+        spring.json.value.default.type: dev.realtimegateway.model.event.MessagingEventDto
+
+application:
+  security:
+    jwt:
+      issuer: ${JWT_ISSUER:identity-service}
+      key-name: ${JWT_KEY_NAME:identity-service-jwt-ed25519}
+
+  kafka:
+    topics:
+      messaging-events: ${MESSAGING_EVENTS_TOPIC:messaging.events}
+
+  websocket:
+    endpoint: ${WEBSOCKET_ENDPOINT:/ws}
+    allowed-origins: ${WEBSOCKET_ALLOWED_ORIGINS:*}
+
+logging:
+  level:
+    dev.realtimegateway: INFO
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
