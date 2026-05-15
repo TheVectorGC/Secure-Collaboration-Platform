@@ -7,3 +7,7 @@ databaseChangeLog:
       file: db/changelog/changes/003-create-messages-table.yaml
   - include:
       file: db/changelog/changes/004-create-message-delivery-states-table.yaml
+  - include:
+      file: db/changelog/changes/005-create-message-device-payloads-table.yaml
+  - include:
+      file: db/changelog/changes/006-make-message-encrypted-payload-nullable.yaml

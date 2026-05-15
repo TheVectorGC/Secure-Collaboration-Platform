@@ -48,9 +48,31 @@ public class ChatServiceImpl implements ChatService {
     @Override
     @Transactional
     public ChatResponseDto createOrGetSelfChat(UUID currentAccountId) {
-        return chatRepository.findBySelfAccountId(currentAccountId)
-            .map(chatEntity -> mapToChatResponseDto(chatEntity, loadActiveParticipants(chatEntity.getId())))
-            .orElseGet(() -> createSelfChat(currentAccountId));
+        OffsetDateTime now = OffsetDateTime.now();
+
+        int insertedRows = chatRepository.insertSelfChatIfAbsent(
+            UUID.randomUUID(),
+            currentAccountId,
+            now
+        );
+
+        ChatEntity chatEntity = chatRepository.findBySelfAccountId(currentAccountId)
+            .orElseThrow(() -> new ChatNotFoundException("Self chat for account ID '" + currentAccountId + "' not found after creation attempt."));
+
+        chatRepository.insertParticipantIfAbsent(
+            UUID.randomUUID(),
+            chatEntity.getId(),
+            currentAccountId,
+            ChatParticipantRole.OWNER.name(),
+            ChatParticipantStatus.ACTIVE.name(),
+            now
+        );
+
+        if (insertedRows > 0) {
+            log.info("Self chat created. Chat ID: {}.", chatEntity.getId());
+        }
+
+        return mapToChatResponseDto(chatEntity, loadActiveParticipants(chatEntity.getId()));
     }
 
     @Override
@@ -82,46 +104,39 @@ public class ChatServiceImpl implements ChatService {
 
     private ChatResponseDto createDirectChat(UUID currentAccountId, UUID recipientAccountId, String directChatKey) {
         OffsetDateTime now = OffsetDateTime.now();
-        ChatEntity chatEntity = ChatEntity.builder()
-            .type(ChatType.DIRECT)
-            .directChatKey(directChatKey)
-            .createdByAccountId(currentAccountId)
-            .createdAt(now)
-            .updatedAt(now)
-            .build();
-        ChatEntity savedChatEntity = chatRepository.save(chatEntity);
 
-        chatParticipantRepository.save(buildParticipant(savedChatEntity.getId(), currentAccountId, ChatParticipantRole.MEMBER, now));
-        chatParticipantRepository.save(buildParticipant(savedChatEntity.getId(), recipientAccountId, ChatParticipantRole.MEMBER, now));
+        int insertedRows = chatRepository.insertDirectChatIfAbsent(
+            UUID.randomUUID(),
+            directChatKey,
+            currentAccountId,
+            now
+        );
 
-        log.info("Direct chat created. Chat ID: {}.", savedChatEntity.getId());
-        return mapToChatResponseDto(savedChatEntity, loadActiveParticipants(savedChatEntity.getId()));
-    }
+        ChatEntity chatEntity = chatRepository.findByDirectChatKey(directChatKey)
+            .orElseThrow(() -> new ChatNotFoundException("Direct chat with key '" + directChatKey + "' not found after creation attempt."));
 
-    private ChatResponseDto createSelfChat(UUID currentAccountId) {
-        OffsetDateTime now = OffsetDateTime.now();
-        ChatEntity chatEntity = ChatEntity.builder()
-            .type(ChatType.SELF)
-            .selfAccountId(currentAccountId)
-            .createdByAccountId(currentAccountId)
-            .createdAt(now)
-            .updatedAt(now)
-            .build();
-        ChatEntity savedChatEntity = chatRepository.save(chatEntity);
-        chatParticipantRepository.save(buildParticipant(savedChatEntity.getId(), currentAccountId, ChatParticipantRole.OWNER, now));
+        chatRepository.insertParticipantIfAbsent(
+            UUID.randomUUID(),
+            chatEntity.getId(),
+            currentAccountId,
+            ChatParticipantRole.MEMBER.name(),
+            ChatParticipantStatus.ACTIVE.name(),
+            now
+        );
+        chatRepository.insertParticipantIfAbsent(
+            UUID.randomUUID(),
+            chatEntity.getId(),
+            recipientAccountId,
+            ChatParticipantRole.MEMBER.name(),
+            ChatParticipantStatus.ACTIVE.name(),
+            now
+        );
 
-        log.info("Self chat created. Chat ID: {}.", savedChatEntity.getId());
-        return mapToChatResponseDto(savedChatEntity, loadActiveParticipants(savedChatEntity.getId()));
-    }
+        if (insertedRows > 0) {
+            log.info("Direct chat created. Chat ID: {}.", chatEntity.getId());
+        }
 
-    private ChatParticipantEntity buildParticipant(UUID chatId, UUID accountId, ChatParticipantRole role, OffsetDateTime joinedAt) {
-        return ChatParticipantEntity.builder()
-            .chatId(chatId)
-            .accountId(accountId)
-            .role(role)
-            .status(ChatParticipantStatus.ACTIVE)
-            .joinedAt(joinedAt)
-            .build();
+        return mapToChatResponseDto(chatEntity, loadActiveParticipants(chatEntity.getId()));
     }
 
     private void validateActiveParticipant(UUID chatId, UUID accountId) {

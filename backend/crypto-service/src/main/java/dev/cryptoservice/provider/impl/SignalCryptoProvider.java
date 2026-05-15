@@ -30,6 +30,11 @@ public class SignalCryptoProvider implements CryptoProvider {
     }
 
     @Override
+    public void validateKyberPreKeyPublicKey(String serializedPublicKey) {
+        decodeSerializedValue(serializedPublicKey);
+    }
+
+    @Override
     public void validateOneTimePreKeyPublicKey(String serializedPublicKey) {
         decodePublicKey(serializedPublicKey);
     }
@@ -53,6 +58,28 @@ public class SignalCryptoProvider implements CryptoProvider {
         }
         catch (InvalidKeyException exception) {
             throw new CryptoKeyValidationException("Signed prekey signature validation failed.", exception);
+        }
+    }
+
+    @Override
+    public boolean verifyKyberPreKeySignature(
+            String identityPublicKey,
+            String kyberPreKeyPublicKey,
+            String signature
+    ) {
+        try {
+            IdentityKey decodedIdentityKey = decodeIdentityKey(identityPublicKey);
+            byte[] decodedKyberPreKeyPublicKey = decodeSerializedValue(kyberPreKeyPublicKey);
+            byte[] decodedSignature = decodeSerializedValue(signature);
+
+            return Curve.verifySignature(
+                    decodedIdentityKey.getPublicKey(),
+                    decodedKyberPreKeyPublicKey,
+                    decodedSignature
+            );
+        }
+        catch (InvalidKeyException exception) {
+            throw new CryptoKeyValidationException("Kyber prekey signature validation failed.", exception);
         }
     }
 

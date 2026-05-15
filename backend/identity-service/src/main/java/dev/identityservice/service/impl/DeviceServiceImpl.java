@@ -5,6 +5,7 @@ import dev.identityservice.exception.DeviceNotFoundException;
 import dev.identityservice.exception.DeviceRegistrationException;
 import dev.identityservice.exception.DeviceRevokedException;
 import dev.identityservice.model.dto.request.LoginRequestDto;
+import dev.identityservice.model.dto.response.ActiveDeviceResponseDto;
 import dev.identityservice.model.dto.response.DeviceResponseDto;
 import dev.identityservice.model.dto.response.InternalDeviceResponseDto;
 import dev.identityservice.model.entity.AccountEntity;
@@ -35,6 +36,12 @@ public class DeviceServiceImpl implements DeviceService {
     @Override
     @Transactional
     public DeviceEntity resolveLoginDevice(AccountEntity accountEntity, LoginRequestDto loginRequestDto) {
+        DeviceEntity existingDeviceByInstallation = resolveExistingDeviceByInstallation(accountEntity, loginRequestDto);
+
+        if (existingDeviceByInstallation != null) {
+            return existingDeviceByInstallation;
+        }
+
         if (loginRequestDto.deviceId() != null) {
             return resolveExistingDevice(accountEntity, loginRequestDto);
         }
@@ -50,6 +57,18 @@ public class DeviceServiceImpl implements DeviceService {
 
         return deviceRepository.findByAccountId(accountEntity.getId()).stream()
             .map(this::mapToDeviceResponseDto)
+            .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ActiveDeviceResponseDto> getActiveAccountDevices(UUID accountId) {
+        if (!accountRepository.existsById(accountId)) {
+            throw new AccountNotFoundException("Account with ID '" + accountId + "' not found.");
+        }
+
+        return deviceRepository.findByAccountIdAndStatus(accountId, DeviceStatus.ACTIVE).stream()
+            .map(this::mapToActiveDeviceResponseDto)
             .toList();
     }
 
@@ -107,25 +126,61 @@ public class DeviceServiceImpl implements DeviceService {
             throw new DeviceRevokedException("Device has been revoked.");
         }
 
+        return updateExistingDeviceFromLogin(deviceEntity, loginRequestDto);
+    }
+
+    private DeviceEntity updateExistingDeviceFromLogin(DeviceEntity deviceEntity, LoginRequestDto loginRequestDto) {
         OffsetDateTime now = OffsetDateTime.now();
 
         deviceEntity.setLastSeenAt(now);
 
-        if (loginRequestDto.clientVersion() != null && !loginRequestDto.clientVersion().trim().isEmpty()) {
-            deviceEntity.setClientVersion(loginRequestDto.clientVersion().trim());
+        String clientVersion = trimToNull(loginRequestDto.clientVersion());
+
+        if (clientVersion != null) {
+            deviceEntity.setClientVersion(clientVersion);
+        }
+
+        String clientInstallationId = trimToNull(loginRequestDto.clientInstallationId());
+
+        if (clientInstallationId != null) {
+            if (deviceEntity.getClientInstallationId() == null) {
+                validateClientInstallationIsNotBoundToAnotherDevice(deviceEntity, clientInstallationId);
+                deviceEntity.setClientInstallationId(clientInstallationId);
+            }
+            else if (!deviceEntity.getClientInstallationId().equals(clientInstallationId)) {
+                throw new DeviceRegistrationException("Device belongs to another client installation.");
+            }
         }
 
         return deviceRepository.save(deviceEntity);
     }
 
+    private DeviceEntity resolveExistingDeviceByInstallation(AccountEntity accountEntity, LoginRequestDto loginRequestDto) {
+        String clientInstallationId = trimToNull(loginRequestDto.clientInstallationId());
+
+        if (clientInstallationId == null) {
+            return null;
+        }
+
+        return deviceRepository.findByAccountIdAndClientInstallationIdAndStatus(
+                accountEntity.getId(),
+                clientInstallationId,
+                DeviceStatus.ACTIVE
+            )
+            .map(deviceEntity -> updateExistingDeviceFromLogin(deviceEntity, loginRequestDto))
+            .orElse(null);
+    }
+
     private DeviceEntity createDevice(AccountEntity accountEntity, LoginRequestDto loginRequestDto) {
         validateNewDeviceRequest(loginRequestDto);
+        String clientInstallationId = trimToNull(loginRequestDto.clientInstallationId());
 
         OffsetDateTime now = OffsetDateTime.now();
 
         DeviceEntity deviceEntity = DeviceEntity.builder()
             .accountId(accountEntity.getId())
             .deviceName(loginRequestDto.deviceName().trim())
+            .clientInstallationId(clientInstallationId)
             .platform(loginRequestDto.platform())
             .status(DeviceStatus.ACTIVE)
             .clientVersion(trimToNull(loginRequestDto.clientVersion()))
@@ -141,6 +196,10 @@ public class DeviceServiceImpl implements DeviceService {
     }
 
     private void validateNewDeviceRequest(LoginRequestDto loginRequestDto) {
+        if (trimToNull(loginRequestDto.clientInstallationId()) == null) {
+            throw new DeviceRegistrationException("Client installation ID is required for desktop device registration.");
+        }
+
         if (loginRequestDto.deviceName() == null || loginRequestDto.deviceName().trim().isEmpty()) {
             throw new DeviceRegistrationException("Device name is required for new device registration.");
         }
@@ -148,6 +207,21 @@ public class DeviceServiceImpl implements DeviceService {
         if (loginRequestDto.platform() == null) {
             throw new DeviceRegistrationException("Device platform is required for new device registration.");
         }
+    }
+
+    private void validateClientInstallationIsNotBoundToAnotherDevice(
+            DeviceEntity deviceEntity,
+            String clientInstallationId
+    ) {
+        deviceRepository.findByAccountIdAndClientInstallationIdAndStatus(
+                deviceEntity.getAccountId(),
+                clientInstallationId,
+                DeviceStatus.ACTIVE
+            )
+            .filter(existingDeviceEntity -> !existingDeviceEntity.getId().equals(deviceEntity.getId()))
+            .ifPresent(existingDeviceEntity -> {
+                throw new DeviceRegistrationException("Client installation ID is already bound to another active device.");
+            });
     }
 
     private DeviceResponseDto mapToDeviceResponseDto(DeviceEntity deviceEntity) {
@@ -159,6 +233,17 @@ public class DeviceServiceImpl implements DeviceService {
             deviceEntity.getClientVersion(),
             deviceEntity.getLastSeenAt(),
             deviceEntity.getCreatedAt()
+        );
+    }
+
+
+    private ActiveDeviceResponseDto mapToActiveDeviceResponseDto(DeviceEntity deviceEntity) {
+        return new ActiveDeviceResponseDto(
+            deviceEntity.getId(),
+            deviceEntity.getAccountId(),
+            deviceEntity.getDeviceName(),
+            deviceEntity.getPlatform(),
+            deviceEntity.getLastSeenAt()
         );
     }
 
@@ -184,3 +269,4 @@ public class DeviceServiceImpl implements DeviceService {
         return trimmedValue;
     }
 }
+

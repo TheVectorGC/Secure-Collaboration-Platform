@@ -1,0 +1,44 @@
+server:
+  port: ${SERVER_PORT:8082}
+
+spring:
+  application:
+    name: crypto-service
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/crypto_db}
+    username: ${DB_USERNAME:crypto_user}
+    password: ${DB_PASSWORD:crypto_password}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+
+  cloud:
+    vault:
+      uri: ${VAULT_URI:http://localhost:8200}
+      token: ${VAULT_TOKEN:root}
+      kv:
+        enabled: false
+
+application:
+  identity-service:
+    base-url: ${IDENTITY_SERVICE_BASE_URL:http://localhost:8081}
+    internal-device-path: /api/v1/devices/{deviceId}/internal
+
+  security:
+    jwt:
+      issuer: ${JWT_ISSUER:identity-service}
+      key-name: ${JWT_KEY_NAME:identity-service-jwt-ed25519}
+
+  crypto:
+    prekey:
+      low-threshold: ${PREKEY_LOW_THRESHOLD:20}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html

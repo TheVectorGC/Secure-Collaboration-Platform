@@ -4,6 +4,7 @@ export type LoginRequestDto = {
   login: string;
   password: string;
   deviceId: string | null;
+  clientInstallationId: string | null;
   deviceName: string | null;
   platform: DevicePlatform | null;
   clientVersion: string | null;
@@ -23,6 +24,7 @@ export type AuthenticationResponseDto = {
   tokenType: string;
   accessTokenExpiresAt: string;
   sessionId: string;
+  deviceId: string;
 };
 
 export type DeviceResponseDto = {
@@ -34,6 +36,14 @@ export type DeviceResponseDto = {
   clientVersion: string | null;
   lastSeenAt: string;
   createdAt: string;
+};
+
+export type ActiveDeviceResponseDto = {
+  deviceId: string;
+  accountId: string;
+  deviceName: string;
+  platform: DevicePlatform;
+  lastSeenAt: string | null;
 };
 
 export type ProfileResponseDto = {
@@ -85,12 +95,21 @@ export type ChatResponseDto = {
   updatedAt: string;
 };
 
+export type MessageCiphertextType = 'PRE_KEY' | 'SIGNAL' | 'LOCAL';
+
+export type DeviceMessagePayloadRequestDto = {
+  targetAccountId: string;
+  targetDeviceId: string;
+  ciphertextType: MessageCiphertextType;
+  encryptedPayload: string;
+};
+
 export type SendMessageRequestDto = {
   senderDeviceId: string;
   clientMessageId: string;
   messageType: 'TEXT';
   encryptionType: 'SIGNAL';
-  encryptedPayload: string;
+  devicePayloads: DeviceMessagePayloadRequestDto[];
 };
 
 export type MessageDeliveryStateResponseDto = {
@@ -98,6 +117,13 @@ export type MessageDeliveryStateResponseDto = {
   status: 'SENT' | 'DELIVERED' | 'READ';
   deliveredAt: string | null;
   readAt: string | null;
+};
+
+export type MessageDevicePayloadResponseDto = {
+  targetAccountId: string;
+  targetDeviceId: string;
+  ciphertextType: MessageCiphertextType;
+  encryptedPayload: string;
 };
 
 export type MessageResponseDto = {
@@ -108,7 +134,7 @@ export type MessageResponseDto = {
   clientMessageId: string | null;
   messageType: 'TEXT';
   encryptionType: 'SIGNAL';
-  encryptedPayload: string;
+  devicePayloads: MessageDevicePayloadResponseDto[];
   createdAt: string;
   deliveryStates: MessageDeliveryStateResponseDto[];
 };
@@ -129,7 +155,7 @@ export type MessageCreatedPayload = {
   senderDeviceId: string;
   messageType: 'TEXT';
   encryptionType: 'SIGNAL';
-  encryptedPayload: string;
+  devicePayloads?: MessageDevicePayloadResponseDto[];
   createdAt: string;
 };
 

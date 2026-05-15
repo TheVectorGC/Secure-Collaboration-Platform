@@ -26,6 +26,34 @@ function openDatabase() {
   return database;
 }
 
+function tableExists(database, tableName) {
+  const row = database
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .get(tableName);
+
+  return Boolean(row);
+}
+
+function columnExists(database, tableName, columnName) {
+  const rows = database.prepare(`PRAGMA table_info(${tableName})`).all();
+  return rows.some((row) => row.name === columnName);
+}
+
+function migrateLegacySchema(database) {
+  if (tableExists(database, 'local_devices') && !columnExists(database, 'local_devices', 'registration_id')) {
+    database.exec('ALTER TABLE local_devices ADD COLUMN registration_id INTEGER');
+  }
+
+  if (tableExists(database, 'signal_sessions') && !columnExists(database, 'signal_sessions', 'remote_address')) {
+    database.exec('DROP INDEX IF EXISTS idx_signal_sessions_recipient');
+    database.exec('DROP TABLE signal_sessions');
+  }
+
+  if (tableExists(database, 'trusted_identities') && !columnExists(database, 'trusted_identities', 'remote_address')) {
+    database.exec('DROP TABLE trusted_identities');
+  }
+}
+
 function applySchema(database) {
   database.exec(`
     CREATE TABLE IF NOT EXISTS crypto_metadata (
@@ -85,26 +113,63 @@ function applySchema(database) {
         REFERENCES local_devices(account_id, device_id)
         ON DELETE CASCADE
     );
+  `);
 
-    CREATE TABLE IF NOT EXISTS signal_sessions (
+  migrateLegacySchema(database);
+
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS kyber_prekeys (
       account_id TEXT NOT NULL,
       device_id TEXT NOT NULL,
-      recipient_account_id TEXT NOT NULL,
-      recipient_device_id TEXT NOT NULL,
-      session_data TEXT NOT NULL,
+      key_id INTEGER NOT NULL,
+      public_key TEXT NOT NULL,
+      secret_key TEXT NOT NULL,
+      signature TEXT NOT NULL,
+      record_data TEXT NOT NULL,
+      status TEXT NOT NULL,
       created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      PRIMARY KEY (account_id, device_id, recipient_account_id, recipient_device_id),
+      used_at TEXT,
+      expires_at TEXT,
+      PRIMARY KEY (account_id, device_id, key_id),
       FOREIGN KEY (account_id, device_id)
         REFERENCES local_devices(account_id, device_id)
         ON DELETE CASCADE
     );
 
-    CREATE INDEX IF NOT EXISTS idx_signal_sessions_recipient
-      ON signal_sessions(recipient_account_id, recipient_device_id);
+    CREATE TABLE IF NOT EXISTS signal_sessions (
+      account_id TEXT NOT NULL,
+      device_id TEXT NOT NULL,
+      remote_address TEXT NOT NULL,
+      session_data TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (account_id, device_id, remote_address),
+      FOREIGN KEY (account_id, device_id)
+        REFERENCES local_devices(account_id, device_id)
+        ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS trusted_identities (
+      account_id TEXT NOT NULL,
+      device_id TEXT NOT NULL,
+      remote_address TEXT NOT NULL,
+      public_key TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (account_id, device_id, remote_address),
+      FOREIGN KEY (account_id, device_id)
+        REFERENCES local_devices(account_id, device_id)
+        ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_signal_sessions_remote_address
+      ON signal_sessions(remote_address);
 
     CREATE INDEX IF NOT EXISTS idx_one_time_prekeys_status
       ON one_time_prekeys(account_id, device_id, status);
+
+    CREATE INDEX IF NOT EXISTS idx_kyber_prekeys_status
+      ON kyber_prekeys(account_id, device_id, status);
   `);
 }
 

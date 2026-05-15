@@ -6,6 +6,12 @@ export async function getChats(): Promise<ChatResponseDto[]> {
   return response.data;
 }
 
+
+export async function getChat(chatId: string): Promise<ChatResponseDto> {
+  const response = await messagingHttpClient.get<ChatResponseDto>(`/api/v1/chats/${chatId}`);
+  return response.data;
+}
+
 export async function createSelfChat(): Promise<ChatResponseDto> {
   const response = await messagingHttpClient.post<ChatResponseDto>('/api/v1/chats/self');
   return response.data;

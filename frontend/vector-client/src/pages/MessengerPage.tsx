@@ -17,6 +17,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { createDirectChat, createSelfChat, getChats } from '../features/chats/api/chatsApi';
 import { searchProfiles } from '../features/directory/api/profilesApi';
+import { getActiveAccountDevices } from '../features/devices/api/devicesApi';
 import { useDirectoryStore } from '../features/directory/model/directoryStore';
 import { logout as logoutRequest } from '../features/auth/api/authApi';
 import { useAuthStore } from '../features/auth/model/authStore';
@@ -27,7 +28,7 @@ import { useRealtimeStore } from '../features/realtime/model/realtimeStore';
 import { DevAccountPanel } from '../features/admin/ui/DevAccountPanel';
 import { useCryptoBootstrap } from '../features/crypto/useCryptoBootstrap';
 import { useCryptoStore } from '../features/crypto/model/cryptoStore';
-import { fakeDecryptMessage, fakeEncryptMessage } from '../shared/lib/fakeCrypto';
+import { getPreKeyBundle } from '../features/crypto/api/cryptoKeysApi';
 import { formatChatTime, formatMessageTime } from '../shared/lib/dateFormat';
 import { getAvatarGradient, getInitials } from '../shared/lib/avatar';
 import { getDirectCompanionAccountId, getDisplayName } from '../shared/lib/profile';
@@ -118,6 +119,7 @@ function NewChatModal({
   const [results, setResults] = useState<ProfileResponseDto[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [decryptedMessagesById, setDecryptedMessagesById] = useState<Record<string, string>>({});
   const [creatingAccountId, setCreatingAccountId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -292,6 +294,7 @@ export function MessengerPage() {
   const [isCreateChatOpen, setIsCreateChatOpen] = useState(false);
   const [isDevToolsOpen, setIsDevToolsOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [decryptedMessagesById, setDecryptedMessagesById] = useState<Record<string, string>>({});
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const deliveredMarkersRef = useRef<Set<string>>(new Set());
@@ -324,6 +327,51 @@ export function MessengerPage() {
   );
 
   const selectedMessages = selectedChatId ? messagesByChatId[selectedChatId] ?? [] : [];
+
+  useEffect(() => {
+    const vectorCrypto = window.vectorCrypto;
+
+    if (!profile?.accountId || !deviceId || !vectorCrypto) {
+      return;
+    }
+
+    selectedMessages.forEach((message) => {
+      if (decryptedMessagesById[message.messageId]) {
+        return;
+      }
+
+      const currentDevicePayload = message.devicePayloads.find((devicePayload) => devicePayload.targetDeviceId === deviceId);
+
+      if (!currentDevicePayload) {
+        setDecryptedMessagesById((previousValue) => ({
+          ...previousValue,
+          [message.messageId]: '[Сообщение недоступно для этого устройства]',
+        }));
+        return;
+      }
+
+      vectorCrypto.decryptMessage({
+        accountId: profile.accountId,
+        deviceId,
+        remoteDeviceId: message.senderDeviceId,
+        ciphertextType: currentDevicePayload.ciphertextType,
+        encryptedPayload: currentDevicePayload.encryptedPayload,
+      })
+        .then((decryptResponse) => {
+          setDecryptedMessagesById((previousValue) => ({
+            ...previousValue,
+            [message.messageId]: decryptResponse.plainText,
+          }));
+        })
+        .catch((error) => {
+          console.error(error);
+          setDecryptedMessagesById((previousValue) => ({
+            ...previousValue,
+            [message.messageId]: '[Не удалось расшифровать сообщение]',
+          }));
+        });
+    });
+  }, [decryptedMessagesById, deviceId, profile?.accountId, selectedMessages]);
 
   const filteredChats = useMemo(() => {
     const normalizedQuery = chatSearchQuery.trim().toLowerCase();
@@ -439,15 +487,69 @@ export function MessengerPage() {
     setErrorMessage(null);
 
     try {
+      const targetAccountIds = selectedChat?.participantAccountIds ?? [];
+      const activeDevicesByAccount = await Promise.all(
+        targetAccountIds.map(async (targetAccountId) => ({
+          targetAccountId,
+          devices: await getActiveAccountDevices(targetAccountId),
+        })),
+      );
+      const targetDevices = activeDevicesByAccount.flatMap(({ targetAccountId, devices }) => devices.map((targetDevice) => ({
+        targetAccountId,
+        targetDeviceId: targetDevice.deviceId,
+      })));
+
+      if (targetDevices.length === 0) {
+        throw new Error('No active devices are available for message recipients.');
+      }
+
+      const vectorCrypto = window.vectorCrypto;
+
+      if (!profile?.accountId || !vectorCrypto) {
+        throw new Error('Local cryptography is not available.');
+      }
+
+      const trimmedMessageText = messageText.trim();
+      const devicePayloads = await Promise.all(targetDevices.map(async (targetDevice) => {
+        const encryptedMessage = targetDevice.targetDeviceId === deviceId
+          ? await vectorCrypto.encryptLocalMessage({
+            accountId: profile.accountId,
+            deviceId,
+            plainText: trimmedMessageText,
+          })
+          : await (async () => {
+            const preKeyBundle = await getPreKeyBundle(targetDevice.targetDeviceId);
+
+            return vectorCrypto.encryptMessage({
+              accountId: profile.accountId,
+              deviceId,
+              targetDeviceId: targetDevice.targetDeviceId,
+              plainText: trimmedMessageText,
+              preKeyBundle,
+            });
+          })();
+
+        return {
+          targetAccountId: targetDevice.targetAccountId,
+          targetDeviceId: targetDevice.targetDeviceId,
+          ciphertextType: encryptedMessage.ciphertextType,
+          encryptedPayload: encryptedMessage.encryptedPayload,
+        };
+      }));
+
       const savedMessage = await sendMessage(selectedChatId, {
         senderDeviceId: deviceId,
         clientMessageId: crypto.randomUUID(),
         messageType: 'TEXT',
         encryptionType: 'SIGNAL',
-        encryptedPayload: fakeEncryptMessage(messageText.trim()),
+        devicePayloads,
       });
 
       upsertMessage(savedMessage);
+      setDecryptedMessagesById((previousValue) => ({
+        ...previousValue,
+        [savedMessage.messageId]: trimmedMessageText,
+      }));
       setMessageText('');
     }
     catch (error) {
@@ -697,7 +799,7 @@ export function MessengerPage() {
                           }`}
                         >
                           <div className="whitespace-pre-wrap text-sm leading-6">
-                            {fakeDecryptMessage(message.encryptedPayload)}
+                            {decryptedMessagesById[message.messageId] ?? 'Расшифровка…'}
                           </div>
                           <div className={`mt-2 flex items-center gap-2 text-[11px] ${isOwnMessage ? 'justify-end text-violet-100/80' : 'justify-end text-zinc-500'}`}>
                             <span>{formatMessageTime(message.createdAt)}</span>

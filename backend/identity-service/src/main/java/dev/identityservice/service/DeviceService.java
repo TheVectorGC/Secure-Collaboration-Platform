@@ -1,6 +1,7 @@
 package dev.identityservice.service;
 
 import dev.identityservice.model.dto.request.LoginRequestDto;
+import dev.identityservice.model.dto.response.ActiveDeviceResponseDto;
 import dev.identityservice.model.dto.response.DeviceResponseDto;
 import dev.identityservice.model.dto.response.InternalDeviceResponseDto;
 import dev.identityservice.model.entity.AccountEntity;
@@ -12,6 +13,8 @@ public interface DeviceService {
     DeviceEntity resolveLoginDevice(AccountEntity accountEntity, LoginRequestDto loginRequestDto);
 
     List<DeviceResponseDto> getCurrentAccountDevices(String username);
+
+    List<ActiveDeviceResponseDto> getActiveAccountDevices(UUID accountId);
 
     InternalDeviceResponseDto getInternalDevice(UUID deviceId);
 

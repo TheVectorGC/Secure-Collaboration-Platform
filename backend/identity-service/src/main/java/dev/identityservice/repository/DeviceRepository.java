@@ -12,6 +12,12 @@ import org.springframework.stereotype.Repository;
 public interface DeviceRepository extends JpaRepository<DeviceEntity, UUID> {
     Optional<DeviceEntity> findByIdAndAccountId(UUID deviceId, UUID accountId);
 
+    Optional<DeviceEntity> findByAccountIdAndClientInstallationIdAndStatus(
+            UUID accountId,
+            String clientInstallationId,
+            DeviceStatus status
+    );
+
     List<DeviceEntity> findByAccountId(UUID accountId);
 
     List<DeviceEntity> findByAccountIdAndStatus(UUID accountId, DeviceStatus status);

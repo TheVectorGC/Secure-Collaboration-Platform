@@ -1,5 +1,6 @@
 package dev.identityservice.controller;
 
+import dev.identityservice.model.dto.response.ActiveDeviceResponseDto;
 import dev.identityservice.model.dto.response.DeviceResponseDto;
 import dev.identityservice.model.dto.response.InternalDeviceResponseDto;
 import dev.identityservice.service.DeviceService;
@@ -39,6 +40,12 @@ public class DeviceController {
     ) {
         deviceService.revokeCurrentAccountDevice(principal.getName(), deviceId);
         return new ResponseEntity<>(HttpStatus.OK);
+    }
+
+
+    @GetMapping("/accounts/{accountId}/active")
+    public ResponseEntity<List<ActiveDeviceResponseDto>> getActiveAccountDevices(@PathVariable UUID accountId) {
+        return ResponseEntity.ok(deviceService.getActiveAccountDevices(accountId));
     }
 
     @GetMapping("/{deviceId}/internal")

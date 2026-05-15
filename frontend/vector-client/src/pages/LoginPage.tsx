@@ -1,27 +1,15 @@
 import { FormEvent, useState } from 'react';
 import { KeyRound, Lock, MessageCircle, Sparkles, WandSparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { login, getCurrentDevices, getCurrentProfile } from '../features/auth/api/authApi';
+import { login, getCurrentProfile } from '../features/auth/api/authApi';
 import { useAuthStore } from '../features/auth/model/authStore';
 import { useDirectoryStore } from '../features/directory/model/directoryStore';
 import { GlowButton } from '../shared/ui/GlowButton';
 import { TextInput } from '../shared/ui/TextInput';
-import type { DeviceResponseDto } from '../shared/types/api';
-
-function resolveDeviceId(devices: DeviceResponseDto[]): string | null {
-  if (devices.length === 0) {
-    return null;
-  }
-
-  const firstDevice = devices[0];
-  return firstDevice.deviceId ?? firstDevice.id ?? null;
-}
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const storedDeviceId = useAuthStore((state) => state.deviceId);
   const setAuthentication = useAuthStore((state) => state.setAuthentication);
-  const setDeviceId = useAuthStore((state) => state.setDeviceId);
   const setProfile = useAuthStore((state) => state.setProfile);
   const upsertProfile = useDirectoryStore((state) => state.upsertProfile);
 
@@ -41,29 +29,32 @@ export function LoginPage() {
     setErrorMessage(null);
 
     try {
+      if (!window.vectorCrypto) {
+        throw new Error('Vector desktop crypto bridge is unavailable. Run the Electron client, not a regular browser tab.');
+      }
+
+      const clientInstallationId = await window.vectorCrypto.getOrCreateClientInstallationId();
+
+      if (!clientInstallationId) {
+        throw new Error('Client installation ID was not generated.');
+      }
+
       const authenticationResponse = await login({
         login: loginValue,
         password,
-        deviceId: storedDeviceId,
-        deviceName: storedDeviceId ? null : 'Vector Desktop',
-        platform: storedDeviceId ? null : 'WINDOWS',
+        deviceId: null,
+        clientInstallationId,
+        deviceName: 'Vector Desktop',
+        platform: 'WINDOWS',
         clientVersion: '0.2.0',
       });
 
-      setAuthentication(authenticationResponse, storedDeviceId);
+      setAuthentication(authenticationResponse);
 
       const profile = await getCurrentProfile();
       setProfile(profile);
       upsertProfile(profile);
 
-      if (!storedDeviceId) {
-        const devices = await getCurrentDevices();
-        const resolvedDeviceId = resolveDeviceId(devices);
-
-        if (resolvedDeviceId) {
-          setDeviceId(resolvedDeviceId);
-        }
-      }
 
       navigate('/messenger');
     }

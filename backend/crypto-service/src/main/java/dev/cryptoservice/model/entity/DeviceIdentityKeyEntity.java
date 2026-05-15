@@ -24,6 +24,9 @@ public class DeviceIdentityKeyEntity {
     @Column(name = "device_id")
     private UUID deviceId;
 
+    @Column(name = "registration_id", nullable = false)
+    private Integer registrationId;
+
     @Column(name = "public_key", nullable = false, columnDefinition = "TEXT")
     private String publicKey;
 

@@ -7,7 +7,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
-@Schema(description = "Response DTO for encrypted message.")
+@Schema(description = "Response DTO for an encrypted message.")
 public record MessageResponseDto(
     @Schema(description = "Message ID.")
     UUID messageId,
@@ -30,8 +30,8 @@ public record MessageResponseDto(
     @Schema(description = "Encryption type.")
     MessageEncryptionType encryptionType,
 
-    @Schema(description = "Encrypted payload.")
-    String encryptedPayload,
+    @Schema(description = "Encrypted payloads available to the current account devices.")
+    List<MessageDevicePayloadResponseDto> devicePayloads,
 
     @Schema(description = "Creation datetime.")
     OffsetDateTime createdAt,

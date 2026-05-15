@@ -9,3 +9,5 @@ databaseChangeLog:
       file: db/changelog/changes/004-create-devices-table.yaml
   - include:
       file: db/changelog/changes/005-create-auth-sessions-table.yaml
+  - include:
+      file: db/changelog/changes/006-add-client-installation-id-to-devices.yaml

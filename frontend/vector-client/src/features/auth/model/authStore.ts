@@ -54,7 +54,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   profile: readProfileFromStorage(),
 
   setAuthentication: (authenticationResponse, fallbackDeviceId) => {
-    const resolvedDeviceId = fallbackDeviceId ?? localStorage.getItem(DEVICE_ID_STORAGE_KEY);
+    const resolvedDeviceId = authenticationResponse.deviceId ?? fallbackDeviceId ?? localStorage.getItem(DEVICE_ID_STORAGE_KEY);
 
     localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, authenticationResponse.accessToken);
     localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, authenticationResponse.refreshToken);

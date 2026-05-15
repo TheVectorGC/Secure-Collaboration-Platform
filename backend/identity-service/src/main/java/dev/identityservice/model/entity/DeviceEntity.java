@@ -36,6 +36,9 @@ public class DeviceEntity {
     @Column(name = "device_name", nullable = false, length = 100)
     private String deviceName;
 
+    @Column(name = "client_installation_id", length = 64)
+    private String clientInstallationId;
+
     @Column(nullable = false, length = 32)
     @Enumerated(EnumType.STRING)
     private DevicePlatform platform;

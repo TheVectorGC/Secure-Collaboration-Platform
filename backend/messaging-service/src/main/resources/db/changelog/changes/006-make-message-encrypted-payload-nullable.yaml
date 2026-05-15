@@ -1,0 +1,16 @@
+databaseChangeLog:
+  - changeSet:
+      id: 006-make-message-encrypted-payload-nullable
+      author: messaging-service
+      preConditions:
+        - onFail: MARK_RAN
+        - tableExists:
+            tableName: messages
+        - columnExists:
+            tableName: messages
+            columnName: encrypted_payload
+      changes:
+        - dropNotNullConstraint:
+            tableName: messages
+            columnName: encrypted_payload
+            columnDataType: TEXT

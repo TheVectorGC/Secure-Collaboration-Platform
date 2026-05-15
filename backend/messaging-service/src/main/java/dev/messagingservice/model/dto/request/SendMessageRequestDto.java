@@ -3,12 +3,14 @@ package dev.messagingservice.model.dto.request;
 import dev.messagingservice.model.enumeration.MessageEncryptionType;
 import dev.messagingservice.model.enumeration.MessageType;
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import java.util.List;
 import java.util.UUID;
 
-@Schema(description = "Request DTO for sending encrypted message.")
+@Schema(description = "Request DTO for sending an end-to-end encrypted message.")
 public record SendMessageRequestDto(
     @NotNull(message = "Sender device ID can't be empty.")
     @Schema(description = "Sender device ID.")
@@ -26,8 +28,8 @@ public record SendMessageRequestDto(
     @Schema(description = "Encryption type.", example = "SIGNAL")
     MessageEncryptionType encryptionType,
 
-    @NotBlank(message = "Encrypted payload can't be empty.")
-    @Size(max = 200000, message = "Encrypted payload is too long.")
-    @Schema(description = "Encrypted message payload.")
-    String encryptedPayload
+    @Valid
+    @NotEmpty(message = "Device payloads can't be empty.")
+    @Schema(description = "Encrypted payloads, one per target device.")
+    List<DeviceMessagePayloadRequestDto> devicePayloads
 ) {}

@@ -1,6 +1,7 @@
 package dev.cryptoservice.controller;
 
 import dev.cryptoservice.model.dto.request.RegisterIdentityKeyRequestDto;
+import dev.cryptoservice.model.dto.request.UploadKyberPreKeyRequestDto;
 import dev.cryptoservice.model.dto.request.UploadOneTimePreKeysRequestDto;
 import dev.cryptoservice.model.dto.request.UploadSignedPreKeyRequestDto;
 import dev.cryptoservice.model.dto.response.IdentityKeyResponseDto;
@@ -59,6 +60,22 @@ public class DeviceKeyController {
             currentAccountService.getCurrentAccountId(),
             deviceId,
             uploadSignedPreKeyRequestDto
+        );
+
+        return new ResponseEntity<>(HttpStatus.OK);
+    }
+
+
+    @Operation(summary = "Upload active Kyber prekey")
+    @PutMapping("/kyber-prekey")
+    public ResponseEntity<Void> uploadKyberPreKey(
+        @PathVariable UUID deviceId,
+        @Valid @RequestBody UploadKyberPreKeyRequestDto uploadKyberPreKeyRequestDto
+    ) {
+        cryptoKeyService.uploadKyberPreKey(
+            currentAccountService.getCurrentAccountId(),
+            deviceId,
+            uploadKyberPreKeyRequestDto
         );
 
         return new ResponseEntity<>(HttpStatus.OK);

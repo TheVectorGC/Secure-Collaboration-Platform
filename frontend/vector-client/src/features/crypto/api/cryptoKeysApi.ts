@@ -1,12 +1,13 @@
 import { AxiosError } from 'axios';
 import { cryptoHttpClient } from '../../../shared/api/httpClient';
-import type { LocalPublicSignalKeyBundle } from '../../../shared/types/vectorCrypto';
+import type { LocalPublicSignalKeyBundle, PreKeyBundleResponseDto } from '../../../shared/types/vectorCrypto';
 
 export type PreKeyStatusResponseDto = {
   deviceId: string;
   identityKeyRegistered: boolean;
   activeSignedPreKeyRegistered: boolean;
   availableOneTimePreKeyCount: number;
+  activeKyberPreKeyRegistered: boolean;
   lowPreKeyThresholdReached: boolean;
 };
 
@@ -16,10 +17,18 @@ type LegacyPreKeyStatusResponseDto = PreKeyStatusResponseDto & {
 };
 
 type RegisterIdentityKeyRequestDto = {
+  registrationId: number;
   publicKey: string;
 };
 
 type UploadSignedPreKeyRequestDto = {
+  keyId: number;
+  publicKey: string;
+  signature: string;
+  expiresAt: string | null;
+};
+
+type UploadKyberPreKeyRequestDto = {
   keyId: number;
   publicKey: string;
   signature: string;
@@ -57,6 +66,7 @@ function isOneTimePreKeyRefillRequired(status: LegacyPreKeyStatusResponseDto | n
 function hasEnoughRegisteredKeys(status: LegacyPreKeyStatusResponseDto): boolean {
   return status.identityKeyRegistered
     && isActiveSignedPreKeyRegistered(status)
+    && status.activeKyberPreKeyRegistered
     && !isOneTimePreKeyRefillRequired(status);
 }
 
@@ -76,8 +86,17 @@ export async function uploadSignedPreKey(deviceId: string, request: UploadSigned
   await cryptoHttpClient.put(`/api/v1/crypto/devices/${deviceId}/signed-prekey`, request);
 }
 
+export async function uploadKyberPreKey(deviceId: string, request: UploadKyberPreKeyRequestDto): Promise<void> {
+  await cryptoHttpClient.put(`/api/v1/crypto/devices/${deviceId}/kyber-prekey`, request);
+}
+
 export async function uploadOneTimePreKeys(deviceId: string, request: UploadOneTimePreKeysRequestDto): Promise<void> {
   await cryptoHttpClient.post(`/api/v1/crypto/devices/${deviceId}/one-time-prekeys`, request);
+}
+
+export async function getPreKeyBundle(deviceId: string): Promise<PreKeyBundleResponseDto> {
+  const response = await cryptoHttpClient.get<PreKeyBundleResponseDto>(`/api/v1/crypto/devices/${deviceId}/prekey-bundle`);
+  return response.data;
 }
 
 async function uploadMissingDeviceKeys(
@@ -87,6 +106,7 @@ async function uploadMissingDeviceKeys(
 ): Promise<void> {
   if (!status?.identityKeyRegistered) {
     await registerIdentityKey(deviceId, {
+      registrationId: signalKeyBundle.registrationId,
       publicKey: signalKeyBundle.identityKey.publicKey,
     });
   }
@@ -97,6 +117,15 @@ async function uploadMissingDeviceKeys(
       publicKey: signalKeyBundle.signedPreKey.publicKey,
       signature: signalKeyBundle.signedPreKey.signature,
       expiresAt: signalKeyBundle.signedPreKey.expiresAt,
+    });
+  }
+
+  if (!status?.activeKyberPreKeyRegistered) {
+    await uploadKyberPreKey(deviceId, {
+      keyId: signalKeyBundle.kyberPreKey.keyId,
+      publicKey: signalKeyBundle.kyberPreKey.publicKey,
+      signature: signalKeyBundle.kyberPreKey.signature,
+      expiresAt: signalKeyBundle.kyberPreKey.expiresAt,
     });
   }
 
@@ -131,8 +160,8 @@ export async function ensureCryptoDeviceKeysRegistered(
 
   const finalStatus = await getDevicePreKeyStatus(deviceId);
 
-  if (!finalStatus.identityKeyRegistered || !isActiveSignedPreKeyRegistered(finalStatus)) {
-    throw new Error('Crypto key registration finished, but crypto-service still reports missing identity or active signed prekey.');
+  if (!finalStatus.identityKeyRegistered || !isActiveSignedPreKeyRegistered(finalStatus) || !finalStatus.activeKyberPreKeyRegistered) {
+    throw new Error('Crypto key registration finished, but crypto-service still reports missing identity, active signed prekey or active Kyber prekey.');
   }
 
   return finalStatus;

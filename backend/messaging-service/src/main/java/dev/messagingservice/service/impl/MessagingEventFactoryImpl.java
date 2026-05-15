@@ -2,6 +2,7 @@ package dev.messagingservice.service.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.messagingservice.model.entity.MessageDevicePayloadEntity;
 import dev.messagingservice.model.entity.MessageEntity;
 import dev.messagingservice.model.enumeration.MessagingEventType;
 import dev.messagingservice.model.event.MessagingEventDto;
@@ -20,7 +21,11 @@ public class MessagingEventFactoryImpl implements MessagingEventFactory {
     private final ObjectMapper objectMapper;
 
     @Override
-    public MessagingEventDto createMessageCreatedEvent(MessageEntity messageEntity, List<UUID> recipientAccountIds) {
+    public MessagingEventDto createMessageCreatedEvent(
+        MessageEntity messageEntity,
+        List<MessageDevicePayloadEntity> payloadEntities,
+        List<UUID> recipientAccountIds
+    ) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("chatId", messageEntity.getChatId());
         payload.put("messageId", messageEntity.getId());
@@ -28,7 +33,7 @@ public class MessagingEventFactoryImpl implements MessagingEventFactory {
         payload.put("senderDeviceId", messageEntity.getSenderDeviceId());
         payload.put("messageType", messageEntity.getMessageType());
         payload.put("encryptionType", messageEntity.getEncryptionType());
-        payload.put("encryptedPayload", messageEntity.getEncryptedPayload());
+        payload.put("devicePayloads", createDevicePayloads(payloadEntities));
         payload.put("createdAt", messageEntity.getCreatedAt());
 
         return createEvent(
@@ -85,6 +90,19 @@ public class MessagingEventFactoryImpl implements MessagingEventFactory {
             recipientAccountIds,
             payload
         );
+    }
+
+    private List<Map<String, Object>> createDevicePayloads(List<MessageDevicePayloadEntity> payloadEntities) {
+        return payloadEntities.stream()
+            .map(payloadEntity -> {
+                Map<String, Object> payload = new LinkedHashMap<>();
+                payload.put("targetAccountId", payloadEntity.getTargetAccountId());
+                payload.put("targetDeviceId", payloadEntity.getTargetDeviceId());
+                payload.put("ciphertextType", payloadEntity.getCiphertextType());
+                payload.put("encryptedPayload", payloadEntity.getEncryptedPayload());
+                return payload;
+            })
+            .toList();
     }
 
     private MessagingEventDto createEvent(

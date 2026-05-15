@@ -6,12 +6,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "electron": "wait-on http://localhost:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron electron/main.cjs",
+    "electron": "wait-on http://localhost:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
     "dev:electron": "concurrently \"npm run dev\" \"npm run electron\"",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "rebuild:electron": "electron-rebuild -f -w better-sqlite3-multiple-ciphers -w @signalapp/libsignal-client"
+    "rebuild:electron": "electron-rebuild -f -w better-sqlite3-multiple-ciphers -w @signalapp/libsignal-client",
+    "electron:admin": "wait-on http://localhost:5173 && cross-env VECTOR_PROFILE=admin-device VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
+    "electron:ivan": "wait-on http://localhost:5173 && cross-env VECTOR_PROFILE=ivan-device VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
+    "electron:petr": "wait-on http://localhost:5173 && cross-env VECTOR_PROFILE=petr-device VITE_DEV_SERVER_URL=http://localhost:5173 electron ."
   },
   "dependencies": {
     "@signalapp/libsignal-client": "^0.74.1",

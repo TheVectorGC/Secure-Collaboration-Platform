@@ -3,6 +3,7 @@ const encryptedDatabase = require('./encryptedDatabase.cjs');
 const secureStorageService = require('./secureStorageService.cjs');
 const localCryptoRepository = require('./localCryptoRepository.cjs');
 const signalKeyService = require('./signalKeyService.cjs');
+const signalMessageService = require('./signalMessageService.cjs');
 
 function validateInitializeRequest(request) {
   if (!request || typeof request !== 'object') {
@@ -19,6 +20,10 @@ function validateInitializeRequest(request) {
 }
 
 function registerVectorCryptoIpc() {
+  ipcMain.handle('vectorCrypto:getOrCreateClientInstallationId', async () => {
+    return secureStorageService.getOrCreateClientInstallationId();
+  });
+
   ipcMain.handle('vectorCrypto:getHealth', async () => {
     const storageHealth = secureStorageService.getHealth();
 
@@ -55,6 +60,18 @@ function registerVectorCryptoIpc() {
       databasePath: encryptedDatabase.getDatabaseFilePath(),
       signalKeyBundle,
     };
+  });
+
+  ipcMain.handle('vectorCrypto:encryptMessage', async (_event, request) => {
+    return signalMessageService.encryptMessage(request);
+  });
+
+  ipcMain.handle('vectorCrypto:encryptLocalMessage', async (_event, request) => {
+    return signalMessageService.encryptLocalMessage(request);
+  });
+
+  ipcMain.handle('vectorCrypto:decryptMessage', async (_event, request) => {
+    return signalMessageService.decryptMessage(request);
   });
 
   ipcMain.handle('vectorCrypto:clearLocalVault', async () => {

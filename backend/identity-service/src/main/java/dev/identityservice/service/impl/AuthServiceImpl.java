@@ -166,7 +166,8 @@ public class AuthServiceImpl implements AuthService {
                 refreshToken,
                 TOKEN_TYPE,
                 accessTokenExpiresAt,
-                authSessionEntity.getId()
+                authSessionEntity.getId(),
+                deviceEntity.getId()
         );
     }
 
@@ -236,7 +237,8 @@ public class AuthServiceImpl implements AuthService {
                 newRefreshToken,
                 TOKEN_TYPE,
                 accessTokenExpiresAt,
-                newAuthSessionEntity.getId()
+                newAuthSessionEntity.getId(),
+                authSessionEntity.getDeviceId()
         );
     }
 

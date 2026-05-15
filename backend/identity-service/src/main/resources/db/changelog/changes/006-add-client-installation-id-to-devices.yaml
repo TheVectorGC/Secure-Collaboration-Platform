@@ -1,0 +1,31 @@
+databaseChangeLog:
+  - changeSet:
+      id: 006-add-client-installation-id-to-devices
+      author: identity-service
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            columnExists:
+              tableName: devices
+              columnName: client_installation_id
+      changes:
+        - addColumn:
+            tableName: devices
+            columns:
+              - column:
+                  name: client_installation_id
+                  type: VARCHAR(64)
+
+        - createIndex:
+            tableName: devices
+            indexName: idx_devices_account_installation
+            columns:
+              - column:
+                  name: account_id
+              - column:
+                  name: client_installation_id
+
+        - addUniqueConstraint:
+            tableName: devices
+            columnNames: account_id, client_installation_id
+            constraintName: uk_devices_account_client_installation

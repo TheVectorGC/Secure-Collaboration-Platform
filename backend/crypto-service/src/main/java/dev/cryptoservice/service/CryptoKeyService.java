@@ -1,6 +1,7 @@
 package dev.cryptoservice.service;
 
 import dev.cryptoservice.model.dto.request.RegisterIdentityKeyRequestDto;
+import dev.cryptoservice.model.dto.request.UploadKyberPreKeyRequestDto;
 import dev.cryptoservice.model.dto.request.UploadOneTimePreKeysRequestDto;
 import dev.cryptoservice.model.dto.request.UploadSignedPreKeyRequestDto;
 import dev.cryptoservice.model.dto.response.IdentityKeyResponseDto;
@@ -19,6 +20,12 @@ public interface CryptoKeyService {
         UUID accountId,
         UUID deviceId,
         UploadSignedPreKeyRequestDto uploadSignedPreKeyRequestDto
+    );
+
+    void uploadKyberPreKey(
+        UUID accountId,
+        UUID deviceId,
+        UploadKyberPreKeyRequestDto uploadKyberPreKeyRequestDto
     );
 
     void uploadOneTimePreKeys(

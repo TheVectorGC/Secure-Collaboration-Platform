@@ -14,6 +14,9 @@ public record PreKeyStatusResponseDto(
     @Schema(description = "Whether active signed prekey is registered.")
     boolean activeSignedPreKeyRegistered,
 
+    @Schema(description = "Whether active Kyber prekey is registered.")
+    boolean activeKyberPreKeyRegistered,
+
     @Schema(description = "Number of available one-time prekeys.")
     long availableOneTimePreKeyCount,
 

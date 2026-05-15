@@ -19,6 +19,10 @@ public record LoginRequestDto(
         @Schema(description = "Existing device ID. Can be null for first login from a new device.")
         UUID deviceId,
 
+        @Size(max = 64, message = "Client installation ID must be less than 64 characters.")
+        @Schema(description = "Stable local client installation ID. Used to avoid duplicate devices from the same desktop installation.")
+        String clientInstallationId,
+
         @Size(max = 100, message = "Device name must be less than 100 characters.")
         @Schema(description = "Device name. Required when deviceId is null.", example = "Ivan Windows Laptop")
         String deviceName,

@@ -4,6 +4,7 @@ import dev.messagingservice.exception.ChatAccessDeniedException;
 import dev.messagingservice.exception.ChatNotFoundException;
 import dev.messagingservice.exception.DuplicateClientMessageException;
 import dev.messagingservice.exception.MessageNotFoundException;
+import dev.messagingservice.exception.MessagePayloadValidationException;
 import dev.messagingservice.exception.TokenValidationException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -46,6 +47,13 @@ public class AppExceptionHandler {
     public ResponseEntity<StandardErrorResponse> handleNotFoundException(RuntimeException exception) {
         log.warn("{}: {}.", exception.getClass().getSimpleName(), exception.getMessage());
         return buildStandardErrorResponse(exception.getClass().getSimpleName(), exception.getMessage(), HttpStatus.NOT_FOUND);
+    }
+
+
+    @ExceptionHandler(MessagePayloadValidationException.class)
+    public ResponseEntity<StandardErrorResponse> handleMessagePayloadValidationException(MessagePayloadValidationException exception) {
+        log.warn("MessagePayloadValidationException: {}.", exception.getMessage());
+        return buildStandardErrorResponse("MessagePayloadValidationException", exception.getMessage(), HttpStatus.BAD_REQUEST);
     }
 
     @ExceptionHandler(DuplicateClientMessageException.class)

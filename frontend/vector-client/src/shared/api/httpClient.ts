@@ -40,7 +40,7 @@ async function refreshAuthentication(): Promise<AuthenticationResponseDto> {
     refreshRequestPromise = refreshHttpClient
       .post<AuthenticationResponseDto>('/api/v1/auth/refresh', { refreshToken })
       .then((response) => {
-        useAuthStore.getState().setAuthentication(response.data, useAuthStore.getState().deviceId);
+        useAuthStore.getState().setAuthentication(response.data);
         return response.data;
       })
       .finally(() => {

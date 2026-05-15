@@ -15,5 +15,7 @@ public record AuthenticationResponseDto(
     @Schema(description = "Access token expiration datetime")
     OffsetDateTime accessTokenExpiresAt,
     @Schema(description = "Refresh session ID")
-    UUID sessionId
+    UUID sessionId,
+    @Schema(description = "Authenticated device ID")
+    UUID deviceId
 ) {}
