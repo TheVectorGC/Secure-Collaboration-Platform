@@ -10,6 +10,7 @@ import dev.cryptoservice.exception.ExternalServiceException;
 import dev.cryptoservice.exception.KyberPreKeyAlreadyExistsException;
 import dev.cryptoservice.exception.KyberPreKeyNotFoundException;
 import dev.cryptoservice.exception.KyberPreKeySignatureInvalidException;
+import dev.cryptoservice.exception.KeyBackupNotFoundException;
 import dev.cryptoservice.exception.OneTimePreKeyAlreadyExistsException;
 import dev.cryptoservice.exception.PreKeyBundleNotAvailableException;
 import dev.cryptoservice.exception.SignedPreKeyAlreadyExistsException;
@@ -71,7 +72,7 @@ public class AppExceptionHandler {
         return buildStandardErrorResponse("DeviceNotFoundException", exception.getMessage(), HttpStatus.NOT_FOUND);
     }
 
-    @ExceptionHandler({DeviceIdentityKeyNotFoundException.class, SignedPreKeyNotFoundException.class, KyberPreKeyNotFoundException.class, PreKeyBundleNotAvailableException.class})
+    @ExceptionHandler({DeviceIdentityKeyNotFoundException.class, SignedPreKeyNotFoundException.class, KyberPreKeyNotFoundException.class, PreKeyBundleNotAvailableException.class, KeyBackupNotFoundException.class})
     public ResponseEntity<StandardErrorResponse> handleNotFoundException(RuntimeException exception) {
         log.warn("{}: {}.", exception.getClass().getSimpleName(), exception.getMessage());
         return buildStandardErrorResponse(exception.getClass().getSimpleName(), exception.getMessage(), HttpStatus.NOT_FOUND);

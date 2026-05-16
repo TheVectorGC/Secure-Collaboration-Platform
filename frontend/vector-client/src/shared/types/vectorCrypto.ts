@@ -104,31 +104,52 @@ export type DecryptMessageResponse = {
   fromCache?: boolean;
 };
 
-export type DocumentSigningKeyResponse = {
-  publicKeyBase64: string;
-  fingerprint: string;
-  createdAt: string;
-  alreadyExisted: boolean;
-};
-
-export type EnsureDocumentSigningKeyRequest = {
-  accountId: string;
-  deviceId: string;
-};
-
-export type SignDocumentHashRequest = {
-  accountId: string;
-  deviceId: string;
-  documentHashBase64: string;
-};
-
-export type SignDocumentHashResponse = {
-  signatureBase64: string;
-  signingKeyFingerprint: string;
-};
-
 export type ClearLocalVaultResponse = {
   cleared: boolean;
+};
+
+
+export type ExportEncryptedKeyBackupRequest = {
+  accountId: string;
+  recoveryPassword: string;
+};
+
+export type ExportEncryptedKeyBackupResponse = {
+  backupVersion: number;
+  kdfAlgorithm: string;
+  kdfSaltBase64: string;
+  kdfParametersJson: string;
+  encryptionAlgorithm: string;
+  initializationVectorBase64: string;
+  authenticationTagBase64: string;
+  encryptedBackupBlobBase64: string;
+  exportedDeviceIds: string[];
+};
+
+export type ImportEncryptedKeyBackupRequest = {
+  accountId: string;
+  recoveryPassword: string;
+  backup: {
+    backupVersion: number;
+    kdfAlgorithm: string;
+    kdfSaltBase64: string;
+    kdfParametersJson: string;
+    encryptionAlgorithm: string;
+    initializationVectorBase64: string;
+    authenticationTagBase64: string;
+    encryptedBackupBlobBase64: string;
+  };
+};
+
+export type ImportEncryptedKeyBackupResponse = {
+  imported: boolean;
+  accountId: string;
+  importedDeviceIds: string[];
+  exportedAt: string;
+};
+
+export type GetRestoredDeviceIdsRequest = {
+  accountId: string;
 };
 
 export type VectorCryptoApi = {
@@ -138,7 +159,8 @@ export type VectorCryptoApi = {
   encryptMessage: (request: EncryptMessageRequest) => Promise<EncryptMessageResponse>;
   encryptLocalMessage: (request: EncryptLocalMessageRequest) => Promise<EncryptMessageResponse>;
   decryptMessage: (request: DecryptMessageRequest) => Promise<DecryptMessageResponse>;
-  ensureDocumentSigningKey: (request: EnsureDocumentSigningKeyRequest) => Promise<DocumentSigningKeyResponse>;
-  signDocumentHash: (request: SignDocumentHashRequest) => Promise<SignDocumentHashResponse>;
+  exportEncryptedKeyBackup: (request: ExportEncryptedKeyBackupRequest) => Promise<ExportEncryptedKeyBackupResponse>;
+  importEncryptedKeyBackup: (request: ImportEncryptedKeyBackupRequest) => Promise<ImportEncryptedKeyBackupResponse>;
+  getRestoredDeviceIds: (request: GetRestoredDeviceIdsRequest) => Promise<string[]>;
   clearLocalVault: () => Promise<ClearLocalVaultResponse>;
 };

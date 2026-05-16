@@ -4,6 +4,7 @@ const secureStorageService = require('./secureStorageService.cjs');
 const localCryptoRepository = require('./localCryptoRepository.cjs');
 const signalKeyService = require('./signalKeyService.cjs');
 const signalMessageService = require('./signalMessageService.cjs');
+const keyBackupService = require('./keyBackupService.cjs');
 
 function validateInitializeRequest(request) {
   if (!request || typeof request !== 'object') {
@@ -70,32 +71,6 @@ function registerVectorCryptoIpc() {
     return signalMessageService.encryptLocalMessage(request);
   });
 
-  ipcMain.handle('vectorCrypto:ensureDocumentSigningKey', async (_event, request) => {
-    validateInitializeRequest(request);
-    const signingKey = localCryptoRepository.getOrCreateDocumentSigningKey(request.accountId, request.deviceId);
-
-    return {
-      publicKeyBase64: signingKey.publicKeyBase64,
-      fingerprint: signingKey.fingerprint,
-      createdAt: signingKey.createdAt,
-      alreadyExisted: signingKey.alreadyExisted,
-    };
-  });
-
-  ipcMain.handle('vectorCrypto:signDocumentHash', async (_event, request) => {
-    validateInitializeRequest(request);
-
-    if (!request.documentHashBase64 || typeof request.documentHashBase64 !== 'string') {
-      throw new Error('documentHashBase64 is required.');
-    }
-
-    return localCryptoRepository.signDocumentHash(
-      request.accountId,
-      request.deviceId,
-      request.documentHashBase64
-    );
-  });
-
   ipcMain.handle('vectorCrypto:decryptMessage', async (_event, request) => {
     if (request?.messageId) {
       const cachedPlainText = localCryptoRepository.getCachedDecryptedMessage(
@@ -127,6 +102,18 @@ function registerVectorCryptoIpc() {
       ...decryptResponse,
       fromCache: false,
     };
+  });
+
+  ipcMain.handle('vectorCrypto:exportEncryptedKeyBackup', async (_event, request) => {
+    return keyBackupService.exportEncryptedKeyBackup(request);
+  });
+
+  ipcMain.handle('vectorCrypto:importEncryptedKeyBackup', async (_event, request) => {
+    return keyBackupService.importEncryptedKeyBackup(request);
+  });
+
+  ipcMain.handle('vectorCrypto:getRestoredDeviceIds', async (_event, request) => {
+    return keyBackupService.getRestoredDeviceIds(request?.accountId);
   });
 
   ipcMain.handle('vectorCrypto:clearLocalVault', async () => {

@@ -137,22 +137,38 @@ function signDocumentHash(accountId, deviceId, documentHashBase64) {
 }
 
 function getCachedDecryptedMessage(accountId, deviceId, messageId) {
-  if (!accountId || !deviceId || !messageId) {
+  if (!accountId || !messageId) {
     return null;
   }
 
   const database = encryptedDatabase.openDatabase();
 
   try {
-    const cachedMessage = database
+    if (deviceId) {
+      const exactCachedMessage = database
+        .prepare(`
+          SELECT plain_text
+          FROM decrypted_message_cache
+          WHERE account_id = ? AND device_id = ? AND message_id = ?
+        `)
+        .get(accountId, deviceId, messageId);
+
+      if (exactCachedMessage?.plain_text) {
+        return exactCachedMessage.plain_text;
+      }
+    }
+
+    const anyDeviceCachedMessage = database
       .prepare(`
         SELECT plain_text
         FROM decrypted_message_cache
-        WHERE account_id = ? AND device_id = ? AND message_id = ?
+        WHERE account_id = ? AND message_id = ?
+        ORDER BY updated_at DESC
+        LIMIT 1
       `)
-      .get(accountId, deviceId, messageId);
+      .get(accountId, messageId);
 
-    return cachedMessage?.plain_text ?? null;
+    return anyDeviceCachedMessage?.plain_text ?? null;
   }
   finally {
     database.close();
@@ -182,10 +198,59 @@ function saveCachedDecryptedMessage(accountId, deviceId, messageId, plainText) {
   }
 }
 
+
+function saveRestoredLocalMessageKey(accountId, deviceId, keyBase64) {
+  if (!accountId || !deviceId || !keyBase64) {
+    return;
+  }
+
+  const database = encryptedDatabase.openDatabase();
+  const timestamp = nowIso();
+
+  try {
+    database
+      .prepare(`
+        INSERT INTO restored_local_message_keys(account_id, device_id, key_base64, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(account_id, device_id)
+        DO UPDATE SET key_base64 = excluded.key_base64, updated_at = excluded.updated_at
+      `)
+      .run(accountId, deviceId, keyBase64, timestamp, timestamp);
+  }
+  finally {
+    database.close();
+  }
+}
+
+function getRestoredLocalMessageKey(accountId, deviceId) {
+  if (!accountId || !deviceId) {
+    return null;
+  }
+
+  const database = encryptedDatabase.openDatabase();
+
+  try {
+    const row = database
+      .prepare(`
+        SELECT key_base64
+        FROM restored_local_message_keys
+        WHERE account_id = ? AND device_id = ?
+      `)
+      .get(accountId, deviceId);
+
+    return row?.key_base64 ?? null;
+  }
+  finally {
+    database.close();
+  }
+}
+
 module.exports = {
   initializeLocalDevice,
   getOrCreateDocumentSigningKey,
   signDocumentHash,
   getCachedDecryptedMessage,
   saveCachedDecryptedMessage,
+  saveRestoredLocalMessageKey,
+  getRestoredLocalMessageKey,
 };

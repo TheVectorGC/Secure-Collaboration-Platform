@@ -1,6 +1,7 @@
 const crypto = require('node:crypto');
 const encryptedDatabase = require('./encryptedDatabase.cjs');
 const secureStorageService = require('./secureStorageService.cjs');
+const localCryptoRepository = require('./localCryptoRepository.cjs');
 const { createSignalStores, fromBase64, toBase64 } = require('./signalStores.cjs');
 
 const SIGNAL_DEVICE_ID = 1;
@@ -110,8 +111,7 @@ function encryptLocalPlainText(accountId, deviceId, plainText) {
   }), 'utf8'));
 }
 
-function decryptLocalPlainText(accountId, deviceId, encryptedPayload) {
-  const key = deriveLocalMessageKey(accountId, deviceId);
+function decryptLocalPlainTextWithKey(accountId, deviceId, encryptedPayload, key) {
   const serializedEnvelope = fromBase64(encryptedPayload).toString('utf8');
   const envelope = JSON.parse(serializedEnvelope);
 
@@ -133,6 +133,28 @@ function decryptLocalPlainText(accountId, deviceId, encryptedPayload) {
   ]);
 
   return plainTextBytes.toString('utf8');
+}
+
+function decryptLocalPlainText(accountId, deviceId, encryptedPayload) {
+  const currentLocalMessageKey = deriveLocalMessageKey(accountId, deviceId);
+
+  try {
+    return decryptLocalPlainTextWithKey(accountId, deviceId, encryptedPayload, currentLocalMessageKey);
+  }
+  catch (exception) {
+    const restoredLocalMessageKeyBase64 = localCryptoRepository.getRestoredLocalMessageKey(accountId, deviceId);
+
+    if (!restoredLocalMessageKeyBase64) {
+      throw exception;
+    }
+
+    return decryptLocalPlainTextWithKey(
+      accountId,
+      deviceId,
+      encryptedPayload,
+      Buffer.from(restoredLocalMessageKeyBase64, 'base64')
+    );
+  }
 }
 
 async function encryptLocalMessage(request) {

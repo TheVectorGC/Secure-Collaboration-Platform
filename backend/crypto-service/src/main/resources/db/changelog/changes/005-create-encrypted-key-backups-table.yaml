@@ -1,0 +1,76 @@
+databaseChangeLog:
+  - changeSet:
+      id: 005-create-encrypted-key-backups-table
+      author: vector
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            tableExists:
+              tableName: encrypted_key_backups
+      changes:
+        - createTable:
+            tableName: encrypted_key_backups
+            columns:
+              - column:
+                  name: account_id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_encrypted_key_backups
+                    nullable: false
+              - column:
+                  name: backup_version
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: kdf_algorithm
+                  type: varchar(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: kdf_salt_base64
+                  type: varchar(512)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: kdf_parameters_json
+                  type: text
+                  constraints:
+                    nullable: false
+              - column:
+                  name: encryption_algorithm
+                  type: varchar(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: initialization_vector_base64
+                  type: varchar(512)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: authentication_tag_base64
+                  type: varchar(512)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: encrypted_backup_blob_base64
+                  type: text
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamp with time zone
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamp with time zone
+                  constraints:
+                    nullable: false
+        - createIndex:
+            tableName: encrypted_key_backups
+            indexName: idx_encrypted_key_backups_updated_at
+            columns:
+              - column:
+                  name: updated_at

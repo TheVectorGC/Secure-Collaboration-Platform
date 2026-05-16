@@ -7,7 +7,6 @@ import {
   MessageCircle,
   Paperclip,
   FileText,
-  FileCheck2,
   Download,
   Image as ImageIcon,
   Plus,
@@ -34,8 +33,7 @@ import { logout as logoutRequest } from '../features/auth/api/authApi';
 import { useAuthStore } from '../features/auth/model/authStore';
 import { getChatMessages, markChatRead, markMessageDelivered, sendMessage } from '../features/messages/api/messagesApi';
 import { downloadEncryptedMediaFile, uploadEncryptedMediaFile } from '../features/media/api/mediaApi';
-import { createDocument, getDocument, getDocuments, registerDocumentSigningKey, rejectDocument, signDocument } from '../features/documents/api/documentsApi';
-import { buildDocumentAttachmentContent, buildFileAttachmentContent, decryptDownloadedFile, encryptFileForUpload, formatFileSize, parseDocumentAttachmentMessageContent, parseFileAttachmentMessageContent, sha256Base64 } from '../features/media/lib/fileCrypto';
+import { buildFileAttachmentContent, decryptDownloadedFile, encryptFileForUpload, formatFileSize, parseFileAttachmentMessageContent } from '../features/media/lib/fileCrypto';
 import { useMessengerStore } from '../features/messenger/model/messengerStore';
 import { useRealtimeConnection } from '../features/realtime/useRealtimeConnection';
 import { useRealtimeStore } from '../features/realtime/model/realtimeStore';
@@ -43,10 +41,11 @@ import { DevAccountPanel } from '../features/admin/ui/DevAccountPanel';
 import { useCryptoBootstrap } from '../features/crypto/useCryptoBootstrap';
 import { useCryptoStore } from '../features/crypto/model/cryptoStore';
 import { getPreKeyBundle } from '../features/crypto/api/cryptoKeysApi';
+import { downloadKeyBackup, getKeyBackupStatus, uploadKeyBackup, type KeyBackupStatusResponseDto } from '../features/crypto/api/keyBackupApi';
 import { formatChatTime, formatMessageTime } from '../shared/lib/dateFormat';
 import { getAvatarGradient, getInitials } from '../shared/lib/avatar';
 import { getDirectCompanionAccountId, getDisplayName } from '../shared/lib/profile';
-import type { ActiveDeviceResponseDto, ChatResponseDto, DocumentAttachmentMessageContent, DocumentResponseDto, FileAttachmentMessageContent, MessageResponseDto, ProfileResponseDto } from '../shared/types/api';
+import type { ActiveDeviceResponseDto, ChatResponseDto, FileAttachmentMessageContent, MessageResponseDto, ProfileResponseDto } from '../shared/types/api';
 
 function Avatar({ label, size = 'md' }: { label: string; size?: 'sm' | 'md' | 'lg' }) {
   const dimensions = size === 'sm' ? 'h-10 w-10 text-sm' : size === 'lg' ? 'h-14 w-14 text-lg' : 'h-12 w-12 text-base';
@@ -366,6 +365,14 @@ function NewChatModal({
 
 type SettingsTab = 'profile' | 'devices' | 'security';
 
+function isDecryptionPlaceholder(value: string | undefined): boolean {
+  if (!value) {
+    return false;
+  }
+
+  return value === '[Не удалось расшифровать сообщение]' || value === '[Сообщение недоступно для этого устройства]';
+}
+
 function formatDeviceTime(value: string | null | undefined): string {
   if (!value) {
     return 'нет данных';
@@ -408,6 +415,7 @@ function SettingsModal({
   realtimeStatus,
   onClose,
   onLogout,
+  onBackupRestored,
 }: {
   isOpen: boolean;
   profile: ProfileResponseDto | null;
@@ -417,11 +425,104 @@ function SettingsModal({
   realtimeStatus: string;
   onClose: () => void;
   onLogout: () => Promise<void>;
+  onBackupRestored: () => Promise<void>;
 }) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
   const [devices, setDevices] = useState<ActiveDeviceResponseDto[]>([]);
   const [isLoadingDevices, setIsLoadingDevices] = useState(false);
   const [devicesError, setDevicesError] = useState<string | null>(null);
+  const [backupStatus, setBackupStatus] = useState<KeyBackupStatusResponseDto | null>(null);
+  const [backupPassword, setBackupPassword] = useState('');
+  const [backupError, setBackupError] = useState<string | null>(null);
+  const [backupSuccess, setBackupSuccess] = useState<string | null>(null);
+  const [isBackupBusy, setIsBackupBusy] = useState(false);
+
+  async function loadBackupStatus() {
+    try {
+      const loadedBackupStatus = await getKeyBackupStatus();
+      setBackupStatus(loadedBackupStatus);
+    }
+    catch (error) {
+      console.error(error);
+      setBackupError('Не удалось загрузить статус резервной копии.');
+    }
+  }
+
+  async function handleCreateKeyBackup() {
+    if (!profile?.accountId || !window.vectorCrypto) {
+      setBackupError('Локальная криптография недоступна.');
+      return;
+    }
+
+    setIsBackupBusy(true);
+    setBackupError(null);
+    setBackupSuccess(null);
+
+    try {
+      const encryptedBackup = await window.vectorCrypto.exportEncryptedKeyBackup({
+        accountId: profile.accountId,
+        recoveryPassword: backupPassword,
+      });
+
+      await uploadKeyBackup({
+        backupVersion: encryptedBackup.backupVersion,
+        kdfAlgorithm: encryptedBackup.kdfAlgorithm,
+        kdfSaltBase64: encryptedBackup.kdfSaltBase64,
+        kdfParametersJson: encryptedBackup.kdfParametersJson,
+        encryptionAlgorithm: encryptedBackup.encryptionAlgorithm,
+        initializationVectorBase64: encryptedBackup.initializationVectorBase64,
+        authenticationTagBase64: encryptedBackup.authenticationTagBase64,
+        encryptedBackupBlobBase64: encryptedBackup.encryptedBackupBlobBase64,
+      });
+
+      setBackupPassword('');
+      setBackupSuccess(`Резервная копия ключей обновлена. Устройств в backup: ${encryptedBackup.exportedDeviceIds.length}.`);
+      await loadBackupStatus();
+    }
+    catch (error) {
+      console.error(error);
+      setBackupError('Не удалось создать резервную копию. Проверь пароль восстановления и локальный vault.');
+    }
+    finally {
+      setIsBackupBusy(false);
+    }
+  }
+
+  async function handleRestoreKeyBackup() {
+    if (!profile?.accountId || !window.vectorCrypto) {
+      setBackupError('Локальная криптография недоступна.');
+      return;
+    }
+
+    setIsBackupBusy(true);
+    setBackupError(null);
+    setBackupSuccess(null);
+
+    try {
+      const encryptedBackup = await downloadKeyBackup();
+      const restoreResult = await window.vectorCrypto.importEncryptedKeyBackup({
+        accountId: profile.accountId,
+        recoveryPassword: backupPassword,
+        backup: encryptedBackup,
+      });
+
+      setBackupPassword('');
+      setBackupSuccess(`Ключи восстановлены. Доступных device-контекстов: ${restoreResult.importedDeviceIds.length}. Интерфейс сейчас обновится.`);
+      await onBackupRestored();
+      await loadBackupStatus();
+
+      window.setTimeout(() => {
+        window.location.reload();
+      }, 700);
+    }
+    catch (error) {
+      console.error(error);
+      setBackupError('Не удалось восстановить ключи. Возможно, пароль восстановления неверный.');
+    }
+    finally {
+      setIsBackupBusy(false);
+    }
+  }
 
   async function loadDevices() {
     if (!profile?.accountId) {
@@ -447,6 +548,10 @@ function SettingsModal({
   useEffect(() => {
     if (isOpen && activeTab === 'devices') {
       void loadDevices();
+    }
+
+    if (isOpen && activeTab === 'security') {
+      void loadBackupStatus();
     }
   }, [activeTab, isOpen, profile?.accountId]);
 
@@ -641,194 +746,74 @@ function SettingsModal({
                   </div>
                 </div>
 
+                <div className="rounded-[2rem] border border-white/10 bg-white/[0.035] p-6">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <div className="text-base font-semibold text-zinc-50">Encrypted key backup</div>
+                      <div className="mt-1 max-w-2xl text-sm leading-6 text-zinc-500">
+                        Backup хранит на сервере только зашифрованный архив локальных ключей. Сервер не знает пароль восстановления и не может прочитать историю.
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => void loadBackupStatus()}
+                      className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-zinc-300 transition hover:border-violet-300/25 hover:text-zinc-50"
+                    >
+                      <RefreshCw size={15} />
+                      Статус
+                    </button>
+                  </div>
+
+                  <div className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
+                    <div className="rounded-2xl border border-white/8 bg-black/15 p-4">
+                      <div className="mb-2 text-zinc-300">Состояние</div>
+                      <div className="text-xs text-zinc-500">
+                        {backupStatus?.exists ? `Включён, версия ${backupStatus.backupVersion}` : 'Backup ещё не создан'}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-white/8 bg-black/15 p-4">
+                      <div className="mb-2 text-zinc-300">Последнее обновление</div>
+                      <div className="text-xs text-zinc-500">{formatDeviceTime(backupStatus?.updatedAt)}</div>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 space-y-3">
+                    <input
+                      type="password"
+                      value={backupPassword}
+                      onChange={(event) => setBackupPassword(event.target.value)}
+                      placeholder="Пароль восстановления, минимум 12 символов"
+                      className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-violet-300/35"
+                    />
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        onClick={() => void handleCreateKeyBackup()}
+                        disabled={isBackupBusy || backupPassword.length < 12}
+                        className="inline-flex items-center gap-2 rounded-2xl border border-emerald-300/20 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/15 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <ShieldCheck size={15} />
+                        Создать / обновить backup
+                      </button>
+                      <button
+                        onClick={() => void handleRestoreKeyBackup()}
+                        disabled={isBackupBusy || backupPassword.length < 12 || backupStatus?.exists === false}
+                        className="inline-flex items-center gap-2 rounded-2xl border border-violet-300/20 bg-violet-500/10 px-4 py-2 text-sm font-medium text-violet-200 transition hover:bg-violet-500/15 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <Download size={15} />
+                        Восстановить ключи
+                      </button>
+                    </div>
+                    {backupError && <div className="rounded-2xl border border-red-400/20 bg-red-500/10 p-3 text-sm text-red-200">{backupError}</div>}
+                    {backupSuccess && <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-3 text-sm text-emerald-200">{backupSuccess}</div>}
+                  </div>
+                </div>
+
                 <div className="rounded-[2rem] border border-violet-300/15 bg-violet-500/10 p-5 text-sm leading-6 text-violet-100/85">
-                  Сервер хранит только зашифрованные payload'ы. Для текущего устройства используется локальная encrypted copy, для остальных устройств — Signal payload.
+                  Сервер хранит только зашифрованные payload'ы и encrypted backup. Без пароля восстановления резервная копия не раскрывает локальные Signal-секреты.
                 </div>
               </div>
             )}
           </div>
         </section>
-      </div>
-    </div>
-  );
-}
-
-
-function DocumentsModal({
-  isOpen,
-  documents,
-  isLoading,
-  currentAccountId,
-  profilesById,
-  onClose,
-  onRefresh,
-}: {
-  isOpen: boolean;
-  documents: DocumentResponseDto[];
-  isLoading: boolean;
-  currentAccountId: string | undefined;
-  profilesById: Record<string, ProfileResponseDto>;
-  onClose: () => void;
-  onRefresh: () => Promise<void>;
-}) {
-  if (!isOpen) {
-    return null;
-  }
-
-  return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
-      <div className="flex h-[760px] w-full max-w-5xl flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-[#15161a] shadow-2xl shadow-black/60">
-        <header className="flex h-20 items-center justify-between border-b border-white/10 px-7">
-          <div>
-            <div className="text-xl font-semibold text-zinc-50">Документооборот</div>
-            <div className="mt-1 text-sm text-zinc-500">Зашифрованные документы, подписи и статусы согласования.</div>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => void onRefresh()}
-              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-zinc-300 transition hover:border-violet-300/25 hover:text-zinc-50"
-            >
-              <RefreshCw size={15} className={isLoading ? 'animate-spin' : ''} />
-              Обновить
-            </button>
-            <button
-              onClick={onClose}
-              className="rounded-2xl border border-white/10 bg-white/[0.04] p-2 text-zinc-400 transition hover:text-zinc-100"
-              title="Закрыть"
-            >
-              <X size={18} />
-            </button>
-          </div>
-        </header>
-
-        <div className="min-h-0 flex-1 overflow-y-auto p-7">
-          {isLoading && documents.length === 0 && (
-            <div className="rounded-[2rem] border border-white/10 bg-white/[0.025] p-8 text-center text-sm text-zinc-500">Загружаем документы...</div>
-          )}
-
-          {!isLoading && documents.length === 0 && (
-            <div className="rounded-[2rem] border border-dashed border-white/10 bg-white/[0.025] p-8 text-center text-sm text-zinc-500">
-              Документы появятся здесь после отправки через меню вложений.
-            </div>
-          )}
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            {documents.map((document) => {
-              const ownerProfile = profilesById[document.ownerAccountId];
-              const ownerName = ownerProfile ? getDisplayName(ownerProfile) : `${document.ownerAccountId.slice(0, 8)}…`;
-              const currentAccountSignature = document.signatures.find((signature) => signature.signerAccountId === currentAccountId);
-              const statusText = document.status === 'REJECTED'
-                ? 'Отклонён'
-                : currentAccountSignature
-                  ? 'Подписан вами'
-                  : document.signatures.length > 0
-                    ? `Подписей: ${document.signatures.length}`
-                    : 'Ожидает подписи';
-
-              return (
-                <div key={document.documentId} className="rounded-[2rem] border border-white/10 bg-white/[0.035] p-5">
-                  <div className="flex items-start gap-4">
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-lg shadow-violet-950/30">
-                      <FileCheck2 size={20} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-base font-semibold text-zinc-50">{document.fileName}</div>
-                      <div className="mt-1 text-xs text-zinc-500">{formatFileSize(document.sizeBytes)} • владелец: {ownerName}</div>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid gap-3 text-xs text-zinc-500 sm:grid-cols-2">
-                    <div className="rounded-2xl bg-black/15 p-3">Статус: <span className="text-zinc-300">{statusText}</span></div>
-                    <div className="rounded-2xl bg-black/15 p-3">Создан: <span className="text-zinc-300">{formatDeviceTime(document.createdAt)}</span></div>
-                  </div>
-
-                  <div className="mt-4 rounded-2xl border border-white/8 bg-black/10 p-3 text-xs text-zinc-500">
-                    SHA-256: <span className="break-all text-zinc-300">{document.plaintextSha256Base64}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DocumentAttachmentCard({
-  attachment,
-  document,
-  currentAccountId,
-  isOwnMessage,
-  isBusy,
-  onDownload,
-  onSign,
-  onReject,
-}: {
-  attachment: DocumentAttachmentMessageContent;
-  document: DocumentResponseDto | null;
-  currentAccountId: string | undefined;
-  isOwnMessage: boolean;
-  isBusy: boolean;
-  onDownload: (attachment: DocumentAttachmentMessageContent) => Promise<void>;
-  onSign: (attachment: DocumentAttachmentMessageContent) => Promise<void>;
-  onReject: (attachment: DocumentAttachmentMessageContent) => Promise<void>;
-}) {
-  const currentAccountSignature = document?.signatures.find((signature) => signature.signerAccountId === currentAccountId) ?? null;
-  const statusText = document?.status === 'REJECTED'
-    ? 'Документ отклонён'
-    : currentAccountSignature
-      ? 'Подписано вами'
-      : document && document.signatures.length > 0
-        ? `Подписей: ${document.signatures.length}`
-        : 'Ожидает подписи';
-
-  return (
-    <div className="min-w-[320px] max-w-[420px]">
-      <div className={`rounded-2xl border p-4 ${isOwnMessage ? 'border-white/20 bg-white/10' : 'border-white/10 bg-black/15'}`}>
-        <div className="flex items-start gap-3">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-black/20 text-white">
-            <FileCheck2 size={21} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-semibold">{attachment.fileName}</div>
-            <div className={`mt-1 text-xs ${isOwnMessage ? 'text-violet-100/75' : 'text-zinc-500'}`}>
-              {formatFileSize(attachment.sizeBytes)} • signed document
-            </div>
-            <div className={`mt-2 text-xs ${document?.status === 'REJECTED' ? 'text-red-200' : currentAccountSignature ? 'text-emerald-200' : isOwnMessage ? 'text-violet-100/75' : 'text-zinc-400'}`}>
-              {statusText}
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button
-            onClick={() => void onDownload(attachment)}
-            className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs transition ${isOwnMessage ? 'bg-white/15 hover:bg-white/25' : 'bg-white/[0.06] hover:bg-white/[0.1]'}`}
-          >
-            <Download size={14} />
-            Скачать
-          </button>
-          {!currentAccountSignature && document?.status !== 'REJECTED' && (
-            <button
-              onClick={() => void onSign(attachment)}
-              disabled={isBusy}
-              className="inline-flex items-center gap-2 rounded-xl bg-emerald-500/20 px-3 py-2 text-xs text-emerald-100 transition hover:bg-emerald-500/30 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isBusy ? <LoaderCircle size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
-              Подписать
-            </button>
-          )}
-          {!currentAccountSignature && document?.status !== 'REJECTED' && (
-            <button
-              onClick={() => void onReject(attachment)}
-              disabled={isBusy}
-              className="inline-flex items-center gap-2 rounded-xl bg-red-500/15 px-3 py-2 text-xs text-red-100 transition hover:bg-red-500/25 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Отклонить
-            </button>
-          )}
-        </div>
       </div>
     </div>
   );
@@ -841,6 +826,7 @@ export function MessengerPage() {
   const refreshToken = useAuthStore((state) => state.refreshToken);
   const clearAuthentication = useAuthStore((state) => state.clearAuthentication);
   const realtimeStatus = useRealtimeStore((state) => state.status);
+  const [restoredDeviceIds, setRestoredDeviceIds] = useState<string[]>([]);
   const typingByChatId = useRealtimeStore((state) => state.typingByChatId);
   const sendTypingEvent = useRealtimeStore((state) => state.sendTypingEvent);
   const cryptoStatus = useCryptoStore((state) => state.status);
@@ -865,10 +851,6 @@ export function MessengerPage() {
   const [isCreateChatOpen, setIsCreateChatOpen] = useState(false);
   const [isDevToolsOpen, setIsDevToolsOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isDocumentsOpen, setIsDocumentsOpen] = useState(false);
-  const [isLoadingDocuments, setIsLoadingDocuments] = useState(false);
-  const [documentsById, setDocumentsById] = useState<Record<string, DocumentResponseDto>>({});
-  const [busyDocumentId, setBusyDocumentId] = useState<string | null>(null);
   const [isAttachmentMenuOpen, setIsAttachmentMenuOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [decryptedMessagesById, setDecryptedMessagesById] = useState<Record<string, string>>({});
@@ -879,11 +861,48 @@ export function MessengerPage() {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
-  const documentInputRef = useRef<HTMLInputElement | null>(null);
   const deliveredMarkersRef = useRef<Set<string>>(new Set());
   const readMarkersRef = useRef<Set<string>>(new Set());
   const lastTypingSentAtRef = useRef(0);
   const typingStopTimeoutRef = useRef<number | null>(null);
+
+  async function loadRestoredDeviceIds() {
+    if (!profile?.accountId || !window.vectorCrypto) {
+      setRestoredDeviceIds([]);
+      return;
+    }
+
+    try {
+      const loadedDeviceIds = await window.vectorCrypto.getRestoredDeviceIds({ accountId: profile.accountId });
+      setRestoredDeviceIds(loadedDeviceIds);
+    }
+    catch (error) {
+      console.warn(error);
+      setRestoredDeviceIds([]);
+    }
+  }
+
+  async function handleKeyBackupRestored() {
+    permanentlyUnavailableMessageIdsRef.current.clear();
+    decryptingMessageIdsRef.current.clear();
+    setDecryptedMessagesById({});
+    await loadRestoredDeviceIds();
+
+    if (selectedChatId) {
+      try {
+        const loadedMessages = await getChatMessages(selectedChatId);
+        setMessages(selectedChatId, loadedMessages);
+      }
+      catch (error) {
+        console.error(error);
+        setErrorMessage('Ключи восстановлены, но не удалось сразу обновить историю чата. Перезагрузите чат вручную.');
+      }
+    }
+  }
+
+  useEffect(() => {
+    void loadRestoredDeviceIds();
+  }, [profile?.accountId, deviceId]);
 
   useRealtimeConnection();
   useCryptoBootstrap();
@@ -924,11 +943,18 @@ export function MessengerPage() {
     selectedMessages.forEach((message) => {
       const messageId = message.messageId;
 
-      if (decryptedMessagesById[messageId] || decryptingMessageIdsRef.current.has(messageId) || permanentlyUnavailableMessageIdsRef.current.has(messageId)) {
+      const cachedPlainText = decryptedMessagesById[messageId];
+
+      if (cachedPlainText && !isDecryptionPlaceholder(cachedPlainText)) {
         return;
       }
 
-      const currentDevicePayload = message.devicePayloads.find((devicePayload) => devicePayload.targetDeviceId === deviceId);
+      if (decryptingMessageIdsRef.current.has(messageId) || permanentlyUnavailableMessageIdsRef.current.has(messageId)) {
+        return;
+      }
+
+      const localDecryptDeviceIds = new Set([deviceId, ...restoredDeviceIds].filter(Boolean));
+      const currentDevicePayload = message.devicePayloads.find((devicePayload) => localDecryptDeviceIds.has(devicePayload.targetDeviceId));
 
       if (!currentDevicePayload) {
         permanentlyUnavailableMessageIdsRef.current.add(messageId);
@@ -949,7 +975,7 @@ export function MessengerPage() {
 
       vectorCrypto.decryptMessage({
         accountId: profile.accountId,
-        deviceId,
+        deviceId: currentDevicePayload.targetDeviceId,
         messageId,
         remoteDeviceId: message.senderDeviceId,
         ciphertextType: currentDevicePayload.ciphertextType,
@@ -964,7 +990,9 @@ export function MessengerPage() {
         .catch((error) => {
           console.error(error);
           setDecryptedMessagesById((previousValue) => {
-            if (previousValue[messageId]) {
+            const previousPlainText = previousValue[messageId];
+
+            if (previousPlainText && !isDecryptionPlaceholder(previousPlainText)) {
               return previousValue;
             }
 
@@ -978,7 +1006,7 @@ export function MessengerPage() {
           decryptingMessageIdsRef.current.delete(messageId);
         });
     });
-  }, [decryptedMessagesById, deviceId, profile?.accountId, selectedMessages]);
+  }, [decryptedMessagesById, deviceId, profile?.accountId, restoredDeviceIds, selectedMessages]);
 
   const filteredChats = useMemo(() => {
     const normalizedQuery = chatSearchQuery.trim().toLowerCase();
@@ -1042,68 +1070,6 @@ export function MessengerPage() {
 
     loadMessages();
   }, [selectedChatId, setMessages]);
-
-
-  async function refreshDocuments() {
-    setIsLoadingDocuments(true);
-
-    try {
-      const loadedDocuments = await getDocuments();
-      setDocumentsById((previousValue) => {
-        const nextValue = { ...previousValue };
-
-        loadedDocuments.forEach((document) => {
-          nextValue[document.documentId] = document;
-        });
-
-        return nextValue;
-      });
-    }
-    catch (error) {
-      console.error(error);
-      setErrorMessage('Не удалось загрузить документы.');
-    }
-    finally {
-      setIsLoadingDocuments(false);
-    }
-  }
-
-  async function refreshDocument(documentId: string) {
-    try {
-      const loadedDocument = await getDocument(documentId);
-      setDocumentsById((previousValue) => ({
-        ...previousValue,
-        [loadedDocument.documentId]: loadedDocument,
-      }));
-      return loadedDocument;
-    }
-    catch (error) {
-      console.error(error);
-      return null;
-    }
-  }
-
-  useEffect(() => {
-    if (isDocumentsOpen) {
-      void refreshDocuments();
-    }
-  }, [isDocumentsOpen]);
-
-  useEffect(() => {
-    selectedMessages.forEach((message) => {
-      const decryptedMessage = decryptedMessagesById[message.messageId];
-
-      if (!decryptedMessage) {
-        return;
-      }
-
-      const documentAttachment = parseDocumentAttachmentMessageContent(decryptedMessage);
-
-      if (documentAttachment && !documentsById[documentAttachment.documentId]) {
-        void refreshDocument(documentAttachment.documentId);
-      }
-    });
-  }, [decryptedMessagesById, documentsById, selectedMessages]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -1249,7 +1215,7 @@ export function MessengerPage() {
     }
   }
 
-  async function handleAttachFile(file: File | null | undefined, attachmentDisplayMode: 'FILE' | 'IMAGE' | 'DOCUMENT') {
+  async function handleAttachFile(file: File | null | undefined, attachmentDisplayMode: 'FILE' | 'IMAGE') {
     if (!file) {
       return;
     }
@@ -1271,41 +1237,15 @@ export function MessengerPage() {
         encryptionResult.encryptedBlob,
         encryptionResult.encryptedSha256Base64,
       );
-      if (attachmentDisplayMode === 'DOCUMENT') {
-        const createdDocument = await createDocument({
-          chatId: selectedChatId,
-          mediaFileId: uploadedFile.id,
-          fileName: file.name,
-          mimeType: file.type || 'application/octet-stream',
-          sizeBytes: file.size,
-          plaintextSha256Base64: encryptionResult.plaintextSha256Base64,
-          encryptedSha256Base64: encryptionResult.encryptedSha256Base64,
-        });
-        const documentAttachmentContent = buildDocumentAttachmentContent(
-          file,
-          createdDocument.documentId,
-          uploadedFile.id,
-          uploadedFile.encryptedSizeBytes,
-          encryptionResult,
-        );
+      const attachmentContent = buildFileAttachmentContent(
+        file,
+        uploadedFile.id,
+        uploadedFile.encryptedSizeBytes,
+        encryptionResult,
+        attachmentDisplayMode,
+      );
 
-        setDocumentsById((previousValue) => ({
-          ...previousValue,
-          [createdDocument.documentId]: createdDocument,
-        }));
-        await sendEncryptedChatContent(JSON.stringify(documentAttachmentContent), 'FILE');
-      }
-      else {
-        const attachmentContent = buildFileAttachmentContent(
-          file,
-          uploadedFile.id,
-          uploadedFile.encryptedSizeBytes,
-          encryptionResult,
-          attachmentDisplayMode,
-        );
-
-        await sendEncryptedChatContent(JSON.stringify(attachmentContent), 'FILE');
-      }
+      await sendEncryptedChatContent(JSON.stringify(attachmentContent), 'FILE');
       sendCurrentTypingState(false);
     }
     catch (error) {
@@ -1318,7 +1258,7 @@ export function MessengerPage() {
     }
   }
 
-  async function handleDownloadAttachment(attachment: FileAttachmentMessageContent | DocumentAttachmentMessageContent) {
+  async function handleDownloadAttachment(attachment: FileAttachmentMessageContent) {
     setErrorMessage(null);
 
     try {
@@ -1336,82 +1276,6 @@ export function MessengerPage() {
     catch (error) {
       console.error(error);
       setErrorMessage('Не удалось скачать или расшифровать файл.');
-    }
-  }
-
-
-  async function handleSignDocumentAttachment(attachment: DocumentAttachmentMessageContent) {
-    if (!profile?.accountId || !deviceId || !window.vectorCrypto) {
-      setErrorMessage('Локальная криптография недоступна для подписи документа.');
-      return;
-    }
-
-    setBusyDocumentId(attachment.documentId);
-    setErrorMessage(null);
-
-    try {
-      const encryptedBytes = await downloadEncryptedMediaFile(attachment.mediaFileId);
-      const decryptedBlob = await decryptDownloadedFile(encryptedBytes, attachment);
-      const plaintextBytes = new Uint8Array(await decryptedBlob.arrayBuffer());
-      const actualPlaintextSha256Base64 = await sha256Base64(plaintextBytes);
-
-      if (actualPlaintextSha256Base64 !== attachment.plaintextSha256Base64) {
-        throw new Error('Document plaintext hash mismatch.');
-      }
-
-      const localSigningKey = await window.vectorCrypto.ensureDocumentSigningKey({
-        accountId: profile.accountId,
-        deviceId,
-      });
-
-      const registeredSigningKey = await registerDocumentSigningKey(deviceId, {
-        publicKeyBase64: localSigningKey.publicKeyBase64,
-      });
-
-      const signature = await window.vectorCrypto.signDocumentHash({
-        accountId: profile.accountId,
-        deviceId,
-        documentHashBase64: actualPlaintextSha256Base64,
-      });
-
-      const signedDocument = await signDocument(attachment.documentId, {
-        signerDeviceId: deviceId,
-        signingKeyFingerprint: registeredSigningKey.fingerprint || signature.signingKeyFingerprint,
-        documentHashBase64: actualPlaintextSha256Base64,
-        signatureBase64: signature.signatureBase64,
-      });
-
-      setDocumentsById((previousValue) => ({
-        ...previousValue,
-        [signedDocument.documentId]: signedDocument,
-      }));
-    }
-    catch (error) {
-      console.error(error);
-      setErrorMessage('Не удалось подписать документ.');
-    }
-    finally {
-      setBusyDocumentId(null);
-    }
-  }
-
-  async function handleRejectDocumentAttachment(attachment: DocumentAttachmentMessageContent) {
-    setBusyDocumentId(attachment.documentId);
-    setErrorMessage(null);
-
-    try {
-      const rejectedDocument = await rejectDocument(attachment.documentId);
-      setDocumentsById((previousValue) => ({
-        ...previousValue,
-        [rejectedDocument.documentId]: rejectedDocument,
-      }));
-    }
-    catch (error) {
-      console.error(error);
-      setErrorMessage('Не удалось отклонить документ.');
-    }
-    finally {
-      setBusyDocumentId(null);
     }
   }
 
@@ -1505,16 +1369,6 @@ export function MessengerPage() {
         onCreateChat={handleCreateDirectChat}
       />
 
-      <DocumentsModal
-        isOpen={isDocumentsOpen}
-        documents={Object.values(documentsById).sort((firstDocument, secondDocument) => new Date(secondDocument.createdAt).getTime() - new Date(firstDocument.createdAt).getTime())}
-        isLoading={isLoadingDocuments}
-        currentAccountId={profile?.accountId}
-        profilesById={profilesById}
-        onClose={() => setIsDocumentsOpen(false)}
-        onRefresh={refreshDocuments}
-      />
-
       <SettingsModal
         isOpen={isSettingsOpen}
         profile={profile}
@@ -1524,6 +1378,7 @@ export function MessengerPage() {
         realtimeStatus={realtimeStatus}
         onClose={() => setIsSettingsOpen(false)}
         onLogout={handleLogout}
+        onBackupRestored={handleKeyBackupRestored}
       />
 
       {isDevToolsOpen && profile?.username === 'admin' && (
@@ -1556,22 +1411,13 @@ export function MessengerPage() {
               <div className="mt-1 text-2xl font-semibold tracking-tight text-zinc-50">Chats</div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setIsDocumentsOpen(true)}
-                className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-zinc-300 transition hover:border-violet-300/25 hover:text-white"
-                title="Документооборот"
-              >
-                <FileCheck2 size={18} />
-              </button>
-              <button
-                onClick={() => setIsCreateChatOpen(true)}
-                className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-lg shadow-violet-950/40 transition hover:brightness-110"
-                title="Новый чат"
-              >
-                <Plus size={18} />
-              </button>
-            </div>
+            <button
+              onClick={() => setIsCreateChatOpen(true)}
+              className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-lg shadow-violet-950/40 transition hover:brightness-110"
+              title="Новый чат"
+            >
+              <Plus size={18} />
+            </button>
           </div>
 
           <div className="flex items-center gap-3 rounded-3xl border border-white/10 bg-white/[0.04] px-4 py-3 text-zinc-500">
@@ -1716,8 +1562,7 @@ export function MessengerPage() {
                   const isOwnMessage = message.senderAccountId === profile?.accountId;
                   const messageStatus = getOutgoingMessageStatus(message, profile?.accountId);
                   const decryptedMessage = decryptedMessagesById[message.messageId] ?? 'Расшифровка…';
-                  const documentAttachment = parseDocumentAttachmentMessageContent(decryptedMessage);
-                  const fileAttachment = documentAttachment ? null : parseFileAttachmentMessageContent(decryptedMessage);
+                  const fileAttachment = parseFileAttachmentMessageContent(decryptedMessage);
 
                   return (
                     <div key={message.messageId} className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
@@ -1731,18 +1576,7 @@ export function MessengerPage() {
                               : 'rounded-bl-md border border-white/10 bg-[#24262d] text-zinc-100 shadow-black/20'
                           }`}
                         >
-                          {documentAttachment ? (
-                            <DocumentAttachmentCard
-                              attachment={documentAttachment}
-                              document={documentsById[documentAttachment.documentId] ?? null}
-                              currentAccountId={profile?.accountId}
-                              isOwnMessage={isOwnMessage}
-                              isBusy={busyDocumentId === documentAttachment.documentId}
-                              onDownload={handleDownloadAttachment}
-                              onSign={handleSignDocumentAttachment}
-                              onReject={handleRejectDocumentAttachment}
-                            />
-                          ) : fileAttachment ? (
+                          {fileAttachment ? (
                             fileAttachment.attachmentDisplayMode === 'IMAGE' ? (
                               <ImageAttachmentPreview attachment={fileAttachment} onDownload={handleDownloadAttachment} />
                             ) : (
@@ -1831,17 +1665,6 @@ export function MessengerPage() {
                   }}
                 />
 
-                <input
-                  ref={documentInputRef}
-                  type="file"
-                  className="hidden"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0] ?? null;
-                    event.target.value = '';
-                    void handleAttachFile(file, 'DOCUMENT');
-                  }}
-                />
-
                 <div className="flex items-end gap-3 rounded-[2rem] border border-white/10 bg-white/[0.04] px-4 py-3 shadow-xl shadow-black/20">
                   <div className="relative">
                     <button
@@ -1861,13 +1684,6 @@ export function MessengerPage() {
                         >
                           <ImageIcon size={18} className="text-violet-200" />
                           <span>Отправить как изображение</span>
-                        </button>
-                        <button
-                          onClick={() => documentInputRef.current?.click()}
-                          className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm text-zinc-200 transition hover:bg-white/[0.06]"
-                        >
-                          <FileCheck2 size={18} className="text-violet-200" />
-                          <span>Отправить как документ</span>
                         </button>
                         <button
                           onClick={() => fileInputRef.current?.click()}

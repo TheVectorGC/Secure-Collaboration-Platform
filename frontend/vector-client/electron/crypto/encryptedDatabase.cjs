@@ -189,6 +189,16 @@ function applySchema(database) {
         ON DELETE CASCADE
     );
 
+
+    CREATE TABLE IF NOT EXISTS restored_local_message_keys (
+      account_id TEXT NOT NULL,
+      device_id TEXT NOT NULL,
+      key_base64 TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (account_id, device_id)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_signal_sessions_remote_address
       ON signal_sessions(remote_address);
 
