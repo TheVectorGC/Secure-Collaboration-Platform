@@ -30,6 +30,9 @@ public record MessageResponseDto(
     @Schema(description = "Encryption type.")
     MessageEncryptionType encryptionType,
 
+    @Schema(description = "Single group sender-key ciphertext for GROUP encryption.")
+    String encryptedPayload,
+
     @Schema(description = "Encrypted payloads available to the current account devices.")
     List<MessageDevicePayloadResponseDto> devicePayloads,
 

@@ -2,7 +2,8 @@ package dev.messagingservice.model.enumeration;
 
 public enum ChatParticipantStatus {
     ACTIVE("активен"),
-    LEFT("покинул");
+    LEFT("покинул"),
+    REMOVED("удалён");
 
     private final String displayName;
 

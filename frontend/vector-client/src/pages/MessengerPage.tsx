@@ -13,6 +13,7 @@ import {
   Search,
   Send,
   Star,
+  Users,
   KeyRound,
   LockKeyhole,
   Monitor,
@@ -25,7 +26,8 @@ import {
   X,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { createDirectChat, createSelfChat, getChats } from '../features/chats/api/chatsApi';
+import { createDirectChat, createGroupChat, createSelfChat, getChats } from '../features/chats/api/chatsApi';
+import { createDocument, getChatDocuments, registerDocumentSigningKey, rejectDocument, signDocument } from '../features/documents/api/documentsApi';
 import { searchProfiles } from '../features/directory/api/profilesApi';
 import { getActiveAccountDevices } from '../features/devices/api/devicesApi';
 import { useDirectoryStore } from '../features/directory/model/directoryStore';
@@ -33,7 +35,7 @@ import { logout as logoutRequest } from '../features/auth/api/authApi';
 import { useAuthStore } from '../features/auth/model/authStore';
 import { getChatMessages, markChatRead, markMessageDelivered, sendMessage } from '../features/messages/api/messagesApi';
 import { downloadEncryptedMediaFile, uploadEncryptedMediaFile } from '../features/media/api/mediaApi';
-import { buildFileAttachmentContent, decryptDownloadedFile, encryptFileForUpload, formatFileSize, parseFileAttachmentMessageContent } from '../features/media/lib/fileCrypto';
+import { buildDocumentAttachmentContent, buildFileAttachmentContent, decryptDownloadedFile, encryptFileForUpload, formatFileSize, parseDocumentAttachmentMessageContent, parseFileAttachmentMessageContent } from '../features/media/lib/fileCrypto';
 import { useMessengerStore } from '../features/messenger/model/messengerStore';
 import { useRealtimeConnection } from '../features/realtime/useRealtimeConnection';
 import { useRealtimeStore } from '../features/realtime/model/realtimeStore';
@@ -45,7 +47,7 @@ import { downloadKeyBackup, getKeyBackupStatus, uploadKeyBackup, type KeyBackupS
 import { formatChatTime, formatMessageTime } from '../shared/lib/dateFormat';
 import { getAvatarGradient, getInitials } from '../shared/lib/avatar';
 import { getDirectCompanionAccountId, getDisplayName } from '../shared/lib/profile';
-import type { ActiveDeviceResponseDto, ChatResponseDto, FileAttachmentMessageContent, MessageResponseDto, ProfileResponseDto } from '../shared/types/api';
+import type { ActiveDeviceResponseDto, ChatResponseDto, DocumentAttachmentMessageContent, DocumentResponseDto, FileAttachmentMessageContent, MessageResponseDto, ProfileResponseDto } from '../shared/types/api';
 
 function Avatar({ label, size = 'md' }: { label: string; size?: 'sm' | 'md' | 'lg' }) {
   const dimensions = size === 'sm' ? 'h-10 w-10 text-sm' : size === 'lg' ? 'h-14 w-14 text-lg' : 'h-12 w-12 text-base';
@@ -142,6 +144,155 @@ function ImageAttachmentPreview({
   );
 }
 
+
+function DocumentAttachmentPreview({
+  attachment,
+  isOwnMessage,
+  onDownload,
+}: {
+  attachment: DocumentAttachmentMessageContent;
+  isOwnMessage: boolean;
+  onDownload: (attachment: DocumentAttachmentMessageContent) => Promise<void>;
+}) {
+  return (
+    <div className="min-w-[280px] max-w-[380px]">
+      <div className={`flex items-center gap-3 rounded-2xl border p-3 ${isOwnMessage ? 'border-white/20 bg-white/10' : 'border-white/10 bg-black/15'}`}>
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-black/20 text-white">
+          <ShieldCheck size={20} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-semibold">{attachment.fileName}</div>
+          <div className={`mt-1 text-xs ${isOwnMessage ? 'text-violet-100/75' : 'text-zinc-500'}`}>
+            {formatFileSize(attachment.sizeBytes)} • encrypted document
+          </div>
+        </div>
+        <button
+          onClick={() => void onDownload(attachment)}
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition ${isOwnMessage ? 'bg-white/15 hover:bg-white/25' : 'bg-white/[0.06] hover:bg-white/[0.1]'}`}
+          title="Скачать и расшифровать"
+        >
+          <Download size={17} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function DocumentsPanel({
+  isOpen,
+  documents,
+  isLoading,
+  activeAccountId,
+  onClose,
+  onRefresh,
+  onDownload,
+  onSign,
+  onReject,
+}: {
+  isOpen: boolean;
+  documents: DocumentResponseDto[];
+  isLoading: boolean;
+  activeAccountId: string | undefined;
+  onClose: () => void;
+  onRefresh: () => Promise<void>;
+  onDownload: (document: DocumentResponseDto) => Promise<void>;
+  onSign: (document: DocumentResponseDto) => Promise<void>;
+  onReject: (document: DocumentResponseDto) => Promise<void>;
+}) {
+  if (!isOpen) {
+    return null;
+  }
+
+  return (
+    <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
+      <div className="flex max-h-[82vh] w-full max-w-3xl flex-col rounded-[2rem] border border-white/10 bg-[#18191d] shadow-2xl shadow-black/50">
+        <div className="flex items-center justify-between gap-4 border-b border-white/10 p-6">
+          <div>
+            <div className="text-xl font-semibold text-zinc-50">Документооборот</div>
+            <div className="mt-1 text-sm text-zinc-500">Зашифрованные документы выбранного чата и цифровые подписи.</div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => void onRefresh()}
+              className="rounded-2xl border border-white/10 bg-white/[0.04] p-2 text-zinc-400 transition hover:text-zinc-100"
+              title="Обновить"
+            >
+              <RefreshCw size={18} />
+            </button>
+            <button
+              onClick={onClose}
+              className="rounded-2xl border border-white/10 bg-white/[0.04] p-2 text-zinc-400 transition hover:text-zinc-100"
+              title="Закрыть"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+          {isLoading ? (
+            <div className="flex items-center justify-center gap-3 rounded-[1.7rem] border border-white/10 bg-white/[0.03] p-8 text-sm text-zinc-400">
+              <LoaderCircle size={18} className="animate-spin" />
+              Загружаем документы…
+            </div>
+          ) : documents.length === 0 ? (
+            <div className="rounded-[1.7rem] border border-dashed border-white/10 bg-white/[0.02] p-8 text-center text-sm text-zinc-500">
+              В этом чате пока нет документов. Прикрепи файл как документ через скрепку.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {documents.map((documentItem) => {
+                const signedByCurrentAccount = documentItem.signatures.some((signature) => signature.signerAccountId === activeAccountId);
+                const isRejected = documentItem.status === 'REJECTED';
+
+                return (
+                  <div key={documentItem.documentId} className="rounded-[1.5rem] border border-white/10 bg-white/[0.035] p-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-zinc-100">{documentItem.fileName}</div>
+                        <div className="mt-1 text-xs text-zinc-500">
+                          {formatFileSize(documentItem.sizeBytes)} • {documentItem.mimeType} • подписей: {documentItem.signatures.length}
+                        </div>
+                        <div className="mt-2 text-xs text-zinc-600">SHA-256: {documentItem.plaintextSha256Base64.slice(0, 18)}…</div>
+                      </div>
+                      <div className={`shrink-0 rounded-full px-3 py-1 text-xs ${isRejected ? 'bg-red-500/15 text-red-200' : 'bg-emerald-500/15 text-emerald-200'}`}>
+                        {isRejected ? 'Отклонён' : 'Активен'}
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button
+                        onClick={() => void onDownload(documentItem)}
+                        className="rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-2 text-xs text-zinc-200 transition hover:bg-white/[0.08]"
+                      >
+                        Скачать
+                      </button>
+                      <button
+                        onClick={() => void onSign(documentItem)}
+                        disabled={isRejected || signedByCurrentAccount}
+                        className="rounded-2xl border border-emerald-300/20 bg-emerald-500/10 px-4 py-2 text-xs text-emerald-100 transition hover:bg-emerald-500/15 disabled:cursor-not-allowed disabled:opacity-45"
+                      >
+                        {signedByCurrentAccount ? 'Подписано' : 'Подписать'}
+                      </button>
+                      <button
+                        onClick={() => void onReject(documentItem)}
+                        disabled={isRejected}
+                        className="rounded-2xl border border-red-300/20 bg-red-500/10 px-4 py-2 text-xs text-red-100 transition hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-45"
+                      >
+                        Отклонить
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 type ChatPresentation = {
   title: string;
   subtitle: string;
@@ -160,6 +311,17 @@ function getChatPresentation(
       subtitle: 'Личные заметки и сохранённые сообщения',
       avatarLabel: 'Избранное',
       companionProfile: currentProfile,
+    };
+  }
+
+  if (chat.type === 'GROUP') {
+    const activeParticipantsCount = chat.participantAccountIds.length;
+
+    return {
+      title: chat.name ?? 'Групповой чат',
+      subtitle: `${activeParticipantsCount} участников • group E2EE`,
+      avatarLabel: chat.name ?? 'Группа',
+      companionProfile: null,
     };
   }
 
@@ -203,26 +365,33 @@ function NewChatModal({
   currentAccountId,
   onClose,
   onCreateChat,
+  onCreateGroupChat,
 }: {
   isOpen: boolean;
   currentAccountId: string | undefined;
   onClose: () => void;
   onCreateChat: (profile: ProfileResponseDto) => Promise<void>;
+  onCreateGroupChat: (name: string, profiles: ProfileResponseDto[]) => Promise<void>;
 }) {
   const upsertProfiles = useDirectoryStore((state) => state.upsertProfiles);
   const [query, setQuery] = useState('');
+  const [groupName, setGroupName] = useState('');
   const [results, setResults] = useState<ProfileResponseDto[]>([]);
+  const [selectedProfiles, setSelectedProfiles] = useState<ProfileResponseDto[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [decryptedMessagesById, setDecryptedMessagesById] = useState<Record<string, string>>({});
   const [creatingAccountId, setCreatingAccountId] = useState<string | null>(null);
+  const [isCreatingGroup, setIsCreatingGroup] = useState(false);
 
   useEffect(() => {
     if (!isOpen) {
       setQuery('');
+      setGroupName('');
       setResults([]);
+      setSelectedProfiles([]);
       setErrorMessage(null);
       setCreatingAccountId(null);
+      setIsCreatingGroup(false);
       return;
     }
 
@@ -256,6 +425,39 @@ function NewChatModal({
     return () => window.clearTimeout(timeoutId);
   }, [currentAccountId, isOpen, query, upsertProfiles]);
 
+  function toggleSelectedProfile(profile: ProfileResponseDto) {
+    setSelectedProfiles((previousProfiles) => {
+      if (previousProfiles.some((selectedProfile) => selectedProfile.accountId === profile.accountId)) {
+        return previousProfiles.filter((selectedProfile) => selectedProfile.accountId !== profile.accountId);
+      }
+
+      return [...previousProfiles, profile];
+    });
+  }
+
+  async function handleCreateSelectedGroup() {
+    const trimmedGroupName = groupName.trim();
+
+    if (selectedProfiles.length === 0 || !trimmedGroupName) {
+      setErrorMessage('Для группы нужно название и хотя бы один участник.');
+      return;
+    }
+
+    setIsCreatingGroup(true);
+    setErrorMessage(null);
+
+    try {
+      await onCreateGroupChat(trimmedGroupName, selectedProfiles);
+    }
+    catch (error) {
+      console.error(error);
+      setErrorMessage('Не удалось создать групповой чат.');
+    }
+    finally {
+      setIsCreatingGroup(false);
+    }
+  }
+
   if (!isOpen) {
     return null;
   }
@@ -267,7 +469,7 @@ function NewChatModal({
           <div>
             <div className="text-2xl font-semibold text-zinc-50">Новый чат</div>
             <div className="mt-2 text-sm text-zinc-500">
-              Найди сотрудника по имени, username или email.
+              Найди сотрудников для direct-чата или собери группу.
             </div>
           </div>
 
@@ -277,6 +479,40 @@ function NewChatModal({
             title="Закрыть"
           >
             <X size={18} />
+          </button>
+        </div>
+
+        <div className="mb-4 rounded-3xl border border-white/10 bg-white/[0.035] p-3">
+          <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.2em] text-zinc-500">
+            <Users size={15} />
+            Группа
+          </div>
+          <input
+            value={groupName}
+            onChange={(event) => setGroupName(event.target.value)}
+            className="mb-3 w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-violet-300/35"
+            placeholder="Название группы"
+          />
+          <div className="mb-3 flex flex-wrap gap-2">
+            {selectedProfiles.length === 0 ? (
+              <span className="text-xs text-zinc-500">Выбери участников ниже.</span>
+            ) : selectedProfiles.map((profile) => (
+              <button
+                key={profile.accountId}
+                onClick={() => toggleSelectedProfile(profile)}
+                className="rounded-full border border-violet-300/20 bg-violet-500/10 px-3 py-1 text-xs text-violet-100"
+              >
+                {getDisplayName(profile)} ×
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => void handleCreateSelectedGroup()}
+            disabled={isCreatingGroup || selectedProfiles.length === 0 || !groupName.trim()}
+            className="inline-flex items-center gap-2 rounded-2xl border border-violet-300/20 bg-violet-500/10 px-4 py-2 text-sm font-medium text-violet-100 transition hover:bg-violet-500/15 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {isCreatingGroup ? <LoaderCircle size={15} className="animate-spin" /> : <Users size={15} />}
+            Создать группу
           </button>
         </div>
 
@@ -321,27 +557,20 @@ function NewChatModal({
             {results.map((profile) => {
               const displayName = getDisplayName(profile);
               const isCreating = creatingAccountId === profile.accountId;
+              const isSelected = selectedProfiles.some((selectedProfile) => selectedProfile.accountId === profile.accountId);
 
               return (
-                <button
+                <div
                   key={profile.accountId}
-                  onClick={async () => {
-                    setCreatingAccountId(profile.accountId);
-                    setErrorMessage(null);
-
-                    try {
-                      await onCreateChat(profile);
-                    }
-                    catch (error) {
-                      console.error(error);
-                      setErrorMessage('Не удалось создать direct chat.');
-                    }
-                    finally {
-                      setCreatingAccountId(null);
-                    }
-                  }}
-                  className="flex w-full items-center gap-4 rounded-3xl border border-white/8 bg-white/[0.03] px-4 py-3 text-left transition hover:border-violet-300/25 hover:bg-white/[0.05]"
+                  className="flex w-full items-center gap-3 rounded-3xl border border-white/8 bg-white/[0.03] px-4 py-3 text-left transition hover:border-violet-300/25 hover:bg-white/[0.05]"
                 >
+                  <button
+                    onClick={() => toggleSelectedProfile(profile)}
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border text-xs transition ${isSelected ? 'border-violet-300/30 bg-violet-500/20 text-violet-100' : 'border-white/10 bg-white/[0.04] text-zinc-500'}`}
+                    title="Выбрать для группы"
+                  >
+                    {isSelected ? '✓' : '+'}
+                  </button>
                   <Avatar label={displayName} />
 
                   <div className="min-w-0 flex-1">
@@ -349,10 +578,27 @@ function NewChatModal({
                     <div className="mt-1 truncate text-xs text-zinc-500">@{profile.username} • {profile.email}</div>
                   </div>
 
-                  <div className="rounded-full border border-violet-300/15 bg-violet-400/10 px-3 py-1 text-xs text-violet-200">
-                    {isCreating ? 'Создаём…' : 'Открыть чат'}
-                  </div>
-                </button>
+                  <button
+                    onClick={async () => {
+                      setCreatingAccountId(profile.accountId);
+                      setErrorMessage(null);
+
+                      try {
+                        await onCreateChat(profile);
+                      }
+                      catch (error) {
+                        console.error(error);
+                        setErrorMessage('Не удалось создать direct chat.');
+                      }
+                      finally {
+                        setCreatingAccountId(null);
+                      }
+                    }}
+                    className="rounded-full border border-violet-300/15 bg-violet-400/10 px-3 py-1 text-xs text-violet-200"
+                  >
+                    {isCreating ? 'Создаём…' : 'Direct'}
+                  </button>
+                </div>
               );
             })}
           </div>
@@ -507,13 +753,9 @@ function SettingsModal({
       });
 
       setBackupPassword('');
-      setBackupSuccess(`Ключи восстановлены. Доступных device-контекстов: ${restoreResult.importedDeviceIds.length}. Интерфейс сейчас обновится.`);
+      setBackupSuccess(`Ключи восстановлены. Доступных device-контекстов: ${restoreResult.importedDeviceIds.length}.`);
       await onBackupRestored();
       await loadBackupStatus();
-
-      window.setTimeout(() => {
-        window.location.reload();
-      }, 700);
     }
     catch (error) {
       console.error(error);
@@ -819,6 +1061,34 @@ function SettingsModal({
   );
 }
 
+
+async function decryptDirectMessageWithAvailablePayloads(
+  message: MessageResponseDto,
+  currentDevicePayloads: MessageResponseDto['devicePayloads'],
+  accountId: string,
+  vectorCrypto: NonNullable<typeof window.vectorCrypto>,
+) {
+  const errors: unknown[] = [];
+
+  for (const currentDevicePayload of currentDevicePayloads) {
+    try {
+      return await vectorCrypto.decryptMessage({
+        accountId,
+        deviceId: currentDevicePayload.targetDeviceId,
+        messageId: message.messageId,
+        remoteDeviceId: message.senderDeviceId,
+        ciphertextType: currentDevicePayload.ciphertextType,
+        encryptedPayload: currentDevicePayload.encryptedPayload,
+      });
+    }
+    catch (error) {
+      errors.push(error);
+    }
+  }
+
+  throw errors.at(-1) ?? new Error('No decryptable payload is available for this message.');
+}
+
 export function MessengerPage() {
   const navigate = useNavigate();
   const profile = useAuthStore((state) => state.profile);
@@ -852,6 +1122,9 @@ export function MessengerPage() {
   const [isDevToolsOpen, setIsDevToolsOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAttachmentMenuOpen, setIsAttachmentMenuOpen] = useState(false);
+  const [isDocumentsPanelOpen, setIsDocumentsPanelOpen] = useState(false);
+  const [chatDocuments, setChatDocuments] = useState<DocumentResponseDto[]>([]);
+  const [isLoadingDocuments, setIsLoadingDocuments] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [decryptedMessagesById, setDecryptedMessagesById] = useState<Record<string, string>>({});
 
@@ -861,6 +1134,7 @@ export function MessengerPage() {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const documentInputRef = useRef<HTMLInputElement | null>(null);
   const deliveredMarkersRef = useRef<Set<string>>(new Set());
   const readMarkersRef = useRef<Set<string>>(new Set());
   const lastTypingSentAtRef = useRef(0);
@@ -953,10 +1227,93 @@ export function MessengerPage() {
         return;
       }
 
-      const localDecryptDeviceIds = new Set([deviceId, ...restoredDeviceIds].filter(Boolean));
-      const currentDevicePayload = message.devicePayloads.find((devicePayload) => localDecryptDeviceIds.has(devicePayload.targetDeviceId));
+      if (message.encryptionType === 'GROUP' && message.encryptedPayload) {
+        decryptingMessageIdsRef.current.add(messageId);
 
-      if (!currentDevicePayload) {
+        const localDecryptDeviceIds = new Set([deviceId, ...restoredDeviceIds].filter(Boolean));
+        const currentDevicePayloads = message.devicePayloads.filter((devicePayload) => localDecryptDeviceIds.has(devicePayload.targetDeviceId));
+
+        const decryptGroupMessageWithAvailableKey = async () => {
+          const directDecryptErrors: unknown[] = [];
+
+          try {
+            return await vectorCrypto.decryptGroupMessage({
+              accountId: profile.accountId,
+              deviceId,
+              chatId: message.chatId,
+              messageId,
+              encryptedPayload: message.encryptedPayload!,
+            });
+          }
+          catch (firstError) {
+            directDecryptErrors.push(firstError);
+          }
+
+          for (const currentDevicePayload of currentDevicePayloads) {
+            try {
+              const groupKeyPackage = await vectorCrypto.decryptMessage({
+                accountId: profile.accountId,
+                deviceId: currentDevicePayload.targetDeviceId,
+                messageId: `${messageId}:group-key:${currentDevicePayload.targetDeviceId}`,
+                remoteDeviceId: message.senderDeviceId,
+                ciphertextType: currentDevicePayload.ciphertextType,
+                encryptedPayload: currentDevicePayload.encryptedPayload,
+              });
+
+              await vectorCrypto.importGroupKey({
+                accountId: profile.accountId,
+                chatId: message.chatId,
+                groupKeyPackagePlainText: groupKeyPackage.plainText,
+              });
+
+              return await vectorCrypto.decryptGroupMessage({
+                accountId: profile.accountId,
+                deviceId,
+                chatId: message.chatId,
+                messageId,
+                encryptedPayload: message.encryptedPayload!,
+              });
+            }
+            catch (candidateError) {
+              directDecryptErrors.push(candidateError);
+            }
+          }
+
+          throw directDecryptErrors.at(-1) ?? new Error('Group key is not available on this device.');
+        };
+
+        decryptGroupMessageWithAvailableKey()
+          .then((decryptResponse) => {
+            setDecryptedMessagesById((previousValue) => ({
+              ...previousValue,
+              [messageId]: decryptResponse.plainText,
+            }));
+          })
+          .catch((error) => {
+            console.error(error);
+            setDecryptedMessagesById((previousValue) => {
+              const previousPlainText = previousValue[messageId];
+
+              if (previousPlainText && !isDecryptionPlaceholder(previousPlainText)) {
+                return previousValue;
+              }
+
+              return {
+                ...previousValue,
+                [messageId]: '[Не удалось расшифровать сообщение]',
+              };
+            });
+          })
+          .finally(() => {
+            decryptingMessageIdsRef.current.delete(messageId);
+          });
+        return;
+      }
+
+      const localDecryptDeviceIds = new Set([deviceId, ...restoredDeviceIds].filter(Boolean));
+      const currentDevicePayloads = message.devicePayloads.filter((devicePayload) => localDecryptDeviceIds.has(devicePayload.targetDeviceId));
+
+      if (currentDevicePayloads.length === 0) {
         permanentlyUnavailableMessageIdsRef.current.add(messageId);
         setDecryptedMessagesById((previousValue) => {
           if (previousValue[messageId]) {
@@ -973,14 +1330,7 @@ export function MessengerPage() {
 
       decryptingMessageIdsRef.current.add(messageId);
 
-      vectorCrypto.decryptMessage({
-        accountId: profile.accountId,
-        deviceId: currentDevicePayload.targetDeviceId,
-        messageId,
-        remoteDeviceId: message.senderDeviceId,
-        ciphertextType: currentDevicePayload.ciphertextType,
-        encryptedPayload: currentDevicePayload.encryptedPayload,
-      })
+      decryptDirectMessageWithAvailablePayloads(message, currentDevicePayloads, profile.accountId, vectorCrypto)
         .then((decryptResponse) => {
           setDecryptedMessagesById((previousValue) => ({
             ...previousValue,
@@ -1173,13 +1523,26 @@ export function MessengerPage() {
       throw new Error('Chat or local device is not available.');
     }
 
-    const devicePayloads = await buildEncryptedDevicePayloads(plainText);
+    const groupEpoch = selectedChat?.currentKeyEpoch ?? 1;
+    const groupEncryptedMessage = selectedChat?.type === 'GROUP' && window.vectorCrypto
+      ? await window.vectorCrypto.encryptGroupMessage({
+        accountId: profile?.accountId ?? '',
+        deviceId,
+        chatId: selectedChatId,
+        epoch: groupEpoch,
+        plainText,
+      })
+      : null;
+    const devicePayloads = groupEncryptedMessage
+      ? await buildEncryptedDevicePayloads(groupEncryptedMessage.groupKeyPackagePlainText)
+      : await buildEncryptedDevicePayloads(plainText);
 
     const savedMessage = await sendMessage(selectedChatId, {
       senderDeviceId: deviceId,
       clientMessageId: crypto.randomUUID(),
       messageType,
-      encryptionType: 'SIGNAL',
+      encryptionType: groupEncryptedMessage ? 'GROUP' : 'SIGNAL',
+      encryptedPayload: groupEncryptedMessage?.encryptedPayload ?? null,
       devicePayloads,
     });
 
@@ -1213,6 +1576,34 @@ export function MessengerPage() {
     finally {
       setIsSending(false);
     }
+  }
+
+
+  async function loadChatDocuments() {
+    if (!selectedChatId) {
+      setChatDocuments([]);
+      return;
+    }
+
+    setIsLoadingDocuments(true);
+    setErrorMessage(null);
+
+    try {
+      const loadedDocuments = await getChatDocuments(selectedChatId);
+      setChatDocuments(loadedDocuments);
+    }
+    catch (error) {
+      console.error(error);
+      setErrorMessage('Не удалось загрузить документы чата.');
+    }
+    finally {
+      setIsLoadingDocuments(false);
+    }
+  }
+
+  async function openDocumentsPanel() {
+    setIsDocumentsPanelOpen(true);
+    await loadChatDocuments();
   }
 
   async function handleAttachFile(file: File | null | undefined, attachmentDisplayMode: 'FILE' | 'IMAGE') {
@@ -1258,7 +1649,61 @@ export function MessengerPage() {
     }
   }
 
-  async function handleDownloadAttachment(attachment: FileAttachmentMessageContent) {
+
+  async function handleAttachDocument(file: File | null | undefined) {
+    if (!file) {
+      return;
+    }
+
+    if (!selectedChatId || !selectedChat || !deviceId) {
+      setErrorMessage('Сначала выбери чат для отправки документа.');
+      return;
+    }
+
+    setIsSending(true);
+    setIsUploadingFile(true);
+    setIsAttachmentMenuOpen(false);
+    setErrorMessage(null);
+
+    try {
+      const encryptionResult = await encryptFileForUpload(file);
+      const uploadedFile = await uploadEncryptedMediaFile(
+        selectedChatId,
+        encryptionResult.encryptedBlob,
+        encryptionResult.encryptedSha256Base64,
+      );
+      const documentItem = await createDocument({
+        chatId: selectedChatId,
+        mediaFileId: uploadedFile.id,
+        fileName: file.name,
+        mimeType: file.type || 'application/octet-stream',
+        sizeBytes: file.size,
+        plaintextSha256Base64: encryptionResult.plaintextSha256Base64,
+        encryptedSha256Base64: encryptionResult.encryptedSha256Base64,
+      });
+      const attachmentContent = buildDocumentAttachmentContent(
+        file,
+        documentItem.documentId,
+        uploadedFile.id,
+        uploadedFile.encryptedSizeBytes,
+        encryptionResult,
+      );
+
+      await sendEncryptedChatContent(JSON.stringify(attachmentContent), 'FILE');
+      setChatDocuments((previousDocuments) => [documentItem, ...previousDocuments.filter((item) => item.documentId !== documentItem.documentId)]);
+      sendCurrentTypingState(false);
+    }
+    catch (error) {
+      console.error(error);
+      setErrorMessage('Не удалось зашифровать и отправить документ.');
+    }
+    finally {
+      setIsSending(false);
+      setIsUploadingFile(false);
+    }
+  }
+
+  async function handleDownloadAttachment(attachment: FileAttachmentMessageContent | DocumentAttachmentMessageContent) {
     setErrorMessage(null);
 
     try {
@@ -1276,6 +1721,75 @@ export function MessengerPage() {
     catch (error) {
       console.error(error);
       setErrorMessage('Не удалось скачать или расшифровать файл.');
+    }
+  }
+
+
+  async function handleDownloadDocument(documentItem: DocumentResponseDto) {
+    const matchingMessage = Object.entries(decryptedMessagesById)
+      .map(([, plainText]) => parseDocumentAttachmentMessageContent(plainText))
+      .find((attachment) => attachment?.documentId === documentItem.documentId);
+
+    if (!matchingMessage) {
+      setErrorMessage('Ключ документа доступен в сообщении чата. Открой сообщение с этим документом и попробуй снова.');
+      return;
+    }
+
+    await handleDownloadAttachment(matchingMessage);
+  }
+
+  async function handleSignDocument(documentItem: DocumentResponseDto) {
+    if (!profile?.accountId || !deviceId || !window.vectorCrypto) {
+      setErrorMessage('Локальная подпись документов недоступна.');
+      return;
+    }
+
+    setErrorMessage(null);
+
+    try {
+      const signingKey = await window.vectorCrypto.getOrCreateDocumentSigningKey({
+        accountId: profile.accountId,
+        deviceId,
+      });
+
+      try {
+        await registerDocumentSigningKey(deviceId, { publicKeyBase64: signingKey.publicKeyBase64 });
+      }
+      catch (registrationError) {
+        console.warn(registrationError);
+      }
+
+      const signature = await window.vectorCrypto.signDocumentHash({
+        accountId: profile.accountId,
+        deviceId,
+        documentHashBase64: documentItem.plaintextSha256Base64,
+      });
+
+      const updatedDocument = await signDocument(documentItem.documentId, {
+        signerDeviceId: deviceId,
+        signingKeyFingerprint: signature.signingKeyFingerprint,
+        documentHashBase64: documentItem.plaintextSha256Base64,
+        signatureBase64: signature.signatureBase64,
+      });
+
+      setChatDocuments((previousDocuments) => previousDocuments.map((item) => item.documentId === updatedDocument.documentId ? updatedDocument : item));
+    }
+    catch (error) {
+      console.error(error);
+      setErrorMessage('Не удалось подписать документ.');
+    }
+  }
+
+  async function handleRejectDocument(documentItem: DocumentResponseDto) {
+    setErrorMessage(null);
+
+    try {
+      const updatedDocument = await rejectDocument(documentItem.documentId);
+      setChatDocuments((previousDocuments) => previousDocuments.map((item) => item.documentId === updatedDocument.documentId ? updatedDocument : item));
+    }
+    catch (error) {
+      console.error(error);
+      setErrorMessage('Не удалось отклонить документ.');
     }
   }
 
@@ -1297,6 +1811,18 @@ export function MessengerPage() {
   async function handleCreateDirectChat(profileToChat: ProfileResponseDto) {
     const chat = await createDirectChat({ recipientAccountId: profileToChat.accountId });
     upsertProfile(profileToChat);
+    upsertChat(chat);
+    selectChat(chat.chatId);
+    setIsCreateChatOpen(false);
+  }
+
+  async function handleCreateGroupChat(groupName: string, profilesToChat: ProfileResponseDto[]) {
+    const chat = await createGroupChat({
+      name: groupName,
+      participantAccountIds: profilesToChat.map((profileToChat) => profileToChat.accountId),
+    });
+
+    profilesToChat.forEach(upsertProfile);
     upsertChat(chat);
     selectChat(chat.chatId);
     setIsCreateChatOpen(false);
@@ -1367,6 +1893,7 @@ export function MessengerPage() {
         currentAccountId={profile?.accountId}
         onClose={() => setIsCreateChatOpen(false)}
         onCreateChat={handleCreateDirectChat}
+        onCreateGroupChat={handleCreateGroupChat}
       />
 
       <SettingsModal
@@ -1379,6 +1906,19 @@ export function MessengerPage() {
         onClose={() => setIsSettingsOpen(false)}
         onLogout={handleLogout}
         onBackupRestored={handleKeyBackupRestored}
+      />
+
+
+      <DocumentsPanel
+        isOpen={isDocumentsPanelOpen}
+        documents={chatDocuments}
+        isLoading={isLoadingDocuments}
+        activeAccountId={profile?.accountId}
+        onClose={() => setIsDocumentsPanelOpen(false)}
+        onRefresh={loadChatDocuments}
+        onDownload={handleDownloadDocument}
+        onSign={handleSignDocument}
+        onReject={handleRejectDocument}
       />
 
       {isDevToolsOpen && profile?.username === 'admin' && (
@@ -1539,8 +2079,18 @@ export function MessengerPage() {
                 </div>
               </div>
 
-              <div className="rounded-full border border-violet-300/20 bg-violet-400/10 px-3 py-1 text-xs text-violet-200">
-                {realtimeStatus === 'connected' ? 'online' : realtimeStatus}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => void openDocumentsPanel()}
+                  className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-zinc-300 transition hover:border-violet-300/25 hover:text-white"
+                  title="Документооборот"
+                >
+                  <ShieldCheck size={14} />
+                  Документы
+                </button>
+                <div className="rounded-full border border-violet-300/20 bg-violet-400/10 px-3 py-1 text-xs text-violet-200">
+                  {realtimeStatus === 'connected' ? 'online' : realtimeStatus}
+                </div>
               </div>
             </header>
 
@@ -1563,6 +2113,7 @@ export function MessengerPage() {
                   const messageStatus = getOutgoingMessageStatus(message, profile?.accountId);
                   const decryptedMessage = decryptedMessagesById[message.messageId] ?? 'Расшифровка…';
                   const fileAttachment = parseFileAttachmentMessageContent(decryptedMessage);
+                  const documentAttachment = parseDocumentAttachmentMessageContent(decryptedMessage);
 
                   return (
                     <div key={message.messageId} className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
@@ -1576,7 +2127,9 @@ export function MessengerPage() {
                               : 'rounded-bl-md border border-white/10 bg-[#24262d] text-zinc-100 shadow-black/20'
                           }`}
                         >
-                          {fileAttachment ? (
+                          {documentAttachment ? (
+                            <DocumentAttachmentPreview attachment={documentAttachment} isOwnMessage={isOwnMessage} onDownload={handleDownloadAttachment} />
+                          ) : fileAttachment ? (
                             fileAttachment.attachmentDisplayMode === 'IMAGE' ? (
                               <ImageAttachmentPreview attachment={fileAttachment} onDownload={handleDownloadAttachment} />
                             ) : (
@@ -1665,6 +2218,18 @@ export function MessengerPage() {
                   }}
                 />
 
+
+                <input
+                  ref={documentInputRef}
+                  type="file"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] ?? null;
+                    event.target.value = '';
+                    void handleAttachDocument(file);
+                  }}
+                />
+
                 <div className="flex items-end gap-3 rounded-[2rem] border border-white/10 bg-white/[0.04] px-4 py-3 shadow-xl shadow-black/20">
                   <div className="relative">
                     <button
@@ -1691,6 +2256,20 @@ export function MessengerPage() {
                         >
                           <FileText size={18} className="text-violet-200" />
                           <span>Отправить как файл</span>
+                        </button>
+                        <button
+                          onClick={() => documentInputRef.current?.click()}
+                          className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm text-zinc-200 transition hover:bg-white/[0.06]"
+                        >
+                          <ShieldCheck size={18} className="text-violet-200" />
+                          <span>Отправить как документ</span>
+                        </button>
+                        <button
+                          onClick={() => void openDocumentsPanel()}
+                          className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm text-zinc-200 transition hover:bg-white/[0.06]"
+                        >
+                          <FileText size={18} className="text-violet-200" />
+                          <span>Открыть документы чата</span>
                         </button>
                       </div>
                     )}
@@ -1723,7 +2302,7 @@ export function MessengerPage() {
 
                 <div className="mt-3 flex items-center justify-between px-2 text-xs text-zinc-600">
                   <span>Enter — отправить, Shift + Enter — новая строка. Файлы шифруются локально перед отправкой.</span>
-                  <span>{selectedChat.type === 'SELF' ? 'Личный чат' : 'Direct chat'}</span>
+                  <span>{selectedChat.type === 'SELF' ? 'Личный чат' : selectedChat.type === 'GROUP' ? 'Group sender-key E2EE' : 'Direct chat'}</span>
                 </div>
               </div>
             </div>

@@ -33,11 +33,17 @@ public class ChatEntity {
     @Enumerated(EnumType.STRING)
     private ChatType type;
 
+    @Column(name = "name", length = 120)
+    private String name;
+
     @Column(name = "direct_chat_key", unique = true, length = 80)
     private String directChatKey;
 
     @Column(name = "self_account_id", unique = true)
     private UUID selfAccountId;
+
+    @Column(name = "current_key_epoch", nullable = false)
+    private Integer currentKeyEpoch;
 
     @Column(name = "created_by_account_id", nullable = false)
     private UUID createdByAccountId;

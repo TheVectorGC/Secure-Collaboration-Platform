@@ -4,7 +4,6 @@ import dev.messagingservice.model.enumeration.MessageEncryptionType;
 import dev.messagingservice.model.enumeration.MessageType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.util.List;
@@ -28,8 +27,12 @@ public record SendMessageRequestDto(
     @Schema(description = "Encryption type.", example = "SIGNAL")
     MessageEncryptionType encryptionType,
 
+    @Size(max = 2000000, message = "Encrypted group payload is too large.")
+    @Schema(description = "Single group sender-key ciphertext. Used for GROUP encryption.")
+    String encryptedPayload,
+
     @Valid
-    @NotEmpty(message = "Device payloads can't be empty.")
-    @Schema(description = "Encrypted payloads, one per target device.")
+    @Size(max = 5000, message = "Device payload list is too large.")
+    @Schema(description = "Encrypted payloads, one per target device. Used for SIGNAL encryption and future key distribution messages.")
     List<DeviceMessagePayloadRequestDto> devicePayloads
 ) {}

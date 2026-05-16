@@ -5,6 +5,8 @@ import dev.mediaservice.exception.MediaAccessDeniedException;
 import dev.mediaservice.exception.MediaFileNotFoundException;
 import dev.mediaservice.exception.MediaStorageException;
 import dev.mediaservice.model.dto.request.UploadEncryptedMediaRequestDto;
+import dev.mediaservice.model.dto.response.InternalChatParticipantResponseDto;
+import dev.mediaservice.model.dto.response.InternalChatResponseDto;
 import dev.mediaservice.model.dto.response.MediaFileResponseDto;
 import dev.mediaservice.model.dto.response.StoredMediaResourceDto;
 import dev.mediaservice.model.entity.MediaFileEntity;
@@ -143,7 +145,37 @@ public class MediaFileServiceImpl implements MediaFileService {
             throw new MediaAccessDeniedException("Media file is not linked to a chat.");
         }
 
-        messagingAccessClient.validateCurrentAccountCanAccessChat(mediaFileEntity.getChatId());
+        InternalChatResponseDto chatResponseDto = messagingAccessClient.validateCurrentAccountCanAccessChat(mediaFileEntity.getChatId());
+        validateMediaVisibilityForCurrentAccount(chatResponseDto, mediaFileEntity.getCreatedAt());
+    }
+
+    private void validateMediaVisibilityForCurrentAccount(InternalChatResponseDto chatResponseDto, OffsetDateTime mediaCreatedAt) {
+        UUID currentAccountId = currentAccountService.getCurrentAccountId();
+        InternalChatParticipantResponseDto currentParticipant = findCurrentParticipant(chatResponseDto, currentAccountId);
+
+        if (currentParticipant == null || !"ACTIVE".equals(currentParticipant.status())) {
+            throw new MediaAccessDeniedException("Current account does not have access to this media file.");
+        }
+
+        if (currentParticipant.historyVisibleFromCreatedAt() != null && mediaCreatedAt.isBefore(currentParticipant.historyVisibleFromCreatedAt())) {
+            throw new MediaAccessDeniedException("Current account does not have access to this media file history.");
+        }
+
+        if (currentParticipant.removedAt() != null && mediaCreatedAt.isAfter(currentParticipant.removedAt())) {
+            throw new MediaAccessDeniedException("Current account does not have access to this media file.");
+        }
+    }
+
+    private InternalChatParticipantResponseDto findCurrentParticipant(InternalChatResponseDto chatResponseDto, UUID currentAccountId) {
+        if (chatResponseDto == null || chatResponseDto.participants() == null) {
+            return null;
+        }
+
+        return chatResponseDto.participants()
+                .stream()
+                .filter(participant -> currentAccountId.equals(participant.accountId()))
+                .findFirst()
+                .orElse(null);
     }
 
     private MediaFileResponseDto toResponseDto(MediaFileEntity mediaFileEntity) {

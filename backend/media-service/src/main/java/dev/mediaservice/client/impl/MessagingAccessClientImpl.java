@@ -4,6 +4,7 @@ import dev.mediaservice.client.MessagingAccessClient;
 import dev.mediaservice.config.properties.MessagingServiceProperties;
 import dev.mediaservice.exception.MediaAccessDeniedException;
 import dev.mediaservice.exception.MediaStorageException;
+import dev.mediaservice.model.dto.response.InternalChatResponseDto;
 import dev.mediaservice.security.AuthorizationHeaderProvider;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -23,9 +24,9 @@ public class MessagingAccessClientImpl implements MessagingAccessClient {
     private final AuthorizationHeaderProvider authorizationHeaderProvider;
 
     @Override
-    public void validateCurrentAccountCanAccessChat(UUID chatId) {
+    public InternalChatResponseDto validateCurrentAccountCanAccessChat(UUID chatId) {
         try {
-            messagingServiceRestClient.get()
+            return messagingServiceRestClient.get()
                     .uri(messagingServiceProperties.chatPath(), chatId)
                     .header(HttpHeaders.AUTHORIZATION, authorizationHeaderProvider.getAuthorizationHeader())
                     .retrieve()
@@ -35,7 +36,7 @@ public class MessagingAccessClientImpl implements MessagingAccessClient {
                     .onStatus(HttpStatusCode::is5xxServerError, (request, response) -> {
                         throw new MediaStorageException("Messaging-service is unavailable for media access validation.");
                     })
-                    .body(String.class);
+                    .body(InternalChatResponseDto.class);
         }
         catch (MediaAccessDeniedException | MediaStorageException exception) {
             throw exception;

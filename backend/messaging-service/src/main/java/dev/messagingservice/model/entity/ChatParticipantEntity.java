@@ -47,6 +47,15 @@ public class ChatParticipantEntity {
     @Column(name = "joined_at", nullable = false)
     private OffsetDateTime joinedAt;
 
+    @Column(name = "history_visible_from_message_id")
+    private UUID historyVisibleFromMessageId;
+
+    @Column(name = "history_visible_from_created_at")
+    private OffsetDateTime historyVisibleFromCreatedAt;
+
+    @Column(name = "removed_at")
+    private OffsetDateTime removedAt;
+
     @Column(name = "last_read_message_id")
     private UUID lastReadMessageId;
 

@@ -88,9 +88,33 @@ export type CreateDirectChatRequestDto = {
   recipientAccountId: string;
 };
 
+export type CreateGroupChatRequestDto = {
+  name: string;
+  participantAccountIds: string[];
+};
+
+export type AddGroupParticipantRequestDto = {
+  accountId: string;
+  historyAccessMode: 'FULL_HISTORY' | 'NEW_MESSAGES_ONLY' | 'FROM_MESSAGE';
+  historyVisibleFromMessageId: string | null;
+};
+
+export type ChatParticipantResponseDto = {
+  accountId: string;
+  role: 'OWNER' | 'MEMBER';
+  status: 'ACTIVE' | 'LEFT' | 'REMOVED';
+  historyVisibleFromMessageId: string | null;
+  historyVisibleFromCreatedAt: string | null;
+  joinedAt: string;
+  removedAt: string | null;
+};
+
 export type ChatResponseDto = {
   chatId: string;
-  type: 'DIRECT' | 'SELF';
+  type: 'DIRECT' | 'SELF' | 'GROUP';
+  name: string | null;
+  currentKeyEpoch: number | null;
+  participants?: ChatParticipantResponseDto[];
   participantAccountIds: string[];
   lastMessageId: string | null;
   lastMessageCreatedAt: string | null;
@@ -110,8 +134,9 @@ export type DeviceMessagePayloadRequestDto = {
 export type SendMessageRequestDto = {
   senderDeviceId: string;
   clientMessageId: string;
-  messageType: 'TEXT' | 'FILE';
-  encryptionType: 'SIGNAL';
+  messageType: 'TEXT' | 'FILE' | 'IMAGE' | 'GROUP_KEY_DISTRIBUTION' | 'SYSTEM';
+  encryptionType: 'SIGNAL' | 'GROUP';
+  encryptedPayload?: string | null;
   devicePayloads: DeviceMessagePayloadRequestDto[];
 };
 
@@ -162,8 +187,9 @@ export type MessageResponseDto = {
   senderAccountId: string;
   senderDeviceId: string;
   clientMessageId: string | null;
-  messageType: 'TEXT' | 'FILE';
-  encryptionType: 'SIGNAL';
+  messageType: 'TEXT' | 'FILE' | 'IMAGE' | 'GROUP_KEY_DISTRIBUTION' | 'SYSTEM';
+  encryptionType: 'SIGNAL' | 'GROUP';
+  encryptedPayload: string | null;
   devicePayloads: MessageDevicePayloadResponseDto[];
   createdAt: string;
   deliveryStates: MessageDeliveryStateResponseDto[];
@@ -183,8 +209,9 @@ export type MessageCreatedPayload = {
   messageId: string;
   senderAccountId: string;
   senderDeviceId: string;
-  messageType: 'TEXT' | 'FILE';
-  encryptionType: 'SIGNAL';
+  messageType: 'TEXT' | 'FILE' | 'IMAGE' | 'GROUP_KEY_DISTRIBUTION' | 'SYSTEM';
+  encryptionType: 'SIGNAL' | 'GROUP';
+  encryptedPayload?: string | null;
   devicePayloads?: MessageDevicePayloadResponseDto[];
   createdAt: string;
 };

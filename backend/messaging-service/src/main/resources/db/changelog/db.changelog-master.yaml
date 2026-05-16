@@ -11,3 +11,5 @@ databaseChangeLog:
       file: db/changelog/changes/005-create-message-device-payloads-table.yaml
   - include:
       file: db/changelog/changes/006-make-message-encrypted-payload-nullable.yaml
+  - include:
+      file: db/changelog/changes/007-add-group-chat-support.yaml

@@ -1,5 +1,5 @@
 import { messagingHttpClient } from '../../../shared/api/httpClient';
-import type { ChatResponseDto, CreateDirectChatRequestDto } from '../../../shared/types/api';
+import type { AddGroupParticipantRequestDto, ChatResponseDto, CreateDirectChatRequestDto, CreateGroupChatRequestDto } from '../../../shared/types/api';
 
 export async function getChats(): Promise<ChatResponseDto[]> {
   const response = await messagingHttpClient.get<ChatResponseDto[]>('/api/v1/chats');
@@ -18,5 +18,21 @@ export async function createSelfChat(): Promise<ChatResponseDto> {
 
 export async function createDirectChat(request: CreateDirectChatRequestDto): Promise<ChatResponseDto> {
   const response = await messagingHttpClient.post<ChatResponseDto>('/api/v1/chats/direct', request);
+  return response.data;
+}
+
+
+export async function createGroupChat(request: CreateGroupChatRequestDto): Promise<ChatResponseDto> {
+  const response = await messagingHttpClient.post<ChatResponseDto>('/api/v1/chats/groups', request);
+  return response.data;
+}
+
+export async function addGroupParticipant(chatId: string, request: AddGroupParticipantRequestDto): Promise<ChatResponseDto> {
+  const response = await messagingHttpClient.post<ChatResponseDto>(`/api/v1/chats/${chatId}/participants`, request);
+  return response.data;
+}
+
+export async function removeGroupParticipant(chatId: string, participantAccountId: string): Promise<ChatResponseDto> {
+  const response = await messagingHttpClient.delete<ChatResponseDto>(`/api/v1/chats/${chatId}/participants/${participantAccountId}`);
   return response.data;
 }

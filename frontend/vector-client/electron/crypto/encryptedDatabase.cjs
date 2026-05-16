@@ -199,6 +199,21 @@ function applySchema(database) {
       PRIMARY KEY (account_id, device_id)
     );
 
+
+    CREATE TABLE IF NOT EXISTS group_keys (
+      account_id TEXT NOT NULL,
+      chat_id TEXT NOT NULL,
+      epoch INTEGER NOT NULL,
+      sender_device_id TEXT NOT NULL,
+      key_base64 TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (account_id, chat_id, epoch, sender_device_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_group_keys_account_chat
+      ON group_keys(account_id, chat_id);
+
     CREATE INDEX IF NOT EXISTS idx_signal_sessions_remote_address
       ON signal_sessions(remote_address);
 

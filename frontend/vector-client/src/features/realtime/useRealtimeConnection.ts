@@ -113,6 +113,7 @@ export function useRealtimeConnection() {
           clientMessageId: null,
           messageType: payload.messageType,
           encryptionType: payload.encryptionType,
+          encryptedPayload: payload.encryptedPayload ?? null,
           devicePayloads,
           createdAt: payload.createdAt,
           deliveryStates: [],

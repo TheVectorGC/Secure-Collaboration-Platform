@@ -1,0 +1,47 @@
+databaseChangeLog:
+  - changeSet:
+      id: 007-add-group-chat-support
+      author: messaging-service
+      preConditions:
+        - onFail: MARK_RAN
+        - tableExists:
+            tableName: chats
+      changes:
+        - addColumn:
+            tableName: chats
+            columns:
+              - column:
+                  name: name
+                  type: VARCHAR(120)
+              - column:
+                  name: current_key_epoch
+                  type: INTEGER
+                  defaultValueNumeric: 1
+                  constraints:
+                    nullable: false
+        - addColumn:
+            tableName: chat_participants
+            columns:
+              - column:
+                  name: history_visible_from_message_id
+                  type: UUID
+              - column:
+                  name: history_visible_from_created_at
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: removed_at
+                  type: TIMESTAMP WITH TIME ZONE
+        - createIndex:
+            tableName: chats
+            indexName: idx_chats_name
+            columns:
+              - column:
+                  name: name
+        - createIndex:
+            tableName: chat_participants
+            indexName: idx_chat_participants_history_boundary
+            columns:
+              - column:
+                  name: chat_id
+              - column:
+                  name: history_visible_from_created_at

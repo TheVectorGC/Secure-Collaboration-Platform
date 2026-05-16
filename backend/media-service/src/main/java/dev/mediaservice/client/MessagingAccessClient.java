@@ -1,7 +1,8 @@
 package dev.mediaservice.client;
 
+import dev.mediaservice.model.dto.response.InternalChatResponseDto;
 import java.util.UUID;
 
 public interface MessagingAccessClient {
-    void validateCurrentAccountCanAccessChat(UUID chatId);
+    InternalChatResponseDto validateCurrentAccountCanAccessChat(UUID chatId);
 }

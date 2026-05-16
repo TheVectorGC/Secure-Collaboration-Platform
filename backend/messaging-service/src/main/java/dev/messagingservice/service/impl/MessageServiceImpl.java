@@ -17,6 +17,7 @@ import dev.messagingservice.model.entity.MessageDevicePayloadEntity;
 import dev.messagingservice.model.entity.MessageEntity;
 import dev.messagingservice.model.enumeration.ChatParticipantStatus;
 import dev.messagingservice.model.enumeration.MessageDeliveryStatus;
+import dev.messagingservice.model.enumeration.MessageEncryptionType;
 import dev.messagingservice.repository.ChatParticipantRepository;
 import dev.messagingservice.repository.ChatRepository;
 import dev.messagingservice.repository.MessageDeliveryStateRepository;
@@ -37,6 +38,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 @Slf4j
 @Service
@@ -71,7 +73,7 @@ public class MessageServiceImpl implements MessageService {
             chatId,
             ChatParticipantStatus.ACTIVE
         );
-        validateDevicePayloads(sendMessageRequestDto.devicePayloads(), activeParticipants);
+        validateMessageEncryptionPayload(sendMessageRequestDto, activeParticipants);
 
         OffsetDateTime now = OffsetDateTime.now();
         MessageEntity messageEntity = MessageEntity.builder()
@@ -81,13 +83,14 @@ public class MessageServiceImpl implements MessageService {
             .clientMessageId(trimToNull(sendMessageRequestDto.clientMessageId()))
             .messageType(sendMessageRequestDto.messageType())
             .encryptionType(sendMessageRequestDto.encryptionType())
+            .encryptedPayload(trimToNull(sendMessageRequestDto.encryptedPayload()))
             .createdAt(now)
             .build();
 
         MessageEntity savedMessageEntity = messageRepository.save(messageEntity);
         List<MessageDevicePayloadEntity> savedPayloadEntities = saveDevicePayloads(
             savedMessageEntity.getId(),
-            sendMessageRequestDto.devicePayloads(),
+            sendMessageRequestDto.devicePayloads() == null ? List.of() : sendMessageRequestDto.devicePayloads(),
             now
         );
         List<UUID> recipientAccountIds = createDeliveryStates(savedMessageEntity, currentAccountId, activeParticipants);
@@ -107,9 +110,10 @@ public class MessageServiceImpl implements MessageService {
     @Override
     @Transactional(readOnly = true)
     public List<MessageResponseDto> getChatMessages(UUID currentAccountId, UUID chatId) {
-        validateActiveParticipant(chatId, currentAccountId);
+        ChatParticipantEntity currentParticipant = getKnownParticipant(chatId, currentAccountId);
 
         List<MessageEntity> messageEntities = messageRepository.findTop50ByChatIdOrderByCreatedAtDesc(chatId).stream()
+            .filter(messageEntity -> isVisibleToParticipant(messageEntity, currentParticipant))
             .sorted(Comparator.comparing(MessageEntity::getCreatedAt))
             .toList();
         List<UUID> messageIds = messageEntities.stream()
@@ -190,6 +194,30 @@ public class MessageServiceImpl implements MessageService {
         }
     }
 
+    private ChatParticipantEntity getKnownParticipant(UUID chatId, UUID accountId) {
+        ChatParticipantEntity participantEntity = chatParticipantRepository.findByChatIdAndAccountId(chatId, accountId)
+            .orElseThrow(() -> new ChatAccessDeniedException("Current account does not have access to this chat."));
+
+        if (participantEntity.getStatus() != ChatParticipantStatus.ACTIVE) {
+            throw new ChatAccessDeniedException("Current account does not have access to this chat.");
+        }
+
+        return participantEntity;
+    }
+
+    private boolean isVisibleToParticipant(MessageEntity messageEntity, ChatParticipantEntity participantEntity) {
+        if (participantEntity.getHistoryVisibleFromCreatedAt() != null
+                && messageEntity.getCreatedAt().isBefore(participantEntity.getHistoryVisibleFromCreatedAt())) {
+            return false;
+        }
+
+        if (participantEntity.getRemovedAt() != null && messageEntity.getCreatedAt().isAfter(participantEntity.getRemovedAt())) {
+            return false;
+        }
+
+        return true;
+    }
+
     private MessageEntity getMessageInChat(UUID chatId, UUID messageId) {
         MessageEntity messageEntity = messageRepository.findById(messageId)
             .orElseThrow(() -> new MessageNotFoundException("Message with ID '" + messageId + "' was not found."));
@@ -199,6 +227,34 @@ public class MessageServiceImpl implements MessageService {
         }
 
         return messageEntity;
+    }
+
+    private void validateMessageEncryptionPayload(
+        SendMessageRequestDto sendMessageRequestDto,
+        List<ChatParticipantEntity> activeParticipants
+    ) {
+        if (sendMessageRequestDto.encryptionType() == MessageEncryptionType.GROUP) {
+            if (!StringUtils.hasText(sendMessageRequestDto.encryptedPayload())) {
+                throw new MessagePayloadValidationException("Group encrypted payload is required for GROUP encryption.");
+            }
+
+            List<DeviceMessagePayloadRequestDto> groupKeyDistributionPayloads = sendMessageRequestDto.devicePayloads();
+
+            if (groupKeyDistributionPayloads == null || groupKeyDistributionPayloads.isEmpty()) {
+                throw new MessagePayloadValidationException("Group key distribution payloads are required for GROUP encryption.");
+            }
+
+            validateDevicePayloads(groupKeyDistributionPayloads, activeParticipants);
+            return;
+        }
+
+        List<DeviceMessagePayloadRequestDto> devicePayloads = sendMessageRequestDto.devicePayloads();
+
+        if (devicePayloads == null || devicePayloads.isEmpty()) {
+            throw new MessagePayloadValidationException("Device payloads can't be empty for SIGNAL encryption.");
+        }
+
+        validateDevicePayloads(devicePayloads, activeParticipants);
     }
 
     private void validateDevicePayloads(
@@ -296,6 +352,7 @@ public class MessageServiceImpl implements MessageService {
             messageEntity.getClientMessageId(),
             messageEntity.getMessageType(),
             messageEntity.getEncryptionType(),
+            messageEntity.getEncryptedPayload(),
             payloadResponseDtos,
             messageEntity.getCreatedAt(),
             deliveryStateResponseDtos

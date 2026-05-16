@@ -108,6 +108,67 @@ export type ClearLocalVaultResponse = {
   cleared: boolean;
 };
 
+export type DocumentSigningKeyResponse = {
+  publicKeyBase64: string;
+  privateKeyBase64: string;
+  fingerprint: string;
+  createdAt: string;
+  alreadyExisted: boolean;
+};
+
+export type GetOrCreateDocumentSigningKeyRequest = {
+  accountId: string;
+  deviceId: string;
+};
+
+export type SignDocumentHashRequest = {
+  accountId: string;
+  deviceId: string;
+  documentHashBase64: string;
+};
+
+export type SignDocumentHashResponse = {
+  signatureBase64: string;
+  signingKeyFingerprint: string;
+};
+
+
+
+export type EncryptGroupMessageRequest = {
+  accountId: string;
+  deviceId: string;
+  chatId: string;
+  epoch: number;
+  plainText: string;
+};
+
+export type EncryptGroupMessageResponse = {
+  encryptionType: 'GROUP';
+  encryptedPayload: string;
+  groupKeyPackagePlainText: string;
+};
+
+export type DecryptGroupMessageRequest = {
+  accountId: string;
+  deviceId: string;
+  chatId: string;
+  epoch?: number;
+  messageId?: string;
+  encryptedPayload: string;
+};
+
+export type ImportGroupKeyRequest = {
+  accountId: string;
+  chatId: string;
+  groupKeyPackagePlainText: string;
+};
+
+export type ImportGroupKeyResponse = {
+  imported: boolean;
+  chatId: string;
+  epoch: number;
+};
+
 
 export type ExportEncryptedKeyBackupRequest = {
   accountId: string;
@@ -156,8 +217,13 @@ export type VectorCryptoApi = {
   getOrCreateClientInstallationId: () => Promise<string>;
   getHealth: () => Promise<VectorCryptoHealth>;
   initializeLocalVault: (request: InitializeLocalVaultRequest) => Promise<InitializeLocalVaultResponse>;
+  getOrCreateDocumentSigningKey: (request: GetOrCreateDocumentSigningKeyRequest) => Promise<DocumentSigningKeyResponse>;
+  signDocumentHash: (request: SignDocumentHashRequest) => Promise<SignDocumentHashResponse>;
   encryptMessage: (request: EncryptMessageRequest) => Promise<EncryptMessageResponse>;
   encryptLocalMessage: (request: EncryptLocalMessageRequest) => Promise<EncryptMessageResponse>;
+  encryptGroupMessage: (request: EncryptGroupMessageRequest) => Promise<EncryptGroupMessageResponse>;
+  decryptGroupMessage: (request: DecryptGroupMessageRequest) => Promise<DecryptMessageResponse>;
+  importGroupKey: (request: ImportGroupKeyRequest) => Promise<ImportGroupKeyResponse>;
   decryptMessage: (request: DecryptMessageRequest) => Promise<DecryptMessageResponse>;
   exportEncryptedKeyBackup: (request: ExportEncryptedKeyBackupRequest) => Promise<ExportEncryptedKeyBackupResponse>;
   importEncryptedKeyBackup: (request: ImportEncryptedKeyBackupRequest) => Promise<ImportEncryptedKeyBackupResponse>;

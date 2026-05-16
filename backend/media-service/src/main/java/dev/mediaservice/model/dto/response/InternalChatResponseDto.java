@@ -1,4 +1,4 @@
-package dev.documentservice.model.dto.response;
+package dev.mediaservice.model.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.time.OffsetDateTime;

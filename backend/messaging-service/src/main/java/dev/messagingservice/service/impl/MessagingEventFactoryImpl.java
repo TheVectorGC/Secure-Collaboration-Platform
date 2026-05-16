@@ -33,6 +33,7 @@ public class MessagingEventFactoryImpl implements MessagingEventFactory {
         payload.put("senderDeviceId", messageEntity.getSenderDeviceId());
         payload.put("messageType", messageEntity.getMessageType());
         payload.put("encryptionType", messageEntity.getEncryptionType());
+        payload.put("encryptedPayload", messageEntity.getEncryptedPayload());
         payload.put("devicePayloads", createDevicePayloads(payloadEntities));
         payload.put("createdAt", messageEntity.getCreatedAt());
 

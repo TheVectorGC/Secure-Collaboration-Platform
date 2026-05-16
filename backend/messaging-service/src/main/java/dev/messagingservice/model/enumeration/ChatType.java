@@ -2,7 +2,8 @@ package dev.messagingservice.model.enumeration;
 
 public enum ChatType {
     DIRECT("личный чат"),
-    SELF("избранное");
+    SELF("избранное"),
+    GROUP("групповой чат");
 
     private final String displayName;
 

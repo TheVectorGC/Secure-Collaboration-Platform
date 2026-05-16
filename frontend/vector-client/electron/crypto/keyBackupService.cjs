@@ -24,6 +24,7 @@ const BACKUP_TABLES = [
   'document_signing_keys',
   'decrypted_message_cache',
   'restored_local_message_keys',
+  'group_keys',
 ];
 
 function nowIso() {

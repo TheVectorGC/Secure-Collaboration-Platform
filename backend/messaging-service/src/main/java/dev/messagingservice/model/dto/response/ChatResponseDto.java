@@ -14,8 +14,17 @@ public record ChatResponseDto(
     @Schema(description = "Chat type.")
     ChatType type,
 
+    @Schema(description = "Group display name. Null for direct chats.")
+    String name,
+
+    @Schema(description = "Current group key epoch. For direct and self chats value is 1.")
+    Integer currentKeyEpoch,
+
     @Schema(description = "Participant account IDs.")
     List<UUID> participantAccountIds,
+
+    @Schema(description = "Detailed participants for groups and future access policies.")
+    List<ChatParticipantResponseDto> participants,
 
     @Schema(description = "Last message ID.")
     UUID lastMessageId,

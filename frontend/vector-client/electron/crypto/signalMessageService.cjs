@@ -324,8 +324,225 @@ async function decryptMessage(request) {
   }
 }
 
+function buildGroupAssociatedData(chatId, epoch, senderDeviceId) {
+  return Buffer.from(`vector-group-message:${chatId}:${epoch}:${senderDeviceId}`, 'utf8');
+}
+
+function saveGroupKey(database, accountId, chatId, epoch, senderDeviceId, keyBase64) {
+  const normalizedEpoch = Number(epoch ?? 1);
+  const timestamp = new Date().toISOString();
+
+  database
+    .prepare(`
+      INSERT INTO group_keys(account_id, chat_id, epoch, sender_device_id, key_base64, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(account_id, chat_id, epoch, sender_device_id) DO UPDATE SET
+        key_base64 = excluded.key_base64,
+        updated_at = excluded.updated_at
+    `)
+    .run(accountId, chatId, normalizedEpoch, senderDeviceId, keyBase64, timestamp, timestamp);
+}
+
+function getOrCreateGroupKey(database, accountId, chatId, epoch, senderDeviceId) {
+  const normalizedEpoch = Number(epoch ?? 1);
+  const existingKey = database
+    .prepare(`
+      SELECT key_base64
+      FROM group_keys
+      WHERE account_id = ? AND chat_id = ? AND epoch = ? AND sender_device_id = ?
+    `)
+    .get(accountId, chatId, normalizedEpoch, senderDeviceId);
+
+  if (existingKey?.key_base64) {
+    return Buffer.from(existingKey.key_base64, 'base64');
+  }
+
+  const key = crypto.randomBytes(32);
+  saveGroupKey(database, accountId, chatId, normalizedEpoch, senderDeviceId, key.toString('base64'));
+  return key;
+}
+
+function buildGroupKeyDistributionPackage(accountId, chatId, epoch, senderDeviceId, key) {
+  return JSON.stringify({
+    type: 'VECTOR_GROUP_KEY',
+    version: 1,
+    accountId,
+    chatId,
+    epoch: Number(epoch ?? 1),
+    senderDeviceId,
+    algorithm: 'AES-256-GCM',
+    keyBase64: key.toString('base64'),
+    exportedAt: new Date().toISOString(),
+  });
+}
+
+function validateGroupCryptoRequest(request, requirePlainText) {
+  if (!request || typeof request !== 'object') {
+    throw new Error('Group crypto request is required.');
+  }
+
+  if (!request.accountId || typeof request.accountId !== 'string') {
+    throw new Error('accountId is required.');
+  }
+
+  if (!request.chatId || typeof request.chatId !== 'string') {
+    throw new Error('chatId is required.');
+  }
+
+  if (requirePlainText && typeof request.epoch !== 'number') {
+    throw new Error('Group key epoch is required.');
+  }
+
+  if (requirePlainText && (!request.deviceId || typeof request.deviceId !== 'string')) {
+    throw new Error('deviceId is required for group encryption.');
+  }
+
+  if (requirePlainText && typeof request.plainText !== 'string') {
+    throw new Error('plainText is required.');
+  }
+}
+
+async function encryptGroupMessage(request) {
+  validateGroupCryptoRequest(request, true);
+
+  const database = encryptedDatabase.openDatabase();
+
+  try {
+    const key = getOrCreateGroupKey(database, request.accountId, request.chatId, request.epoch, request.deviceId);
+    const initializationVector = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, initializationVector);
+    const associatedData = buildGroupAssociatedData(request.chatId, request.epoch, request.deviceId);
+
+    cipher.setAAD(associatedData);
+
+    const encryptedBytes = Buffer.concat([
+      cipher.update(Buffer.from(request.plainText, 'utf8')),
+      cipher.final(),
+    ]);
+    const authenticationTag = cipher.getAuthTag();
+
+    return {
+      encryptionType: 'GROUP',
+      groupKeyPackagePlainText: buildGroupKeyDistributionPackage(request.accountId, request.chatId, request.epoch, request.deviceId, key),
+      encryptedPayload: toBase64(Buffer.from(JSON.stringify({
+        version: 1,
+        algorithm: 'AES-256-GCM',
+        chatId: request.chatId,
+        epoch: request.epoch,
+        senderDeviceId: request.deviceId,
+        initializationVector: toBase64(initializationVector),
+        authenticationTag: toBase64(authenticationTag),
+        ciphertext: toBase64(encryptedBytes),
+      }), 'utf8')),
+    };
+  }
+  finally {
+    database.close();
+  }
+}
+
+async function decryptGroupMessage(request) {
+  validateGroupCryptoRequest(request, false);
+
+  if (!request.encryptedPayload || typeof request.encryptedPayload !== 'string') {
+    throw new Error('encryptedPayload is required.');
+  }
+
+  const envelope = JSON.parse(fromBase64(request.encryptedPayload).toString('utf8'));
+
+  if (envelope.version !== 1 || envelope.algorithm !== 'AES-256-GCM') {
+    throw new Error('Unsupported group message encryption envelope.');
+  }
+
+  if (envelope.chatId !== request.chatId) {
+    throw new Error('Group message envelope does not match requested chat.');
+  }
+
+  const envelopeEpoch = Number(envelope.epoch);
+
+  const database = encryptedDatabase.openDatabase();
+
+  try {
+    const keyRow = database
+      .prepare(`
+        SELECT key_base64
+        FROM group_keys
+        WHERE account_id = ? AND chat_id = ? AND epoch = ? AND sender_device_id = ?
+      `)
+      .get(request.accountId, request.chatId, envelopeEpoch, envelope.senderDeviceId);
+
+    if (!keyRow?.key_base64) {
+      throw new Error('Group key is not available on this device. Restore key backup or receive a key distribution package.');
+    }
+
+    const key = Buffer.from(keyRow.key_base64, 'base64');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, fromBase64(envelope.initializationVector));
+
+    decipher.setAAD(buildGroupAssociatedData(request.chatId, envelopeEpoch, envelope.senderDeviceId));
+    decipher.setAuthTag(fromBase64(envelope.authenticationTag));
+
+    const plainTextBytes = Buffer.concat([
+      decipher.update(fromBase64(envelope.ciphertext)),
+      decipher.final(),
+    ]);
+
+    return {
+      plainText: plainTextBytes.toString('utf8'),
+    };
+  }
+  finally {
+    database.close();
+  }
+}
+
+async function importGroupKey(request) {
+  validateGroupCryptoRequest(request, false);
+
+  if (!request.groupKeyPackagePlainText || typeof request.groupKeyPackagePlainText !== 'string') {
+    throw new Error('groupKeyPackagePlainText is required.');
+  }
+
+  const groupKeyPackage = JSON.parse(request.groupKeyPackagePlainText);
+
+  if (groupKeyPackage.type !== 'VECTOR_GROUP_KEY' || groupKeyPackage.version !== 1 || groupKeyPackage.algorithm !== 'AES-256-GCM') {
+    throw new Error('Unsupported group key distribution package.');
+  }
+
+  if (groupKeyPackage.chatId !== request.chatId) {
+    throw new Error('Group key package does not match requested chat.');
+  }
+
+  if (!groupKeyPackage.senderDeviceId || typeof groupKeyPackage.senderDeviceId !== 'string') {
+    throw new Error('Group key package does not contain sender device ID.');
+  }
+
+  const key = Buffer.from(groupKeyPackage.keyBase64, 'base64');
+
+  if (key.length !== 32) {
+    throw new Error('Group key package contains invalid key material.');
+  }
+
+  const database = encryptedDatabase.openDatabase();
+
+  try {
+    saveGroupKey(database, request.accountId, request.chatId, Number(groupKeyPackage.epoch), groupKeyPackage.senderDeviceId, groupKeyPackage.keyBase64);
+
+    return {
+      imported: true,
+      chatId: request.chatId,
+      epoch: Number(groupKeyPackage.epoch),
+    };
+  }
+  finally {
+    database.close();
+  }
+}
+
 module.exports = {
   encryptMessage,
   encryptLocalMessage,
   decryptMessage,
+  encryptGroupMessage,
+  decryptGroupMessage,
+  importGroupKey,
 };

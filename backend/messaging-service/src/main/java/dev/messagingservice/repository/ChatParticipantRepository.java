@@ -19,5 +19,7 @@ public interface ChatParticipantRepository extends JpaRepository<ChatParticipant
 
     List<ChatParticipantEntity> findByChatIdAndStatus(UUID chatId, ChatParticipantStatus status);
 
+    List<ChatParticipantEntity> findByChatId(UUID chatId);
+
     List<ChatParticipantEntity> findByChatIdInAndStatus(Collection<UUID> chatIds, ChatParticipantStatus status);
 }

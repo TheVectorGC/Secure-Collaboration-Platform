@@ -50,6 +50,9 @@ public class MessageEntity {
     @Enumerated(EnumType.STRING)
     private MessageEncryptionType encryptionType;
 
+    @Column(name = "encrypted_payload", columnDefinition = "TEXT")
+    private String encryptedPayload;
+
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 }
