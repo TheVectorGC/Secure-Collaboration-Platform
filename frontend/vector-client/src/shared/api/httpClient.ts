@@ -15,6 +15,14 @@ export const cryptoHttpClient = axios.create({
   baseURL: serviceUrls.cryptoBaseUrl,
 });
 
+export const mediaHttpClient = axios.create({
+  baseURL: serviceUrls.mediaBaseUrl,
+});
+
+export const documentHttpClient = axios.create({
+  baseURL: serviceUrls.documentBaseUrl,
+});
+
 const refreshHttpClient = axios.create({
   baseURL: serviceUrls.identityBaseUrl,
 });
@@ -83,7 +91,7 @@ async function handleUnauthorizedError(error: AxiosError) {
   }
 }
 
-for (const httpClient of [identityHttpClient, messagingHttpClient, cryptoHttpClient]) {
+for (const httpClient of [identityHttpClient, messagingHttpClient, cryptoHttpClient, mediaHttpClient, documentHttpClient]) {
   httpClient.interceptors.request.use(attachAuthorizationHeader);
   httpClient.interceptors.response.use((response) => response, handleUnauthorizedError);
 }

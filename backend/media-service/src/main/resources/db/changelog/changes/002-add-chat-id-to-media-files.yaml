@@ -1,0 +1,23 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-add-chat-id-to-media-files
+      author: vector
+      preConditions:
+        onFail: MARK_RAN
+        not:
+          columnExists:
+            tableName: media_files
+            columnName: chat_id
+      changes:
+        - addColumn:
+            tableName: media_files
+            columns:
+              - column:
+                  name: chat_id
+                  type: uuid
+        - createIndex:
+            tableName: media_files
+            indexName: idx_media_files_chat_id
+            columns:
+              - column:
+                  name: chat_id

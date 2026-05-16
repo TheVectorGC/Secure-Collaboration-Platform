@@ -70,8 +70,63 @@ function registerVectorCryptoIpc() {
     return signalMessageService.encryptLocalMessage(request);
   });
 
+  ipcMain.handle('vectorCrypto:ensureDocumentSigningKey', async (_event, request) => {
+    validateInitializeRequest(request);
+    const signingKey = localCryptoRepository.getOrCreateDocumentSigningKey(request.accountId, request.deviceId);
+
+    return {
+      publicKeyBase64: signingKey.publicKeyBase64,
+      fingerprint: signingKey.fingerprint,
+      createdAt: signingKey.createdAt,
+      alreadyExisted: signingKey.alreadyExisted,
+    };
+  });
+
+  ipcMain.handle('vectorCrypto:signDocumentHash', async (_event, request) => {
+    validateInitializeRequest(request);
+
+    if (!request.documentHashBase64 || typeof request.documentHashBase64 !== 'string') {
+      throw new Error('documentHashBase64 is required.');
+    }
+
+    return localCryptoRepository.signDocumentHash(
+      request.accountId,
+      request.deviceId,
+      request.documentHashBase64
+    );
+  });
+
   ipcMain.handle('vectorCrypto:decryptMessage', async (_event, request) => {
-    return signalMessageService.decryptMessage(request);
+    if (request?.messageId) {
+      const cachedPlainText = localCryptoRepository.getCachedDecryptedMessage(
+        request.accountId,
+        request.deviceId,
+        request.messageId
+      );
+
+      if (cachedPlainText !== null) {
+        return {
+          plainText: cachedPlainText,
+          fromCache: true,
+        };
+      }
+    }
+
+    const decryptResponse = await signalMessageService.decryptMessage(request);
+
+    if (request?.messageId) {
+      localCryptoRepository.saveCachedDecryptedMessage(
+        request.accountId,
+        request.deviceId,
+        request.messageId,
+        decryptResponse.plainText
+      );
+    }
+
+    return {
+      ...decryptResponse,
+      fromCache: false,
+    };
   });
 
   ipcMain.handle('vectorCrypto:clearLocalVault', async () => {

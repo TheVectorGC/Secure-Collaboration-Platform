@@ -1,0 +1,5 @@
+databaseChangeLog:
+  - include:
+      file: db/changelog/changes/001-create-media-files-table.yaml
+  - include:
+      file: db/changelog/changes/002-add-chat-id-to-media-files.yaml

@@ -36,6 +36,7 @@ export type DeviceResponseDto = {
   clientVersion: string | null;
   lastSeenAt: string;
   createdAt: string;
+  clientInstallationId?: string | null;
 };
 
 export type ActiveDeviceResponseDto = {
@@ -43,6 +44,8 @@ export type ActiveDeviceResponseDto = {
   accountId: string;
   deviceName: string;
   platform: DevicePlatform;
+  status?: string;
+  clientVersion?: string | null;
   lastSeenAt: string | null;
 };
 
@@ -107,9 +110,36 @@ export type DeviceMessagePayloadRequestDto = {
 export type SendMessageRequestDto = {
   senderDeviceId: string;
   clientMessageId: string;
-  messageType: 'TEXT';
+  messageType: 'TEXT' | 'FILE';
   encryptionType: 'SIGNAL';
   devicePayloads: DeviceMessagePayloadRequestDto[];
+};
+
+export type MediaFileResponseDto = {
+  id: string;
+  chatId: string;
+  uploaderAccountId: string;
+  encryptedSizeBytes: number;
+  encryptedSha256Base64: string;
+  createdAt: string;
+};
+
+export type FileAttachmentMessageContent = {
+  kind: 'FILE_ATTACHMENT';
+  version: 1;
+  attachmentDisplayMode: 'FILE' | 'IMAGE';
+  mediaFileId: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  encryptedSizeBytes: number;
+  plaintextSha256Base64: string;
+  encryptedSha256Base64: string;
+  fileEncryption: {
+    algorithm: 'AES-256-GCM';
+    keyBase64: string;
+    initializationVectorBase64: string;
+  };
 };
 
 export type MessageDeliveryStateResponseDto = {
@@ -132,14 +162,14 @@ export type MessageResponseDto = {
   senderAccountId: string;
   senderDeviceId: string;
   clientMessageId: string | null;
-  messageType: 'TEXT';
+  messageType: 'TEXT' | 'FILE';
   encryptionType: 'SIGNAL';
   devicePayloads: MessageDevicePayloadResponseDto[];
   createdAt: string;
   deliveryStates: MessageDeliveryStateResponseDto[];
 };
 
-export type RealtimeEventType = 'MESSAGE_CREATED' | 'MESSAGE_DELIVERED' | 'MESSAGE_READ';
+export type RealtimeEventType = 'MESSAGE_CREATED' | 'MESSAGE_DELIVERED' | 'MESSAGE_READ' | 'TYPING';
 
 export type RealtimeEventDto = {
   eventId: string;
@@ -153,7 +183,7 @@ export type MessageCreatedPayload = {
   messageId: string;
   senderAccountId: string;
   senderDeviceId: string;
-  messageType: 'TEXT';
+  messageType: 'TEXT' | 'FILE';
   encryptionType: 'SIGNAL';
   devicePayloads?: MessageDevicePayloadResponseDto[];
   createdAt: string;
@@ -171,4 +201,95 @@ export type MessageReadPayload = {
   lastReadMessageId: string;
   readByAccountId: string;
   readAt: string;
+};
+
+export type TypingPayload = {
+  chatId: string;
+  typingAccountId: string;
+  username: string;
+  isTyping: boolean;
+};
+
+export type DocumentStatus = 'ACTIVE' | 'REJECTED';
+
+export type SignatureAlgorithm = 'ED25519';
+
+export type DocumentSignatureResponseDto = {
+  signatureId: string;
+  documentId: string;
+  signerAccountId: string;
+  signerDeviceId: string;
+  signingKeyFingerprint: string;
+  algorithm: SignatureAlgorithm;
+  documentHashBase64: string;
+  signatureBase64: string;
+  signedAt: string;
+};
+
+export type DocumentResponseDto = {
+  documentId: string;
+  chatId: string;
+  mediaFileId: string;
+  ownerAccountId: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  plaintextSha256Base64: string;
+  encryptedSha256Base64: string;
+  status: DocumentStatus;
+  rejectedByAccountId: string | null;
+  rejectedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  signatures: DocumentSignatureResponseDto[];
+};
+
+export type CreateDocumentRequestDto = {
+  chatId: string;
+  mediaFileId: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  plaintextSha256Base64: string;
+  encryptedSha256Base64: string;
+};
+
+export type RegisterDocumentSigningKeyRequestDto = {
+  publicKeyBase64: string;
+};
+
+export type DocumentSigningKeyResponseDto = {
+  keyId: string;
+  accountId: string;
+  deviceId: string;
+  algorithm: SignatureAlgorithm;
+  publicKeyBase64: string;
+  fingerprint: string;
+  status: 'ACTIVE' | 'REVOKED';
+  createdAt: string;
+};
+
+export type SignDocumentRequestDto = {
+  signerDeviceId: string;
+  signingKeyFingerprint: string;
+  documentHashBase64: string;
+  signatureBase64: string;
+};
+
+export type DocumentAttachmentMessageContent = {
+  kind: 'DOCUMENT_ATTACHMENT';
+  version: 1;
+  documentId: string;
+  mediaFileId: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  encryptedSizeBytes: number;
+  plaintextSha256Base64: string;
+  encryptedSha256Base64: string;
+  fileEncryption: {
+    algorithm: 'AES-256-GCM';
+    keyBase64: string;
+    initializationVectorBase64: string;
+  };
 };

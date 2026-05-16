@@ -1,0 +1,55 @@
+server:
+  port: ${SERVER_PORT:8089}
+
+spring:
+  application:
+    name: media-service
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5437/media_db}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+
+  servlet:
+    multipart:
+      max-file-size: ${MAX_FILE_SIZE:512MB}
+      max-request-size: ${MAX_REQUEST_SIZE:512MB}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+
+  cloud:
+    vault:
+      enabled: true
+      uri: ${VAULT_URI:http://localhost:8200}
+      token: ${VAULT_TOKEN:root}
+      kv:
+        enabled: false
+
+application:
+  security:
+    jwt:
+      issuer: ${JWT_ISSUER:identity-service}
+      key-name: ${JWT_KEY_NAME:identity-service-jwt-ed25519}
+
+  messaging-service:
+    base-url: ${MESSAGING_SERVICE_BASE_URL:http://localhost:8087}
+    chat-path: ${MESSAGING_SERVICE_CHAT_PATH:/api/v1/chats/{chatId}}
+
+  media:
+    storage:
+      root-path: ${MEDIA_STORAGE_ROOT_PATH:./data/media-files}
+      max-file-size-bytes: ${MEDIA_MAX_FILE_SIZE_BYTES:536870912}
+
+logging:
+  level:
+    dev.mediaservice: INFO
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html

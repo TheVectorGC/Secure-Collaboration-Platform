@@ -1,7 +1,8 @@
 package dev.messagingservice.model.enumeration;
 
 public enum MessageType {
-    TEXT("текст");
+    TEXT("текст"),
+    FILE("файл");
 
     private final String displayName;
 

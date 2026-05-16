@@ -7,5 +7,7 @@ contextBridge.exposeInMainWorld('vectorCrypto', {
   encryptMessage: (request) => ipcRenderer.invoke('vectorCrypto:encryptMessage', request),
   encryptLocalMessage: (request) => ipcRenderer.invoke('vectorCrypto:encryptLocalMessage', request),
   decryptMessage: (request) => ipcRenderer.invoke('vectorCrypto:decryptMessage', request),
+  ensureDocumentSigningKey: (request) => ipcRenderer.invoke('vectorCrypto:ensureDocumentSigningKey', request),
+  signDocumentHash: (request) => ipcRenderer.invoke('vectorCrypto:signDocumentHash', request),
   clearLocalVault: () => ipcRenderer.invoke('vectorCrypto:clearLocalVault'),
 });

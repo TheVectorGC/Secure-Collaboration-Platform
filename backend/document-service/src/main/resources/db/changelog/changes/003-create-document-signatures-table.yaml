@@ -1,0 +1,69 @@
+databaseChangeLog:
+  - changeSet:
+      id: 003-create-document-signatures-table
+      author: document-service
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            tableExists:
+              tableName: document_signatures
+      changes:
+        - createTable:
+            tableName: document_signatures
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: document_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: signer_account_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: signer_device_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: signing_key_fingerprint
+                  type: VARCHAR(128)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: algorithm
+                  type: VARCHAR(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: document_hash_base64
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: signature_base64
+                  type: TEXT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: signed_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+        - addUniqueConstraint:
+            tableName: document_signatures
+            columnNames: document_id, signer_account_id
+            constraintName: uk_document_signatures_document_signer
+        - createIndex:
+            tableName: document_signatures
+            indexName: idx_document_signatures_document_id
+            columns:
+              - column:
+                  name: document_id

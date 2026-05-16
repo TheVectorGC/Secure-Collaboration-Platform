@@ -12,68 +12,68 @@ if (vectorProfile) {
   );
 }
 
-function renderDevServerUnavailablePage(mainWindow, devServerUrl) {
-  const escapedDevServerUrl = devServerUrl.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-  mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`
+function createDevServerUnavailableHtml(devServerUrl) {
+  return `
     <!doctype html>
     <html lang="ru">
       <head>
         <meta charset="UTF-8" />
         <title>Vector Messenger</title>
         <style>
-          body {
+          html, body {
+            width: 100%;
+            height: 100%;
             margin: 0;
-            min-height: 100vh;
-            display: grid;
-            place-items: center;
             background: #111214;
             color: #f4f4f5;
-            font-family: Inter, Segoe UI, Arial, sans-serif;
+            font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+          }
+
+          body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
           }
 
           .card {
-            width: min(560px, calc(100vw - 48px));
+            max-width: 520px;
             border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 28px;
-            background: rgba(255, 255, 255, 0.045);
-            padding: 32px;
-            box-shadow: 0 24px 70px rgba(0, 0, 0, 0.35);
+            border-radius: 32px;
+            background: rgba(255, 255, 255, 0.04);
+            padding: 34px;
+            box-shadow: 0 28px 80px rgba(0, 0, 0, 0.45);
           }
 
           h1 {
             margin: 0 0 12px;
-            font-size: 24px;
+            font-size: 26px;
           }
 
           p {
-            margin: 0 0 18px;
+            margin: 0 0 16px;
             color: #a1a1aa;
-            line-height: 1.55;
+            line-height: 1.6;
           }
 
           code {
             display: block;
-            margin-top: 12px;
+            border-radius: 18px;
+            background: rgba(0, 0, 0, 0.32);
             padding: 14px 16px;
-            border-radius: 16px;
-            background: rgba(0, 0, 0, 0.35);
             color: #ddd6fe;
-            white-space: pre-wrap;
           }
         </style>
       </head>
       <body>
         <main class="card">
           <h1>Vite dev-server не запущен</h1>
-          <p>Electron пытается открыть ${escapedDevServerUrl}, но сервер разработки не отвечает.</p>
-          <p>Открой отдельный терминал в папке vector-client и запусти:</p>
+          <p>Electron пытается открыть ${devServerUrl}, но сервер React-приложения не отвечает.</p>
+          <p>Запусти в отдельном терминале:</p>
           <code>npm run dev</code>
-          <p>После появления строки Local: http://localhost:5173 перезапусти Electron-профиль.</p>
         </main>
       </body>
     </html>
-  `)}`);
+  `;
 }
 
 const createWindow = () => {
@@ -96,13 +96,10 @@ const createWindow = () => {
   const devServerUrl = process.env.VITE_DEV_SERVER_URL;
 
   if (devServerUrl) {
-    mainWindow.webContents.on('did-fail-load', (_event, errorCode) => {
-      if (errorCode === -102) {
-        renderDevServerUnavailablePage(mainWindow, devServerUrl);
-      }
+    mainWindow.loadURL(devServerUrl).catch((error) => {
+      console.error('Failed to load Vite dev server.', error);
+      mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(createDevServerUnavailableHtml(devServerUrl))}`);
     });
-
-    mainWindow.loadURL(devServerUrl);
     mainWindow.webContents.openDevTools({ mode: 'detach' });
     return;
   }

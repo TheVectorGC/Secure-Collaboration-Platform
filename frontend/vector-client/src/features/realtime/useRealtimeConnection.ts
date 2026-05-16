@@ -7,6 +7,7 @@ import type {
   MessageReadPayload,
   MessageResponseDto,
   RealtimeEventDto,
+  TypingPayload,
 } from '../../shared/types/api';
 import { refreshAuthenticationToken } from '../auth/api/authApi';
 import { useAuthStore } from '../auth/model/authStore';
@@ -38,6 +39,14 @@ function isMessageReadPayload(payload: unknown): payload is MessageReadPayload {
     && typeof payload.readByAccountId === 'string';
 }
 
+function isTypingPayload(payload: unknown): payload is TypingPayload {
+  return isObjectPayload(payload)
+    && typeof payload.chatId === 'string'
+    && typeof payload.typingAccountId === 'string'
+    && typeof payload.username === 'string'
+    && typeof payload.isTyping === 'boolean';
+}
+
 function calculateRefreshDelay(accessTokenExpiresAt: string | null): number | null {
   if (!accessTokenExpiresAt) {
     return null;
@@ -54,6 +63,7 @@ export function useRealtimeConnection() {
   const accessToken = useAuthStore((state) => state.accessToken);
   const accessTokenExpiresAt = useAuthStore((state) => state.accessTokenExpiresAt);
   const currentDeviceId = useAuthStore((state) => state.deviceId);
+  const currentAccountId = useAuthStore((state) => state.profile?.accountId);
   const upsertMessage = useMessengerStore((state) => state.upsertMessage);
   const upsertChat = useMessengerStore((state) => state.upsertChat);
   const touchChat = useMessengerStore((state) => state.touchChat);
@@ -61,13 +71,22 @@ export function useRealtimeConnection() {
   const applyMessageRead = useMessengerStore((state) => state.applyMessageRead);
   const setStatus = useRealtimeStore((state) => state.setStatus);
   const setLastError = useRealtimeStore((state) => state.setLastError);
+  const setTyping = useRealtimeStore((state) => state.setTyping);
+  const clearExpiredTyping = useRealtimeStore((state) => state.clearExpiredTyping);
+  const setTypingSender = useRealtimeStore((state) => state.setTypingSender);
   const reconnectAttemptRef = useRef(0);
   const reconnectTimeoutRef = useRef<number | null>(null);
   const refreshTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
+    const intervalId = window.setInterval(clearExpiredTyping, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [clearExpiredTyping]);
+
+  useEffect(() => {
     if (!accessToken) {
       setStatus('disconnected');
+      setTypingSender(null);
       return;
     }
 
@@ -86,7 +105,6 @@ export function useRealtimeConnection() {
       if (realtimeEvent.type === 'MESSAGE_CREATED' && isMessageCreatedPayload(realtimeEvent.payload)) {
         const payload = realtimeEvent.payload;
         const devicePayloads = payload.devicePayloads ?? [];
-        const currentDevicePayload = devicePayloads.find((devicePayload) => devicePayload.targetDeviceId === currentDeviceId);
         const message: MessageResponseDto = {
           messageId: payload.messageId,
           chatId: payload.chatId,
@@ -106,6 +124,7 @@ export function useRealtimeConnection() {
           getChat(payload.chatId)
             .then((chat) => {
               upsertChat(chat);
+              touchChat(payload.chatId, payload.createdAt, payload.messageId);
             })
             .catch((error) => {
               console.error('Failed to load realtime chat.', error);
@@ -115,6 +134,7 @@ export function useRealtimeConnection() {
           touchChat(payload.chatId, payload.createdAt, payload.messageId);
         }
 
+        setTyping(payload.chatId, payload.senderAccountId, '', false);
         upsertMessage(message);
         return;
       }
@@ -128,6 +148,15 @@ export function useRealtimeConnection() {
       if (realtimeEvent.type === 'MESSAGE_READ' && isMessageReadPayload(realtimeEvent.payload)) {
         const payload = realtimeEvent.payload;
         applyMessageRead(payload.chatId, payload.lastReadMessageId, payload.readByAccountId, payload.readAt);
+        return;
+      }
+
+      if (realtimeEvent.type === 'TYPING' && isTypingPayload(realtimeEvent.payload)) {
+        const payload = realtimeEvent.payload;
+
+        if (payload.typingAccountId !== currentAccountId) {
+          setTyping(payload.chatId, payload.typingAccountId, payload.username, payload.isTyping);
+        }
       }
     }
 
@@ -142,6 +171,18 @@ export function useRealtimeConnection() {
         reconnectAttemptRef.current = 0;
         setStatus('connected');
         setLastError(null);
+        setTypingSender((request) => {
+          if (webSocket?.readyState !== WebSocket.OPEN) {
+            return;
+          }
+
+          webSocket.send(JSON.stringify({
+            type: 'TYPING',
+            chatId: request.chatId,
+            recipientAccountIds: request.recipientAccountIds,
+            isTyping: request.isTyping,
+          }));
+        });
         webSocket?.send('ping');
       };
 
@@ -165,6 +206,8 @@ export function useRealtimeConnection() {
       };
 
       webSocket.onclose = () => {
+        setTypingSender(null);
+
         if (isClosedByEffect) {
           setStatus('disconnected');
           return;
@@ -195,6 +238,7 @@ export function useRealtimeConnection() {
 
     return () => {
       isClosedByEffect = true;
+      setTypingSender(null);
       clearReconnectTimeout();
 
       if (refreshTimeoutRef.current !== null) {
@@ -209,11 +253,14 @@ export function useRealtimeConnection() {
   }, [
     accessToken,
     accessTokenExpiresAt,
-    currentDeviceId,
     applyMessageDelivered,
     applyMessageRead,
+    currentAccountId,
+    currentDeviceId,
     setLastError,
     setStatus,
+    setTyping,
+    setTypingSender,
     touchChat,
     upsertChat,
     upsertMessage,

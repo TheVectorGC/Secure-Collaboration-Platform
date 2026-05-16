@@ -93,6 +93,7 @@ export type EncryptLocalMessageRequest = {
 export type DecryptMessageRequest = {
   accountId: string;
   deviceId: string;
+  messageId?: string;
   remoteDeviceId: string;
   ciphertextType: 'PRE_KEY' | 'SIGNAL' | 'LOCAL';
   encryptedPayload: string;
@@ -100,6 +101,30 @@ export type DecryptMessageRequest = {
 
 export type DecryptMessageResponse = {
   plainText: string;
+  fromCache?: boolean;
+};
+
+export type DocumentSigningKeyResponse = {
+  publicKeyBase64: string;
+  fingerprint: string;
+  createdAt: string;
+  alreadyExisted: boolean;
+};
+
+export type EnsureDocumentSigningKeyRequest = {
+  accountId: string;
+  deviceId: string;
+};
+
+export type SignDocumentHashRequest = {
+  accountId: string;
+  deviceId: string;
+  documentHashBase64: string;
+};
+
+export type SignDocumentHashResponse = {
+  signatureBase64: string;
+  signingKeyFingerprint: string;
 };
 
 export type ClearLocalVaultResponse = {
@@ -113,5 +138,7 @@ export type VectorCryptoApi = {
   encryptMessage: (request: EncryptMessageRequest) => Promise<EncryptMessageResponse>;
   encryptLocalMessage: (request: EncryptLocalMessageRequest) => Promise<EncryptMessageResponse>;
   decryptMessage: (request: DecryptMessageRequest) => Promise<DecryptMessageResponse>;
+  ensureDocumentSigningKey: (request: EnsureDocumentSigningKeyRequest) => Promise<DocumentSigningKeyResponse>;
+  signDocumentHash: (request: SignDocumentHashRequest) => Promise<SignDocumentHashResponse>;
   clearLocalVault: () => Promise<ClearLocalVaultResponse>;
 };

@@ -162,6 +162,33 @@ function applySchema(database) {
         ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS document_signing_keys (
+      account_id TEXT NOT NULL,
+      device_id TEXT NOT NULL,
+      public_key_base64 TEXT NOT NULL,
+      private_key_base64 TEXT NOT NULL,
+      fingerprint TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (account_id, device_id),
+      FOREIGN KEY (account_id, device_id)
+        REFERENCES local_devices(account_id, device_id)
+        ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS decrypted_message_cache (
+      account_id TEXT NOT NULL,
+      device_id TEXT NOT NULL,
+      message_id TEXT NOT NULL,
+      plain_text TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (account_id, device_id, message_id),
+      FOREIGN KEY (account_id, device_id)
+        REFERENCES local_devices(account_id, device_id)
+        ON DELETE CASCADE
+    );
+
     CREATE INDEX IF NOT EXISTS idx_signal_sessions_remote_address
       ON signal_sessions(remote_address);
 

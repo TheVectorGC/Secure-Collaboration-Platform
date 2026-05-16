@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.realtimegateway.model.dto.RealtimeEnvelopeDto;
 import dev.realtimegateway.security.AccountPrincipal;
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -64,7 +65,14 @@ public class ConnectionRegistry {
             .forEach(webSocketSession -> send(webSocketSession, serializedEvent));
     }
 
-    private AccountPrincipal getAccountPrincipal(WebSocketSession webSocketSession) {
+    public void sendToAccounts(Collection<UUID> accountIds, RealtimeEnvelopeDto realtimeEnvelopeDto) {
+        accountIds.stream()
+            .filter(accountId -> accountId != null)
+            .distinct()
+            .forEach(accountId -> sendToAccount(accountId, realtimeEnvelopeDto));
+    }
+
+    public AccountPrincipal getAccountPrincipal(WebSocketSession webSocketSession) {
         Object accountPrincipal = webSocketSession.getAttributes().get(ACCOUNT_PRINCIPAL_ATTRIBUTE);
 
         if (accountPrincipal instanceof AccountPrincipal principal) {

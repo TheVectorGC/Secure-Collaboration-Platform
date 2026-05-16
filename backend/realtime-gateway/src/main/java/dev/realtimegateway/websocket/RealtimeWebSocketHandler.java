@@ -1,8 +1,15 @@
 package dev.realtimegateway.websocket;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.realtimegateway.model.dto.ClientTypingEventDto;
+import dev.realtimegateway.model.dto.RealtimeEnvelopeDto;
+import dev.realtimegateway.model.enumeration.MessagingEventType;
 import dev.realtimegateway.security.AccountPrincipal;
 import dev.realtimegateway.service.WebSocketAuthenticationService;
 import dev.realtimegateway.session.ConnectionRegistry;
+import java.time.OffsetDateTime;
+import java.util.Map;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -15,8 +22,11 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 @Component
 @RequiredArgsConstructor
 public class RealtimeWebSocketHandler extends TextWebSocketHandler {
+    private static final String TYPING_EVENT_TYPE = "TYPING";
+
     private final WebSocketAuthenticationService webSocketAuthenticationService;
     private final ConnectionRegistry connectionRegistry;
+    private final ObjectMapper objectMapper;
 
     @Override
     public void afterConnectionEstablished(WebSocketSession webSocketSession) throws Exception {
@@ -26,21 +36,53 @@ public class RealtimeWebSocketHandler extends TextWebSocketHandler {
         }
         catch (RuntimeException exception) {
             log.warn("WebSocket authentication failed. Session ID: {}.", webSocketSession.getId(), exception);
-
-            if (webSocketSession.isOpen()) {
-                webSocketSession.close(CloseStatus.POLICY_VIOLATION.withReason("Authentication failed."));
-            }
+            webSocketSession.close(CloseStatus.POLICY_VIOLATION.withReason("Authentication failed."));
         }
     }
 
     @Override
     protected void handleTextMessage(WebSocketSession webSocketSession, TextMessage textMessage) throws Exception {
-        if (!webSocketSession.isOpen()) {
+        String payload = textMessage.getPayload();
+
+        if ("ping".equalsIgnoreCase(payload)) {
+            webSocketSession.sendMessage(new TextMessage("pong"));
             return;
         }
 
-        if ("ping".equalsIgnoreCase(textMessage.getPayload())) {
-            webSocketSession.sendMessage(new TextMessage("pong"));
+        handleClientEvent(webSocketSession, payload);
+    }
+
+    private void handleClientEvent(WebSocketSession webSocketSession, String payload) {
+        try {
+            ClientTypingEventDto clientTypingEventDto = objectMapper.readValue(payload, ClientTypingEventDto.class);
+
+            if (!TYPING_EVENT_TYPE.equals(clientTypingEventDto.type())) {
+                return;
+            }
+
+            AccountPrincipal accountPrincipal = connectionRegistry.getAccountPrincipal(webSocketSession);
+
+            if (accountPrincipal == null || clientTypingEventDto.chatId() == null || clientTypingEventDto.recipientAccountIds() == null) {
+                return;
+            }
+
+            Boolean typing = clientTypingEventDto.isTyping();
+            RealtimeEnvelopeDto realtimeEnvelopeDto = new RealtimeEnvelopeDto(
+                UUID.randomUUID(),
+                MessagingEventType.TYPING,
+                OffsetDateTime.now(),
+                objectMapper.valueToTree(Map.of(
+                    "chatId", clientTypingEventDto.chatId(),
+                    "typingAccountId", accountPrincipal.accountId(),
+                    "username", accountPrincipal.username(),
+                    "isTyping", typing != null && typing
+                ))
+            );
+
+            connectionRegistry.sendToAccounts(clientTypingEventDto.recipientAccountIds(), realtimeEnvelopeDto);
+        }
+        catch (Exception exception) {
+            log.debug("Ignoring unsupported WebSocket client event. Session ID: {}.", webSocketSession.getId(), exception);
         }
     }
 
@@ -53,9 +95,6 @@ public class RealtimeWebSocketHandler extends TextWebSocketHandler {
     public void handleTransportError(WebSocketSession webSocketSession, Throwable exception) throws Exception {
         log.warn("WebSocket transport error. Session ID: {}.", webSocketSession.getId(), exception);
         connectionRegistry.unregister(webSocketSession);
-
-        if (webSocketSession.isOpen()) {
-            webSocketSession.close(CloseStatus.SERVER_ERROR);
-        }
+        webSocketSession.close(CloseStatus.SERVER_ERROR);
     }
 }

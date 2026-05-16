@@ -1,0 +1,15 @@
+services:
+  media-db:
+    image: postgres:17
+    container_name: vector-media-db
+    environment:
+      POSTGRES_DB: media_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5437:5432"
+    volumes:
+      - media-db-data:/var/lib/postgresql/data
+
+volumes:
+  media-db-data:
