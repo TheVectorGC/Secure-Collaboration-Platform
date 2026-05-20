@@ -92,13 +92,22 @@ public class ConnectionRegistry {
     }
 
     private void send(WebSocketSession webSocketSession, String serializedEvent) {
+        if (!webSocketSession.isOpen()) {
+            return;
+        }
+
         try {
             synchronized (webSocketSession) {
-                webSocketSession.sendMessage(new TextMessage(serializedEvent));
+                if (webSocketSession.isOpen()) {
+                    webSocketSession.sendMessage(new TextMessage(serializedEvent));
+                }
             }
         }
-        catch (IOException exception) {
+        catch (IOException | IllegalStateException exception) {
             log.warn("Failed to send WebSocket message. Session ID: {}.", webSocketSession.getId(), exception);
+            unregister(webSocketSession);
         }
     }
 }
+
+

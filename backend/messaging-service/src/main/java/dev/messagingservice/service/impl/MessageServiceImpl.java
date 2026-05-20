@@ -9,6 +9,9 @@ import dev.messagingservice.model.dto.request.MarkChatReadRequestDto;
 import dev.messagingservice.model.dto.request.SendMessageRequestDto;
 import dev.messagingservice.model.dto.response.MessageDeliveryStateResponseDto;
 import dev.messagingservice.model.dto.response.MessageDevicePayloadResponseDto;
+import dev.messagingservice.model.dto.response.ChatParticipantResponseDto;
+import dev.messagingservice.model.dto.response.ChatParticipantVisibilityWindowResponseDto;
+import dev.messagingservice.model.dto.response.ChatResponseDto;
 import dev.messagingservice.model.dto.response.MessageResponseDto;
 import dev.messagingservice.model.entity.ChatEntity;
 import dev.messagingservice.model.entity.ChatParticipantEntity;
@@ -29,6 +32,7 @@ import dev.messagingservice.service.MessageService;
 import dev.messagingservice.service.MessagingEventFactory;
 import dev.messagingservice.service.MessagingEventPublisher;
 import java.time.OffsetDateTime;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -96,8 +100,9 @@ public class MessageServiceImpl implements MessageService {
             now
         );
         List<UUID> recipientAccountIds = createDeliveryStates(savedMessageEntity, currentAccountId, activeParticipants);
-        updateChatTimestamp(chatId, now);
+        ChatEntity updatedChatEntity = updateChatTimestamp(chatId, now);
 
+        publishChatUpdatedEvent(updatedChatEntity, activeParticipants);
         publishMessageCreatedEvent(savedMessageEntity, savedPayloadEntities, recipientAccountIds);
 
         log.info("Message created. Message ID: {}, chat ID: {}.", savedMessageEntity.getId(), chatId);
@@ -150,7 +155,11 @@ public class MessageServiceImpl implements MessageService {
         }
 
         MessageDeliveryStateEntity deliveryStateEntity = messageDeliveryStateRepository.findByMessageIdAndAccountId(messageId, currentAccountId)
-            .orElseThrow(() -> new MessageNotFoundException("Delivery state for message '" + messageId + "' was not found."));
+            .orElse(null);
+
+        if (deliveryStateEntity == null) {
+            return;
+        }
 
         if (deliveryStateEntity.getStatus() == MessageDeliveryStatus.SENT) {
             deliveryStateEntity.setStatus(MessageDeliveryStatus.DELIVERED);
@@ -263,6 +272,10 @@ public class MessageServiceImpl implements MessageService {
         SendMessageRequestDto sendMessageRequestDto,
         List<ChatParticipantEntity> activeParticipants
     ) {
+        if (sendMessageRequestDto.encryptionType() == MessageEncryptionType.NONE) {
+            throw new MessagePayloadValidationException("System messages can't be sent through the public message API.");
+        }
+
         if (sendMessageRequestDto.encryptionType() == MessageEncryptionType.GROUP) {
             if (!StringUtils.hasText(sendMessageRequestDto.encryptedPayload())) {
                 throw new MessagePayloadValidationException("Group encrypted payload is required for GROUP encryption.");
@@ -349,11 +362,70 @@ public class MessageServiceImpl implements MessageService {
             .toList();
     }
 
-    private void updateChatTimestamp(UUID chatId, OffsetDateTime now) {
+    private ChatEntity updateChatTimestamp(UUID chatId, OffsetDateTime now) {
         ChatEntity chatEntity = chatRepository.findById(chatId)
             .orElseThrow(() -> new ChatNotFoundException("Chat with ID '" + chatId + "' not found."));
         chatEntity.setUpdatedAt(now);
-        chatRepository.save(chatEntity);
+        return chatRepository.save(chatEntity);
+    }
+
+    private void publishChatUpdatedEvent(ChatEntity chatEntity, List<ChatParticipantEntity> activeParticipants) {
+        List<ChatParticipantEntity> allParticipants = chatParticipantRepository.findByChatId(chatEntity.getId());
+        List<UUID> recipientAccountIds = activeParticipants.stream()
+            .map(ChatParticipantEntity::getAccountId)
+            .toList();
+
+        messagingEventPublisher.publish(messagingEventFactory.createChatUpdatedEvent(
+            mapToChatResponseDto(chatEntity, allParticipants),
+            recipientAccountIds
+        ));
+    }
+
+    private ChatResponseDto mapToChatResponseDto(ChatEntity chatEntity, List<ChatParticipantEntity> participants) {
+        MessageEntity lastMessageEntity = messageRepository.findFirstByChatIdOrderByCreatedAtDesc(chatEntity.getId()).orElse(null);
+        List<UUID> participantAccountIds = participants.stream()
+            .filter(participantEntity -> participantEntity.getStatus() == ChatParticipantStatus.ACTIVE)
+            .map(ChatParticipantEntity::getAccountId)
+            .toList();
+        List<ChatParticipantResponseDto> participantResponseDtos = participants.stream()
+            .sorted(Comparator.comparing(ChatParticipantEntity::getJoinedAt))
+            .map(this::mapToParticipantResponseDto)
+            .toList();
+
+        return new ChatResponseDto(
+            chatEntity.getId(),
+            chatEntity.getType(),
+            chatEntity.getName(),
+            chatEntity.getCurrentKeyEpoch() == null ? 1 : chatEntity.getCurrentKeyEpoch(),
+            participantAccountIds,
+            participantResponseDtos,
+            lastMessageEntity == null ? null : lastMessageEntity.getId(),
+            lastMessageEntity == null ? null : lastMessageEntity.getCreatedAt(),
+            chatEntity.getCreatedAt(),
+            chatEntity.getUpdatedAt()
+        );
+    }
+
+    private ChatParticipantResponseDto mapToParticipantResponseDto(ChatParticipantEntity participantEntity) {
+        List<ChatParticipantVisibilityWindowResponseDto> visibilityWindows = chatParticipantVisibilityWindowRepository
+            .findByChatIdAndAccountIdOrderByCreatedAtAsc(participantEntity.getChatId(), participantEntity.getAccountId())
+            .stream()
+            .map(visibilityWindowEntity -> new ChatParticipantVisibilityWindowResponseDto(
+                visibilityWindowEntity.getVisibleFromCreatedAt(),
+                visibilityWindowEntity.getVisibleUntilCreatedAt()
+            ))
+            .toList();
+
+        return new ChatParticipantResponseDto(
+            participantEntity.getAccountId(),
+            participantEntity.getRole(),
+            participantEntity.getStatus(),
+            participantEntity.getHistoryVisibleFromMessageId(),
+            participantEntity.getHistoryVisibleFromCreatedAt(),
+            participantEntity.getJoinedAt(),
+            participantEntity.getRemovedAt(),
+            visibilityWindows
+        );
     }
 
     private MessageResponseDto mapToMessageResponseDto(
@@ -444,3 +516,5 @@ public class MessageServiceImpl implements MessageService {
         return value.trim();
     }
 }
+
+

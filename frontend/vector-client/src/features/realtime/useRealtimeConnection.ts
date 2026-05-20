@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { serviceUrls } from '../../shared/config/serviceUrls';
 import type {
+  ChatUpdatedPayload,
   MessageCreatedPayload,
   MessageDeliveredPayload,
   MessageReadPayload,
@@ -9,6 +10,7 @@ import type {
   TypingPayload,
 } from '../../shared/types/api';
 import { refreshAuthenticationToken } from '../auth/api/authApi';
+import { getChatMessages } from '../messages/api/messagesApi';
 import { useAuthStore } from '../auth/model/authStore';
 import { useMessengerStore } from '../messenger/model/messengerStore';
 import { useRealtimeStore } from './model/realtimeStore';
@@ -30,6 +32,15 @@ function isMessageCreatedPayload(payload: unknown): payload is MessageCreatedPay
       || payload.encryptedPayload === null
       || Array.isArray(payload.devicePayloads)
     );
+}
+
+function isChatUpdatedPayload(payload: unknown): payload is ChatUpdatedPayload {
+  return isObjectPayload(payload)
+    && isObjectPayload(payload.chat)
+    && typeof payload.chat.chatId === 'string'
+    && typeof payload.chat.type === 'string'
+    && Array.isArray(payload.chat.participantAccountIds)
+    && Array.isArray(payload.chat.participants);
 }
 
 function isMessageDeliveredPayload(payload: unknown): payload is MessageDeliveredPayload {
@@ -54,12 +65,37 @@ function isTypingPayload(payload: unknown): payload is TypingPayload {
     && typeof payload.isTyping === 'boolean';
 }
 
-function calculateRefreshDelay(accessTokenExpiresAt: string | null): number | null {
+function getAccessTokenExpirationTime(accessTokenExpiresAt: string | null): number | null {
   if (!accessTokenExpiresAt) {
     return null;
   }
 
   const expirationTime = new Date(accessTokenExpiresAt).getTime();
+
+  if (Number.isNaN(expirationTime)) {
+    return null;
+  }
+
+  return expirationTime;
+}
+
+function shouldRefreshBeforeConnecting(accessTokenExpiresAt: string | null): boolean {
+  const expirationTime = getAccessTokenExpirationTime(accessTokenExpiresAt);
+
+  if (expirationTime === null) {
+    return false;
+  }
+
+  return expirationTime - Date.now() <= 30_000;
+}
+
+function calculateRefreshDelay(accessTokenExpiresAt: string | null): number | null {
+  const expirationTime = getAccessTokenExpirationTime(accessTokenExpiresAt);
+
+  if (expirationTime === null) {
+    return null;
+  }
+
   const refreshTime = expirationTime - 60_000;
   const delay = refreshTime - Date.now();
 
@@ -70,7 +106,10 @@ export function useRealtimeConnection() {
   const accessToken = useAuthStore((state) => state.accessToken);
   const accessTokenExpiresAt = useAuthStore((state) => state.accessTokenExpiresAt);
   const currentDeviceId = useAuthStore((state) => state.deviceId);
+  const selectedChatId = useMessengerStore((state) => state.selectedChatId);
   const upsertMessage = useMessengerStore((state) => state.upsertMessage);
+  const upsertChat = useMessengerStore((state) => state.upsertChat);
+  const setMessages = useMessengerStore((state) => state.setMessages);
   const touchChat = useMessengerStore((state) => state.touchChat);
   const applyMessageDelivered = useMessengerStore((state) => state.applyMessageDelivered);
   const applyMessageRead = useMessengerStore((state) => state.applyMessageRead);
@@ -112,12 +151,23 @@ export function useRealtimeConnection() {
     const activeAccessToken = accessToken;
     let webSocket: WebSocket | null = null;
     let isClosedByEffect = false;
+    let isRefreshingBeforeConnect = false;
 
     function clearReconnectTimeout() {
       if (reconnectTimeoutRef.current !== null) {
         window.clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;
       }
+    }
+
+    function refreshChatMessages(chatId: string) {
+      getChatMessages(chatId)
+        .then((messages) => {
+          setMessages(chatId, messages);
+        })
+        .catch((error) => {
+          console.warn('Failed to refresh chat messages after realtime update.', error);
+        });
     }
 
     function handleRealtimeEvent(realtimeEvent: RealtimeEventDto) {
@@ -141,6 +191,18 @@ export function useRealtimeConnection() {
 
         upsertMessage(message);
         touchChat(payload.chatId, payload.createdAt, payload.messageId);
+
+        if (selectedChatId === payload.chatId) {
+          refreshChatMessages(payload.chatId);
+        }
+
+        return;
+      }
+
+      if (realtimeEvent.type === 'CHAT_UPDATED' && isChatUpdatedPayload(realtimeEvent.payload)) {
+        const chat = realtimeEvent.payload.chat;
+        upsertChat(chat);
+        refreshChatMessages(chat.chatId);
         return;
       }
 
@@ -159,6 +221,26 @@ export function useRealtimeConnection() {
       if (realtimeEvent.type === 'TYPING' && isTypingPayload(realtimeEvent.payload)) {
         const payload = realtimeEvent.payload;
         setTyping(payload.chatId, payload.typingAccountId, payload.username, payload.isTyping);
+      }
+    }
+
+    async function refreshBeforeReconnect() {
+      if (isRefreshingBeforeConnect) {
+        return;
+      }
+
+      isRefreshingBeforeConnect = true;
+      setStatus('reconnecting');
+
+      try {
+        await refreshAuthenticationToken();
+      }
+      catch (error) {
+        console.error(error);
+        setLastError('Failed to refresh realtime token.');
+      }
+      finally {
+        isRefreshingBeforeConnect = false;
       }
     }
 
@@ -196,13 +278,18 @@ export function useRealtimeConnection() {
         setLastError('Realtime connection error.');
       };
 
-      webSocket.onclose = () => {
+      webSocket.onclose = (event) => {
         if (webSocketRef.current === webSocket) {
           webSocketRef.current = null;
         }
 
         if (isClosedByEffect) {
           setStatus('disconnected');
+          return;
+        }
+
+        if (event.code === 1008) {
+          void refreshBeforeReconnect();
           return;
         }
 
@@ -213,7 +300,12 @@ export function useRealtimeConnection() {
       };
     }
 
-    connect();
+    if (shouldRefreshBeforeConnecting(accessTokenExpiresAt)) {
+      void refreshBeforeReconnect();
+    }
+    else {
+      connect();
+    }
 
     const refreshDelay = calculateRefreshDelay(accessTokenExpiresAt);
 
@@ -250,12 +342,15 @@ export function useRealtimeConnection() {
     accessToken,
     accessTokenExpiresAt,
     currentDeviceId,
+    selectedChatId,
     applyMessageDelivered,
     applyMessageRead,
     setLastError,
+    setMessages,
     setStatus,
     setTyping,
     touchChat,
+    upsertChat,
     upsertMessage,
   ]);
 }

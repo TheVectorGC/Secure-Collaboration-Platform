@@ -2,6 +2,7 @@ package dev.messagingservice.service.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.messagingservice.model.dto.response.ChatResponseDto;
 import dev.messagingservice.model.entity.MessageDevicePayloadEntity;
 import dev.messagingservice.model.entity.MessageEntity;
 import dev.messagingservice.model.enumeration.MessagingEventType;
@@ -93,6 +94,21 @@ public class MessagingEventFactoryImpl implements MessagingEventFactory {
         );
     }
 
+    @Override
+    public MessagingEventDto createChatUpdatedEvent(ChatResponseDto chatResponseDto, List<UUID> recipientAccountIds) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("chat", chatResponseDto);
+
+        return createEvent(
+            MessagingEventType.CHAT_UPDATED,
+            chatResponseDto.chatId(),
+            null,
+            null,
+            recipientAccountIds,
+            payload
+        );
+    }
+
     private List<Map<String, Object>> createDevicePayloads(List<MessageDevicePayloadEntity> payloadEntities) {
         return payloadEntities.stream()
             .map(payloadEntity -> {
@@ -128,3 +144,4 @@ public class MessagingEventFactoryImpl implements MessagingEventFactory {
         );
     }
 }
+

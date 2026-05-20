@@ -134,7 +134,7 @@ export type ChatResponseDto = {
 };
 
 export type MessageCiphertextType = 'PRE_KEY' | 'SIGNAL' | 'LOCAL';
-export type MessageEncryptionType = 'SIGNAL' | 'GROUP';
+export type MessageEncryptionType = 'SIGNAL' | 'GROUP' | 'NONE';
 export type MessageType = 'TEXT' | 'FILE' | 'IMAGE' | 'DOCUMENT' | 'GROUP_KEY_DISTRIBUTION' | 'SYSTEM';
 
 export type DeviceMessagePayloadRequestDto = {
@@ -297,7 +297,7 @@ export type SignDocumentRequestDto = {
   signatureBase64: string;
 };
 
-export type RealtimeEventType = 'MESSAGE_CREATED' | 'MESSAGE_DELIVERED' | 'MESSAGE_READ' | 'TYPING';
+export type RealtimeEventType = 'MESSAGE_CREATED' | 'MESSAGE_DELIVERED' | 'MESSAGE_READ' | 'CHAT_UPDATED' | 'TYPING';
 
 export type RealtimeEventDto = {
   eventId: string;
@@ -330,6 +330,10 @@ export type MessageReadPayload = {
   lastReadMessageId: string;
   readByAccountId: string;
   readAt: string;
+};
+
+export type ChatUpdatedPayload = {
+  chat: ChatResponseDto;
 };
 
 export type TypingPayload = {

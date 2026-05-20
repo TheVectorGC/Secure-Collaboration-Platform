@@ -42,17 +42,28 @@ public class RealtimeWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     protected void handleTextMessage(WebSocketSession webSocketSession, TextMessage textMessage) throws Exception {
-        String payload = textMessage.getPayload();
-
-        if ("ping".equalsIgnoreCase(payload)) {
-            webSocketSession.sendMessage(new TextMessage("pong"));
+        if (!webSocketSession.isOpen()) {
             return;
         }
 
-        handleClientEvent(webSocketSession, payload);
+        AccountPrincipal accountPrincipal = connectionRegistry.getAccountPrincipal(webSocketSession);
+
+        if (accountPrincipal == null) {
+            closeUnauthenticatedSession(webSocketSession);
+            return;
+        }
+
+        String payload = textMessage.getPayload();
+
+        if ("ping".equalsIgnoreCase(payload)) {
+            sendPongIfOpen(webSocketSession);
+            return;
+        }
+
+        handleClientEvent(webSocketSession, payload, accountPrincipal);
     }
 
-    private void handleClientEvent(WebSocketSession webSocketSession, String payload) {
+    private void handleClientEvent(WebSocketSession webSocketSession, String payload, AccountPrincipal accountPrincipal) {
         try {
             ClientTypingEventDto clientTypingEventDto = objectMapper.readValue(payload, ClientTypingEventDto.class);
 
@@ -60,9 +71,7 @@ public class RealtimeWebSocketHandler extends TextWebSocketHandler {
                 return;
             }
 
-            AccountPrincipal accountPrincipal = connectionRegistry.getAccountPrincipal(webSocketSession);
-
-            if (accountPrincipal == null || clientTypingEventDto.chatId() == null || clientTypingEventDto.recipientAccountIds() == null) {
+            if (clientTypingEventDto.chatId() == null || clientTypingEventDto.recipientAccountIds() == null) {
                 return;
             }
 
@@ -86,6 +95,18 @@ public class RealtimeWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
+    private void sendPongIfOpen(WebSocketSession webSocketSession) throws Exception {
+        if (webSocketSession.isOpen()) {
+            webSocketSession.sendMessage(new TextMessage("pong"));
+        }
+    }
+
+    private void closeUnauthenticatedSession(WebSocketSession webSocketSession) throws Exception {
+        if (webSocketSession.isOpen()) {
+            webSocketSession.close(CloseStatus.POLICY_VIOLATION.withReason("Authentication required."));
+        }
+    }
+
     @Override
     public void afterConnectionClosed(WebSocketSession webSocketSession, CloseStatus closeStatus) {
         connectionRegistry.unregister(webSocketSession);
@@ -98,3 +119,5 @@ public class RealtimeWebSocketHandler extends TextWebSocketHandler {
         webSocketSession.close(CloseStatus.SERVER_ERROR);
     }
 }
+
+

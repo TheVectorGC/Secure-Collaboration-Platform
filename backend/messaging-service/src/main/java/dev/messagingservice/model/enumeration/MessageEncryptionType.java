@@ -2,7 +2,8 @@ package dev.messagingservice.model.enumeration;
 
 public enum MessageEncryptionType {
     SIGNAL("Signal"),
-    GROUP("Group sender key");
+    GROUP("Group sender key"),
+    NONE("None");
 
     private final String displayName;
 
@@ -14,3 +15,4 @@ public enum MessageEncryptionType {
         return displayName;
     }
 }
+

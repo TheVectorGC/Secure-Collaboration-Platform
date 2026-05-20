@@ -1,13 +1,15 @@
 package dev.messagingservice.service.impl;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.messagingservice.exception.ChatAccessDeniedException;
 import dev.messagingservice.exception.ChatNotFoundException;
 import dev.messagingservice.model.dto.request.AddGroupParticipantRequestDto;
 import dev.messagingservice.model.dto.request.CreateDirectChatRequestDto;
 import dev.messagingservice.model.dto.request.CreateGroupChatRequestDto;
 import dev.messagingservice.model.dto.response.ChatParticipantResponseDto;
-import dev.messagingservice.model.dto.response.ChatResponseDto;
 import dev.messagingservice.model.dto.response.ChatParticipantVisibilityWindowResponseDto;
+import dev.messagingservice.model.dto.response.ChatResponseDto;
 import dev.messagingservice.model.entity.ChatEntity;
 import dev.messagingservice.model.entity.ChatParticipantEntity;
 import dev.messagingservice.model.entity.ChatParticipantVisibilityWindowEntity;
@@ -16,15 +18,21 @@ import dev.messagingservice.model.enumeration.ChatParticipantRole;
 import dev.messagingservice.model.enumeration.ChatParticipantStatus;
 import dev.messagingservice.model.enumeration.ChatType;
 import dev.messagingservice.model.enumeration.GroupHistoryAccessMode;
+import dev.messagingservice.model.enumeration.MessageEncryptionType;
+import dev.messagingservice.model.enumeration.MessageType;
 import dev.messagingservice.repository.ChatParticipantRepository;
-import dev.messagingservice.repository.ChatRepository;
 import dev.messagingservice.repository.ChatParticipantVisibilityWindowRepository;
+import dev.messagingservice.repository.ChatRepository;
 import dev.messagingservice.repository.MessageRepository;
 import dev.messagingservice.service.ChatService;
+import dev.messagingservice.service.MessagingEventFactory;
+import dev.messagingservice.service.MessagingEventPublisher;
 import java.time.OffsetDateTime;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -36,10 +44,15 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class ChatServiceImpl implements ChatService {
+    private static final UUID SYSTEM_DEVICE_ID = new UUID(0L, 0L);
+
     private final ChatRepository chatRepository;
     private final ChatParticipantRepository chatParticipantRepository;
     private final ChatParticipantVisibilityWindowRepository chatParticipantVisibilityWindowRepository;
     private final MessageRepository messageRepository;
+    private final MessagingEventPublisher messagingEventPublisher;
+    private final MessagingEventFactory messagingEventFactory;
+    private final ObjectMapper objectMapper;
 
     @Override
     @Transactional
@@ -130,8 +143,33 @@ public class ChatServiceImpl implements ChatService {
             participantEntity.getHistoryVisibleFromCreatedAt(),
             now
         ));
+
+        List<UUID> recipientAccountIds = participantEntities.stream()
+            .map(ChatParticipantEntity::getAccountId)
+            .toList();
+        createAndPublishSystemMessage(savedChatEntity, currentAccountId, "GROUP_CREATED", null, recipientAccountIds, now);
+
+        List<UUID> initiallyAddedAccountIds = participantEntities.stream()
+            .map(ChatParticipantEntity::getAccountId)
+            .filter(accountId -> !accountId.equals(currentAccountId))
+            .toList();
+
+        for (int participantIndex = 0; participantIndex < initiallyAddedAccountIds.size(); participantIndex++) {
+            createAndPublishSystemMessage(
+                savedChatEntity,
+                currentAccountId,
+                "MEMBER_ADDED",
+                initiallyAddedAccountIds.get(participantIndex),
+                recipientAccountIds,
+                now.plusNanos(participantIndex + 1L)
+            );
+        }
+
+        ChatResponseDto chatResponseDto = mapToChatResponseDto(savedChatEntity, participantEntities);
+        publishChatUpdatedEvent(chatResponseDto, recipientAccountIds);
+
         log.info("Group chat created. Chat ID: {}, participants: {}.", savedChatEntity.getId(), participantEntities.size());
-        return mapToChatResponseDto(savedChatEntity, participantEntities);
+        return chatResponseDto;
     }
 
     @Override
@@ -154,7 +192,17 @@ public class ChatServiceImpl implements ChatService {
         chatParticipantRepository.save(participantEntity);
         updateVisibilityWindows(chatId, requestDto, historyBoundary, now);
         rotateGroupKeyEpoch(chatEntity, now);
-        return mapToChatResponseDto(chatEntity, chatParticipantRepository.findByChatId(chatId));
+
+        List<ChatParticipantEntity> participantEntities = chatParticipantRepository.findByChatId(chatId);
+        List<UUID> recipientAccountIds = participantEntities.stream()
+            .filter(currentParticipant -> currentParticipant.getStatus() == ChatParticipantStatus.ACTIVE)
+            .map(ChatParticipantEntity::getAccountId)
+            .toList();
+
+        createAndPublishSystemMessage(chatEntity, currentAccountId, "MEMBER_ADDED", requestDto.accountId(), recipientAccountIds, now);
+        ChatResponseDto chatResponseDto = mapToChatResponseDto(chatEntity, participantEntities);
+        publishChatUpdatedEvent(chatResponseDto, recipientAccountIds);
+        return chatResponseDto;
     }
 
     @Override
@@ -169,13 +217,30 @@ public class ChatServiceImpl implements ChatService {
         ChatParticipantEntity participantEntity = chatParticipantRepository.findByChatIdAndAccountId(chatId, participantAccountId)
             .orElseThrow(() -> new ChatAccessDeniedException("Participant is not a member of this group."));
 
+        if (participantEntity.getStatus() != ChatParticipantStatus.ACTIVE) {
+            throw new ChatAccessDeniedException("Participant is not an active member of this group.");
+        }
+
+        List<UUID> recipientAccountIdsBeforeRemoval = chatParticipantRepository.findByChatIdAndStatus(chatId, ChatParticipantStatus.ACTIVE).stream()
+            .map(ChatParticipantEntity::getAccountId)
+            .toList();
+
         OffsetDateTime now = OffsetDateTime.now();
+        createAndPublishSystemMessage(chatEntity, currentAccountId, "MEMBER_REMOVED", participantAccountId, recipientAccountIdsBeforeRemoval, now);
         participantEntity.setStatus(ChatParticipantStatus.REMOVED);
         participantEntity.setRemovedAt(now);
         chatParticipantRepository.save(participantEntity);
         closeOpenVisibilityWindow(participantEntity, now);
         rotateGroupKeyEpoch(chatEntity, now);
-        return mapToChatResponseDto(chatEntity, chatParticipantRepository.findByChatId(chatId));
+
+        List<ChatParticipantEntity> participantEntities = chatParticipantRepository.findByChatId(chatId);
+        List<UUID> recipientAccountIdsAfterRemoval = participantEntities.stream()
+            .filter(currentParticipant -> currentParticipant.getStatus() == ChatParticipantStatus.ACTIVE || currentParticipant.getAccountId().equals(participantAccountId))
+            .map(ChatParticipantEntity::getAccountId)
+            .toList();
+        ChatResponseDto chatResponseDto = mapToChatResponseDto(chatEntity, participantEntities);
+        publishChatUpdatedEvent(chatResponseDto, recipientAccountIdsAfterRemoval);
+        return chatResponseDto;
     }
 
     @Override
@@ -334,16 +399,22 @@ public class ChatServiceImpl implements ChatService {
         }
     }
 
-
     private void updateVisibilityWindows(
         UUID chatId,
         AddGroupParticipantRequestDto requestDto,
         HistoryBoundary historyBoundary,
         OffsetDateTime now
     ) {
-        if (requestDto.historyAccessMode() == GroupHistoryAccessMode.FULL_HISTORY
-                || requestDto.historyAccessMode() == GroupHistoryAccessMode.FROM_MESSAGE) {
+        if (requestDto.historyAccessMode() == GroupHistoryAccessMode.FULL_HISTORY) {
             chatParticipantVisibilityWindowRepository.deleteByChatIdAndAccountId(chatId, requestDto.accountId());
+            createVisibilityWindow(chatId, requestDto.accountId(), null, null, now);
+            return;
+        }
+
+        if (requestDto.historyAccessMode() == GroupHistoryAccessMode.FROM_MESSAGE) {
+            chatParticipantVisibilityWindowRepository.deleteByChatIdAndAccountId(chatId, requestDto.accountId());
+            createVisibilityWindow(chatId, requestDto.accountId(), historyBoundary.historyVisibleFromCreatedAt(), null, now);
+            return;
         }
 
         openVisibilityWindow(chatId, requestDto.accountId(), historyBoundary.historyVisibleFromCreatedAt(), now);
@@ -358,11 +429,21 @@ public class ChatServiceImpl implements ChatService {
             return;
         }
 
+        createVisibilityWindow(chatId, accountId, visibleFromCreatedAt, null, now);
+    }
+
+    private void createVisibilityWindow(
+        UUID chatId,
+        UUID accountId,
+        OffsetDateTime visibleFromCreatedAt,
+        OffsetDateTime visibleUntilCreatedAt,
+        OffsetDateTime now
+    ) {
         ChatParticipantVisibilityWindowEntity visibilityWindowEntity = ChatParticipantVisibilityWindowEntity.builder()
             .chatId(chatId)
             .accountId(accountId)
             .visibleFromCreatedAt(visibleFromCreatedAt)
-            .visibleUntilCreatedAt(null)
+            .visibleUntilCreatedAt(visibleUntilCreatedAt)
             .createdAt(now)
             .build();
 
@@ -384,6 +465,63 @@ public class ChatServiceImpl implements ChatService {
 
         visibilityWindowEntity.setVisibleUntilCreatedAt(now);
         chatParticipantVisibilityWindowRepository.save(visibilityWindowEntity);
+    }
+
+    private void createAndPublishSystemMessage(
+        ChatEntity chatEntity,
+        UUID actorAccountId,
+        String systemEventType,
+        UUID targetAccountId,
+        List<UUID> recipientAccountIds,
+        OffsetDateTime now
+    ) {
+        MessageEntity messageEntity = MessageEntity.builder()
+            .chatId(chatEntity.getId())
+            .senderAccountId(actorAccountId)
+            .senderDeviceId(SYSTEM_DEVICE_ID)
+            .clientMessageId(null)
+            .messageType(MessageType.SYSTEM)
+            .encryptionType(MessageEncryptionType.NONE)
+            .encryptedPayload(createSystemMessagePayload(chatEntity, actorAccountId, systemEventType, targetAccountId))
+            .createdAt(now)
+            .build();
+
+        MessageEntity savedMessageEntity = messageRepository.save(messageEntity);
+        chatEntity.setUpdatedAt(now);
+        chatRepository.save(chatEntity);
+
+        messagingEventPublisher.publish(messagingEventFactory.createMessageCreatedEvent(
+            savedMessageEntity,
+            List.of(),
+            recipientAccountIds
+        ));
+    }
+
+    private String createSystemMessagePayload(
+        ChatEntity chatEntity,
+        UUID actorAccountId,
+        String systemEventType,
+        UUID targetAccountId
+    ) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("kind", "GROUP_SYSTEM_EVENT");
+        payload.put("version", 1);
+        payload.put("type", systemEventType);
+        payload.put("chatId", chatEntity.getId());
+        payload.put("chatName", chatEntity.getName());
+        payload.put("actorAccountId", actorAccountId);
+        payload.put("targetAccountId", targetAccountId);
+
+        try {
+            return objectMapper.writeValueAsString(payload);
+        }
+        catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Failed to serialize system message payload.", exception);
+        }
+    }
+
+    private void publishChatUpdatedEvent(ChatResponseDto chatResponseDto, List<UUID> recipientAccountIds) {
+        messagingEventPublisher.publish(messagingEventFactory.createChatUpdatedEvent(chatResponseDto, recipientAccountIds));
     }
 
     private List<ChatParticipantEntity> loadActiveParticipants(UUID chatId) {

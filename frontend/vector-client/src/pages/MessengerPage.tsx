@@ -465,6 +465,86 @@ function getParticipantDisplayName(profileOrAccountId: ProfileResponseDto | stri
   return getDisplayName(profileOrAccountId);
 }
 
+type GroupSystemEventType = 'GROUP_CREATED' | 'MEMBER_ADDED' | 'MEMBER_REMOVED';
+
+type GroupSystemMessagePayload = {
+  kind: 'GROUP_SYSTEM_EVENT';
+  version: number;
+  type: GroupSystemEventType;
+  chatId: string;
+  chatName: string | null;
+  actorAccountId: string;
+  targetAccountId: string | null;
+};
+
+function parseGroupSystemMessagePayload(value: string | null): GroupSystemMessagePayload | null {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const parsedValue = JSON.parse(value) as Partial<GroupSystemMessagePayload>;
+
+    if (parsedValue.kind !== 'GROUP_SYSTEM_EVENT' || parsedValue.version !== 1 || typeof parsedValue.type !== 'string') {
+      return null;
+    }
+
+    if (typeof parsedValue.chatId !== 'string' || typeof parsedValue.actorAccountId !== 'string') {
+      return null;
+    }
+
+    return {
+      kind: 'GROUP_SYSTEM_EVENT',
+      version: 1,
+      type: parsedValue.type as GroupSystemEventType,
+      chatId: parsedValue.chatId,
+      chatName: typeof parsedValue.chatName === 'string' ? parsedValue.chatName : null,
+      actorAccountId: parsedValue.actorAccountId,
+      targetAccountId: typeof parsedValue.targetAccountId === 'string' ? parsedValue.targetAccountId : null,
+    };
+  }
+  catch {
+    return null;
+  }
+}
+
+function getProfileDisplayNameById(accountId: string | null, profilesById: Record<string, ProfileResponseDto>): string {
+  if (!accountId) {
+    return 'Неизвестный пользователь';
+  }
+
+  const profile = profilesById[accountId];
+
+  if (!profile) {
+    return `${accountId.slice(0, 8)}…`;
+  }
+
+  return getDisplayName(profile);
+}
+
+function formatGroupSystemMessage(payload: GroupSystemMessagePayload | null, profilesById: Record<string, ProfileResponseDto>): string {
+  if (!payload) {
+    return 'Системное событие';
+  }
+
+  const actorDisplayName = getProfileDisplayNameById(payload.actorAccountId, profilesById);
+  const targetDisplayName = getProfileDisplayNameById(payload.targetAccountId, profilesById);
+
+  if (payload.type === 'GROUP_CREATED') {
+    return `${actorDisplayName} создал(а) группу`;
+  }
+
+  if (payload.type === 'MEMBER_ADDED') {
+    return `${actorDisplayName} добавил(а) ${targetDisplayName}`;
+  }
+
+  if (payload.type === 'MEMBER_REMOVED') {
+    return `${actorDisplayName} удалил(а) ${targetDisplayName}`;
+  }
+
+  return 'Системное событие';
+}
+
 function NewChatModal({
   isOpen,
   currentAccountId,
@@ -1628,6 +1708,14 @@ export function MessengerPage() {
         return;
       }
 
+      if (message.messageType === 'SYSTEM') {
+        setDecryptedMessagesById((previousValue) => ({
+          ...previousValue,
+          [messageId]: message.encryptedPayload ?? '',
+        }));
+        return;
+      }
+
       if (message.encryptionType === 'GROUP' && message.encryptedPayload) {
         decryptingMessageIdsRef.current.add(messageId);
 
@@ -1928,7 +2016,11 @@ export function MessengerPage() {
       return;
     }
 
-    const incomingMessages = selectedMessages.filter((message) => message.senderAccountId !== profile.accountId);
+    const incomingMessages = selectedMessages.filter((message) => (
+      message.senderAccountId !== profile.accountId
+      && message.messageType !== 'SYSTEM'
+      && message.messageType !== 'GROUP_KEY_DISTRIBUTION'
+    ));
 
     incomingMessages.forEach((message) => {
       const deliveredMarker = `${selectedChatId}:${message.messageId}:delivered`;
@@ -2755,9 +2847,21 @@ export function MessengerPage() {
                 )}
 
                 {selectedMessages.filter((message) => message.messageType !== 'GROUP_KEY_DISTRIBUTION').map((message) => {
+                  const decryptedMessage = decryptedMessagesById[message.messageId] ?? 'Расшифровка…';
+
+                  if (message.messageType === 'SYSTEM') {
+                    const systemPayload = parseGroupSystemMessagePayload(decryptedMessage);
+                    return (
+                      <div key={message.messageId} className="flex justify-center py-1">
+                        <div className="max-w-[80%] rounded-full border border-white/10 bg-white/[0.06] px-4 py-1.5 text-center text-xs text-zinc-400 shadow-sm shadow-black/10">
+                          {formatGroupSystemMessage(systemPayload, profilesById)}
+                        </div>
+                      </div>
+                    );
+                  }
+
                   const isOwnMessage = message.senderAccountId === profile?.accountId;
                   const messageStatus = getOutgoingMessageStatus(message, profile?.accountId);
-                  const decryptedMessage = decryptedMessagesById[message.messageId] ?? 'Расшифровка…';
                   const fileAttachment = parseFileAttachmentMessageContent(decryptedMessage);
                   const documentAttachment = parseDocumentAttachmentMessageContent(decryptedMessage);
                   const senderProfile = profilesById[message.senderAccountId] ?? null;

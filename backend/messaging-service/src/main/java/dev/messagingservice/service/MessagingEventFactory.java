@@ -1,5 +1,6 @@
 package dev.messagingservice.service;
 
+import dev.messagingservice.model.dto.response.ChatResponseDto;
 import dev.messagingservice.model.entity.MessageDevicePayloadEntity;
 import dev.messagingservice.model.entity.MessageEntity;
 import dev.messagingservice.model.event.MessagingEventDto;
@@ -16,4 +17,7 @@ public interface MessagingEventFactory {
     MessagingEventDto createMessageDeliveredEvent(UUID chatId, UUID messageId, UUID deliveredByAccountId, List<UUID> recipientAccountIds);
 
     MessagingEventDto createMessageReadEvent(UUID chatId, UUID lastReadMessageId, UUID readByAccountId, List<UUID> recipientAccountIds);
+
+    MessagingEventDto createChatUpdatedEvent(ChatResponseDto chatResponseDto, List<UUID> recipientAccountIds);
 }
+

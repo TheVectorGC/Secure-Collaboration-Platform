@@ -76,6 +76,36 @@ function createDevServerUnavailableHtml(devServerUrl) {
   `;
 }
 
+async function clearHttpCache(mainWindow) {
+  try {
+    await mainWindow.webContents.session.clearCache();
+  }
+  catch (error) {
+    console.warn('Failed to clear Electron HTTP cache.', error);
+  }
+}
+
+async function loadApplication(mainWindow) {
+  const devServerUrl = process.env.VITE_DEV_SERVER_URL;
+
+  await clearHttpCache(mainWindow);
+
+  if (devServerUrl) {
+    try {
+      await mainWindow.loadURL(devServerUrl);
+    }
+    catch (error) {
+      console.error('Failed to load Vite dev server.', error);
+      await mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(createDevServerUnavailableHtml(devServerUrl))}`);
+    }
+
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
+    return;
+  }
+
+  await mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+}
+
 const createWindow = () => {
   const mainWindow = new BrowserWindow({
     width: 1320,
@@ -93,18 +123,7 @@ const createWindow = () => {
     },
   });
 
-  const devServerUrl = process.env.VITE_DEV_SERVER_URL;
-
-  if (devServerUrl) {
-    mainWindow.loadURL(devServerUrl).catch((error) => {
-      console.error('Failed to load Vite dev server.', error);
-      mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(createDevServerUnavailableHtml(devServerUrl))}`);
-    });
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
-    return;
-  }
-
-  mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+  void loadApplication(mainWindow);
 };
 
 app.whenReady().then(() => {
