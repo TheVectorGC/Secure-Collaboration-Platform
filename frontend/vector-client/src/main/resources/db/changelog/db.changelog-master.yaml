@@ -1,7 +1,0 @@
-databaseChangeLog:
-  - include:
-      file: db/changelog/changes/001-create-device-identity-keys-table.yaml
-  - include:
-      file: db/changelog/changes/002-create-device-signed-prekeys-table.yaml
-  - include:
-      file: db/changelog/changes/003-create-device-one-time-prekeys-table.yaml

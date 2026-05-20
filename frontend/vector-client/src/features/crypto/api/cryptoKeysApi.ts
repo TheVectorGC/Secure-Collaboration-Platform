@@ -11,11 +11,6 @@ export type PreKeyStatusResponseDto = {
   lowPreKeyThresholdReached: boolean;
 };
 
-type LegacyPreKeyStatusResponseDto = PreKeyStatusResponseDto & {
-  signedPreKeyRegistered?: boolean;
-  oneTimePreKeyRefillRequired?: boolean;
-};
-
 type RegisterIdentityKeyRequestDto = {
   registrationId: number;
   publicKey: string;
@@ -47,23 +42,15 @@ function isNotFound(error: unknown): boolean {
   return error instanceof AxiosError && error.response?.status === 404;
 }
 
-function isActiveSignedPreKeyRegistered(status: LegacyPreKeyStatusResponseDto | null): boolean {
-  if (!status) {
-    return false;
-  }
-
-  return status.activeSignedPreKeyRegistered ?? status.signedPreKeyRegistered ?? false;
+function isActiveSignedPreKeyRegistered(status: PreKeyStatusResponseDto | null): boolean {
+  return status?.activeSignedPreKeyRegistered ?? false;
 }
 
-function isOneTimePreKeyRefillRequired(status: LegacyPreKeyStatusResponseDto | null): boolean {
-  if (!status) {
-    return true;
-  }
-
-  return status.lowPreKeyThresholdReached ?? status.oneTimePreKeyRefillRequired ?? status.availableOneTimePreKeyCount === 0;
+function isOneTimePreKeyRefillRequired(status: PreKeyStatusResponseDto | null): boolean {
+  return !status || status.lowPreKeyThresholdReached || status.availableOneTimePreKeyCount === 0;
 }
 
-function hasEnoughRegisteredKeys(status: LegacyPreKeyStatusResponseDto): boolean {
+function hasEnoughRegisteredKeys(status: PreKeyStatusResponseDto): boolean {
   return status.identityKeyRegistered
     && isActiveSignedPreKeyRegistered(status)
     && status.activeKyberPreKeyRegistered
@@ -101,7 +88,7 @@ export async function getPreKeyBundle(deviceId: string): Promise<PreKeyBundleRes
 
 async function uploadMissingDeviceKeys(
   deviceId: string,
-  status: LegacyPreKeyStatusResponseDto | null,
+  status: PreKeyStatusResponseDto | null,
   signalKeyBundle: LocalPublicSignalKeyBundle,
 ): Promise<void> {
   if (!status?.identityKeyRegistered) {
@@ -141,7 +128,7 @@ export async function ensureCryptoDeviceKeysRegistered(
   deviceId: string,
   signalKeyBundle: LocalPublicSignalKeyBundle,
 ): Promise<PreKeyStatusResponseDto> {
-  let currentStatus: LegacyPreKeyStatusResponseDto | null = null;
+  let currentStatus: PreKeyStatusResponseDto | null = null;
 
   try {
     currentStatus = await getDevicePreKeyStatus(deviceId);

@@ -89,6 +89,10 @@ function registerVectorCryptoIpc() {
     return signalMessageService.importGroupKey(request);
   });
 
+  ipcMain.handle('vectorCrypto:exportGroupKeyPackagesForChat', async (_event, request) => {
+    return signalMessageService.exportGroupKeyPackagesForChat(request);
+  });
+
   ipcMain.handle('vectorCrypto:decryptGroupMessage', async (_event, request) => {
     if (request?.messageId) {
       const cachedPlainText = localCryptoRepository.getCachedDecryptedMessage(
@@ -105,7 +109,24 @@ function registerVectorCryptoIpc() {
       }
     }
 
-    const decryptResponse = await signalMessageService.decryptGroupMessage(request);
+    let decryptResponse;
+
+    try {
+      decryptResponse = await signalMessageService.decryptGroupMessage(request);
+    }
+    catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      if (errorMessage.includes('Group key is not available')) {
+        return {
+          plainText: null,
+          missingGroupKey: true,
+          fromCache: false,
+        };
+      }
+
+      throw error;
+    }
 
     if (request?.messageId) {
       localCryptoRepository.saveCachedDecryptedMessage(
@@ -118,6 +139,7 @@ function registerVectorCryptoIpc() {
 
     return {
       ...decryptResponse,
+      missingGroupKey: false,
       fromCache: false,
     };
   });

@@ -14,6 +14,8 @@ import {
   Send,
   Star,
   Users,
+  UserPlus,
+  UserMinus,
   KeyRound,
   LockKeyhole,
   Monitor,
@@ -26,7 +28,7 @@ import {
   X,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { createDirectChat, createGroupChat, createSelfChat, getChats } from '../features/chats/api/chatsApi';
+import { addGroupParticipant, createDirectChat, createGroupChat, createSelfChat, getChat, getChats, removeGroupParticipant } from '../features/chats/api/chatsApi';
 import { createDocument, getChatDocuments, registerDocumentSigningKey, rejectDocument, signDocument } from '../features/documents/api/documentsApi';
 import { searchProfiles } from '../features/directory/api/profilesApi';
 import { getActiveAccountDevices } from '../features/devices/api/devicesApi';
@@ -47,7 +49,7 @@ import { downloadKeyBackup, getKeyBackupStatus, uploadKeyBackup, type KeyBackupS
 import { formatChatTime, formatMessageTime } from '../shared/lib/dateFormat';
 import { getAvatarGradient, getInitials } from '../shared/lib/avatar';
 import { getDirectCompanionAccountId, getDisplayName } from '../shared/lib/profile';
-import type { ActiveDeviceResponseDto, ChatResponseDto, DocumentAttachmentMessageContent, DocumentResponseDto, FileAttachmentMessageContent, MessageResponseDto, ProfileResponseDto } from '../shared/types/api';
+import type { ActiveDeviceResponseDto, AddGroupParticipantRequestDto, ChatResponseDto, DocumentAttachmentMessageContent, DocumentResponseDto, FileAttachmentMessageContent, MessageResponseDto, ProfileResponseDto } from '../shared/types/api';
 
 function Avatar({ label, size = 'md' }: { label: string; size?: 'sm' | 'md' | 'lg' }) {
   const dimensions = size === 'sm' ? 'h-10 w-10 text-sm' : size === 'lg' ? 'h-14 w-14 text-lg' : 'h-12 w-12 text-base';
@@ -300,6 +302,67 @@ type ChatPresentation = {
   companionProfile: ProfileResponseDto | null;
 };
 
+
+function getAllGroupParticipants(chat: ChatResponseDto | null): NonNullable<ChatResponseDto['participants']> {
+  if (!chat || chat.type !== 'GROUP') {
+    return [];
+  }
+
+  if (chat.participants && chat.participants.length > 0) {
+    return chat.participants;
+  }
+
+  return chat.participantAccountIds.map((participantAccountId) => ({
+    accountId: participantAccountId,
+    role: 'MEMBER',
+    status: 'ACTIVE',
+    historyVisibleFromMessageId: null,
+    historyVisibleFromCreatedAt: null,
+    joinedAt: chat.createdAt,
+    removedAt: null,
+  }));
+}
+
+function getActiveGroupParticipants(chat: ChatResponseDto | null): NonNullable<ChatResponseDto['participants']> {
+  return getAllGroupParticipants(chat).filter((participant) => participant.status === 'ACTIVE');
+}
+
+function getCurrentGroupParticipant(chat: ChatResponseDto | null, currentAccountId: string | undefined) {
+  if (!chat || chat.type !== 'GROUP' || !currentAccountId) {
+    return null;
+  }
+
+  return getAllGroupParticipants(chat).find((participant) => participant.accountId === currentAccountId) ?? null;
+}
+
+function isCurrentAccountActiveInChat(chat: ChatResponseDto | null, currentAccountId: string | undefined): boolean {
+  if (!chat) {
+    return false;
+  }
+
+  if (chat.type !== 'GROUP') {
+    return true;
+  }
+
+  return getCurrentGroupParticipant(chat, currentAccountId)?.status === 'ACTIVE';
+}
+
+function getActiveGroupParticipantAccountIds(chat: ChatResponseDto | null): string[] {
+  if (!chat) {
+    return [];
+  }
+
+  if (chat.type !== 'GROUP') {
+    return chat.participantAccountIds;
+  }
+
+  return getActiveGroupParticipants(chat).map((participant) => participant.accountId);
+}
+
+function isGroupMembershipChangedSystemText(value: string | undefined): boolean {
+  return value === '[Ключ группы обновлён]' || value === '[Состав группы обновлён]' || value === '[История группы доступна]';
+}
+
 function getChatPresentation(
   chat: ChatResponseDto,
   currentProfile: ProfileResponseDto | null,
@@ -315,7 +378,7 @@ function getChatPresentation(
   }
 
   if (chat.type === 'GROUP') {
-    const activeParticipantsCount = chat.participantAccountIds.length;
+    const activeParticipantsCount = getActiveGroupParticipants(chat).length;
 
     return {
       title: chat.name ?? 'Групповой чат',
@@ -358,6 +421,48 @@ function getOutgoingMessageStatus(message: MessageResponseDto, currentAccountId:
   }
 
   return 'SENT';
+}
+
+
+function getReadReceiptDetails(
+  message: MessageResponseDto,
+  chat: ChatResponseDto | null,
+  profilesById: Record<string, ProfileResponseDto>,
+  currentAccountId: string | undefined,
+) {
+  const recipients = chat?.type === 'GROUP'
+    ? getActiveGroupParticipants(chat).filter((participant) => participant.accountId !== currentAccountId)
+    : [];
+  const readAccountIds = new Set(
+    message.deliveryStates
+      .filter((deliveryState) => deliveryState.status === 'READ')
+      .map((deliveryState) => deliveryState.accountId),
+  );
+  const deliveredAccountIds = new Set(
+    message.deliveryStates
+      .filter((deliveryState) => deliveryState.status === 'DELIVERED' || deliveryState.status === 'READ')
+      .map((deliveryState) => deliveryState.accountId),
+  );
+
+  const readParticipants = recipients.filter((participant) => readAccountIds.has(participant.accountId));
+  const unreadParticipants = recipients.filter((participant) => !readAccountIds.has(participant.accountId));
+  const deliveredParticipants = recipients.filter((participant) => deliveredAccountIds.has(participant.accountId));
+
+  return {
+    totalCount: recipients.length,
+    readCount: readParticipants.length,
+    deliveredCount: deliveredParticipants.length,
+    readParticipants: readParticipants.map((participant) => profilesById[participant.accountId] ?? participant.accountId),
+    unreadParticipants: unreadParticipants.map((participant) => profilesById[participant.accountId] ?? participant.accountId),
+  };
+}
+
+function getParticipantDisplayName(profileOrAccountId: ProfileResponseDto | string): string {
+  if (typeof profileOrAccountId === 'string') {
+    return `${profileOrAccountId.slice(0, 8)}…`;
+  }
+
+  return getDisplayName(profileOrAccountId);
 }
 
 function NewChatModal({
@@ -609,6 +714,283 @@ function NewChatModal({
 }
 
 
+type GroupHistoryAccessMode = AddGroupParticipantRequestDto['historyAccessMode'];
+
+function GroupManagementModal({
+  isOpen,
+  chat,
+  currentAccountId,
+  profilesById,
+  onClose,
+  onAddParticipant,
+  onRemoveParticipant,
+}: {
+  isOpen: boolean;
+  chat: ChatResponseDto | null;
+  currentAccountId: string | undefined;
+  profilesById: Record<string, ProfileResponseDto>;
+  onClose: () => void;
+  onAddParticipant: (profile: ProfileResponseDto, historyAccessMode: GroupHistoryAccessMode) => Promise<void>;
+  onRemoveParticipant: (participantAccountId: string) => Promise<void>;
+}) {
+  const upsertProfiles = useDirectoryStore((state) => state.upsertProfiles);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<ProfileResponseDto[]>([]);
+  const [historyAccessMode, setHistoryAccessMode] = useState<GroupHistoryAccessMode>('NEW_MESSAGES_ONLY');
+  const [isSearching, setIsSearching] = useState(false);
+  const [busyAccountId, setBusyAccountId] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const activeParticipantIds = useMemo(() => {
+    if (!chat) {
+      return new Set<string>();
+    }
+
+    const activeParticipants = getActiveGroupParticipants(chat).map((participant) => participant.accountId);
+    return new Set(activeParticipants);
+  }, [chat]);
+
+  const activeParticipants = useMemo(() => {
+    if (!chat) {
+      return [];
+    }
+
+    return getActiveGroupParticipants(chat);
+  }, [chat, currentAccountId]);
+
+  const currentParticipant = activeParticipants.find((participant) => participant.accountId === currentAccountId);
+  const canManageMembers = currentParticipant?.role === 'OWNER';
+
+  useEffect(() => {
+    if (!isOpen) {
+      setQuery('');
+      setResults([]);
+      setHistoryAccessMode('NEW_MESSAGES_ONLY');
+      setIsSearching(false);
+      setBusyAccountId(null);
+      setErrorMessage(null);
+      return;
+    }
+
+    const trimmedQuery = query.trim();
+
+    if (trimmedQuery.length < 2) {
+      setResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    const timeoutId = window.setTimeout(async () => {
+      setIsSearching(true);
+      setErrorMessage(null);
+
+      try {
+        const profiles = await searchProfiles(trimmedQuery);
+        const filteredProfiles = profiles.filter((profile) => profile.accountId !== currentAccountId && !activeParticipantIds.has(profile.accountId));
+        upsertProfiles(filteredProfiles);
+        setResults(filteredProfiles);
+      }
+      catch (error) {
+        console.error(error);
+        setErrorMessage('Не удалось найти пользователей для группы.');
+      }
+      finally {
+        setIsSearching(false);
+      }
+    }, 250);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [activeParticipantIds, currentAccountId, isOpen, query, upsertProfiles]);
+
+  if (!isOpen || !chat || chat.type !== 'GROUP') {
+    return null;
+  }
+
+  async function handleAdd(profile: ProfileResponseDto) {
+    setBusyAccountId(profile.accountId);
+    setErrorMessage(null);
+
+    try {
+      await onAddParticipant(profile, historyAccessMode);
+      setQuery('');
+      setResults([]);
+    }
+    catch (error) {
+      console.error(error);
+      setErrorMessage('Не удалось добавить участника.');
+    }
+    finally {
+      setBusyAccountId(null);
+    }
+  }
+
+  async function handleRemove(accountId: string) {
+    setBusyAccountId(accountId);
+    setErrorMessage(null);
+
+    try {
+      await onRemoveParticipant(accountId);
+    }
+    catch (error) {
+      console.error(error);
+      setErrorMessage('Не удалось удалить участника.');
+    }
+    finally {
+      setBusyAccountId(null);
+    }
+  }
+
+  return (
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
+      <div className="grid max-h-[88vh] w-full max-w-4xl grid-cols-1 overflow-hidden rounded-[2rem] border border-white/10 bg-[#18191d] shadow-2xl shadow-black/50 md:grid-cols-[1fr_1fr]">
+        <section className="border-b border-white/10 p-6 md:border-b-0 md:border-r">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-2xl font-semibold text-zinc-50">Участники группы</div>
+              <p className="mt-2 text-sm leading-6 text-zinc-500">Управляй составом группы и доступом новых участников к истории.</p>
+            </div>
+            <button onClick={onClose} className="rounded-2xl border border-white/10 bg-white/[0.04] p-2 text-zinc-400 transition hover:text-white">
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className="mt-6 rounded-3xl border border-white/10 bg-white/[0.03] p-4">
+            <div className="text-sm font-semibold text-zinc-200">{chat.name ?? 'Групповой чат'}</div>
+            <div className="mt-1 text-xs text-zinc-500">{activeParticipants.length} активных участников • epoch {chat.currentKeyEpoch ?? 1}</div>
+          </div>
+
+          <div className="mt-5 max-h-[48vh] space-y-3 overflow-y-auto pr-1">
+            {activeParticipants.map((participant) => {
+              const participantProfile = profilesById[participant.accountId];
+              const participantName = participantProfile ? getDisplayName(participantProfile) : `${participant.accountId.slice(0, 8)}…`;
+              const isCurrentUser = participant.accountId === currentAccountId;
+              const canRemove = canManageMembers && !isCurrentUser && participant.role !== 'OWNER';
+
+              return (
+                <div key={participant.accountId} className="flex items-center gap-3 rounded-3xl border border-white/8 bg-white/[0.03] px-4 py-3">
+                  <Avatar label={participantName} />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold text-zinc-100">{participantName}{isCurrentUser ? ' • это вы' : ''}</div>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+                      <span>{participantProfile ? `@${participantProfile.username}` : participant.accountId}</span>
+                      <span className="rounded-full border border-violet-300/15 bg-violet-400/10 px-2 py-0.5 text-violet-200">{participant.role === 'OWNER' ? 'Владелец' : 'Участник'}</span>
+                      {participant.historyVisibleFromCreatedAt && <span>история с {formatMessageTime(participant.historyVisibleFromCreatedAt)}</span>}
+                    </div>
+                  </div>
+                  {canRemove && (
+                    <button
+                      onClick={() => void handleRemove(participant.accountId)}
+                      disabled={busyAccountId === participant.accountId}
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-red-300/15 bg-red-500/10 text-red-200 transition hover:border-red-300/30 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                      title="Удалить из группы"
+                    >
+                      {busyAccountId === participant.accountId ? <LoaderCircle size={17} className="animate-spin" /> : <UserMinus size={17} />}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="p-6">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-3xl bg-violet-500/15 text-violet-200">
+              <UserPlus size={20} />
+            </div>
+            <div>
+              <div className="text-lg font-semibold text-zinc-50">Добавить участника</div>
+              <div className="text-xs text-zinc-500">Доступ к истории выбирается до добавления.</div>
+            </div>
+          </div>
+
+          {!canManageMembers && (
+            <div className="mt-5 rounded-3xl border border-amber-300/15 bg-amber-500/10 p-4 text-sm leading-6 text-amber-100">
+              Добавлять и удалять участников может только владелец группы.
+            </div>
+          )}
+
+          <div className="mt-5 space-y-3">
+            <label className={`block rounded-3xl border p-4 transition ${historyAccessMode === 'NEW_MESSAGES_ONLY' ? 'border-violet-300/30 bg-violet-500/10' : 'border-white/10 bg-white/[0.03]'}`}>
+              <div className="flex items-start gap-3">
+                <input
+                  type="radio"
+                  name="group-history-mode"
+                  checked={historyAccessMode === 'NEW_MESSAGES_ONLY'}
+                  onChange={() => setHistoryAccessMode('NEW_MESSAGES_ONLY')}
+                  className="mt-1"
+                  disabled={!canManageMembers}
+                />
+                <div>
+                  <div className="text-sm font-semibold text-zinc-100">Только новые сообщения</div>
+                  <div className="mt-1 text-xs leading-5 text-zinc-500">Участник получит ключи новой эпохи и будет читать сообщения после добавления.</div>
+                </div>
+              </div>
+            </label>
+            <label className={`block rounded-3xl border p-4 transition ${historyAccessMode === 'FULL_HISTORY' ? 'border-violet-300/30 bg-violet-500/10' : 'border-white/10 bg-white/[0.03]'}`}>
+              <div className="flex items-start gap-3">
+                <input
+                  type="radio"
+                  name="group-history-mode"
+                  checked={historyAccessMode === 'FULL_HISTORY'}
+                  onChange={() => setHistoryAccessMode('FULL_HISTORY')}
+                  className="mt-1"
+                  disabled={!canManageMembers}
+                />
+                <div>
+                  <div className="text-sm font-semibold text-zinc-100">Вся доступная история</div>
+                  <div className="mt-1 text-xs leading-5 text-zinc-500">Клиент передаст новому участнику локально доступные group keys для старых сообщений.</div>
+                </div>
+              </div>
+            </label>
+          </div>
+
+          <div className="mt-5 rounded-3xl border border-white/10 bg-black/15 px-4 py-3">
+            <div className="flex items-center gap-3">
+              <Search size={18} className="text-zinc-500" />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                disabled={!canManageMembers}
+                className="w-full bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-600 disabled:cursor-not-allowed"
+                placeholder="Найти пользователя по имени, username или email"
+              />
+            </div>
+          </div>
+
+          {errorMessage && <div className="mt-3 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{errorMessage}</div>}
+
+          <div className="mt-4 max-h-[28vh] space-y-3 overflow-y-auto pr-1">
+            {isSearching && <div className="py-5 text-center text-sm text-zinc-500">Ищем пользователей…</div>}
+            {!isSearching && query.trim().length >= 2 && results.length === 0 && <div className="py-5 text-center text-sm text-zinc-500">Новых пользователей не найдено.</div>}
+            {results.map((profile) => {
+              const displayName = getDisplayName(profile);
+
+              return (
+                <div key={profile.accountId} className="flex items-center gap-3 rounded-3xl border border-white/8 bg-white/[0.03] px-4 py-3">
+                  <Avatar label={displayName} />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold text-zinc-100">{displayName}</div>
+                    <div className="mt-1 truncate text-xs text-zinc-500">@{profile.username} • {profile.email}</div>
+                  </div>
+                  <button
+                    onClick={() => void handleAdd(profile)}
+                    disabled={!canManageMembers || busyAccountId === profile.accountId}
+                    className="rounded-full border border-violet-300/15 bg-violet-400/10 px-3 py-1.5 text-xs text-violet-100 transition hover:border-violet-300/30 hover:bg-violet-400/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {busyAccountId === profile.accountId ? 'Добавляем…' : 'Добавить'}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+
 type SettingsTab = 'profile' | 'devices' | 'security';
 
 function isDecryptionPlaceholder(value: string | undefined): boolean {
@@ -616,7 +998,7 @@ function isDecryptionPlaceholder(value: string | undefined): boolean {
     return false;
   }
 
-  return value === '[Не удалось расшифровать сообщение]' || value === '[Сообщение недоступно для этого устройства]';
+  return value === '[Не удалось расшифровать сообщение]' || value === '[Сообщение недоступно для этого устройства]' || value === '[Ключ группы пока недоступен]';
 }
 
 function formatDeviceTime(value: string | null | undefined): string {
@@ -1123,13 +1505,16 @@ export function MessengerPage() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAttachmentMenuOpen, setIsAttachmentMenuOpen] = useState(false);
   const [isDocumentsPanelOpen, setIsDocumentsPanelOpen] = useState(false);
+  const [isGroupManagementOpen, setIsGroupManagementOpen] = useState(false);
   const [chatDocuments, setChatDocuments] = useState<DocumentResponseDto[]>([]);
   const [isLoadingDocuments, setIsLoadingDocuments] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [decryptedMessagesById, setDecryptedMessagesById] = useState<Record<string, string>>({});
+  const [readDetailsMessageId, setReadDetailsMessageId] = useState<string | null>(null);
 
   const decryptingMessageIdsRef = useRef<Set<string>>(new Set());
   const permanentlyUnavailableMessageIdsRef = useRef<Set<string>>(new Set());
+  const temporarilyMissingGroupKeyMessageIdsRef = useRef<Set<string>>(new Set());
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -1158,6 +1543,7 @@ export function MessengerPage() {
 
   async function handleKeyBackupRestored() {
     permanentlyUnavailableMessageIdsRef.current.clear();
+    temporarilyMissingGroupKeyMessageIdsRef.current.clear();
     decryptingMessageIdsRef.current.clear();
     setDecryptedMessagesById({});
     await loadRestoredDeviceIds();
@@ -1205,7 +1591,22 @@ export function MessengerPage() {
   );
 
   const selectedMessages = selectedChatId ? messagesByChatId[selectedChatId] ?? [] : [];
-  const selectedTypingStates = selectedChatId ? typingByChatId[selectedChatId] ?? [] : [];
+  const selectedChatActiveParticipantAccountIds = useMemo(
+    () => getActiveGroupParticipantAccountIds(selectedChat),
+    [selectedChat],
+  );
+  const selectedChatActiveParticipantAccountIdSet = useMemo(
+    () => new Set(selectedChatActiveParticipantAccountIds),
+    [selectedChatActiveParticipantAccountIds],
+  );
+  const selectedChatCurrentParticipant = useMemo(
+    () => getCurrentGroupParticipant(selectedChat, profile?.accountId),
+    [profile?.accountId, selectedChat],
+  );
+  const isSelectedChatWritable = isCurrentAccountActiveInChat(selectedChat, profile?.accountId);
+  const selectedTypingStates = selectedChatId
+    ? (typingByChatId[selectedChatId] ?? []).filter((typingState) => selectedChat?.type !== 'GROUP' || selectedChatActiveParticipantAccountIdSet.has(typingState.accountId))
+    : [];
 
   useEffect(() => {
     const vectorCrypto = window.vectorCrypto;
@@ -1223,7 +1624,7 @@ export function MessengerPage() {
         return;
       }
 
-      if (decryptingMessageIdsRef.current.has(messageId) || permanentlyUnavailableMessageIdsRef.current.has(messageId)) {
+      if (decryptingMessageIdsRef.current.has(messageId) || permanentlyUnavailableMessageIdsRef.current.has(messageId) || temporarilyMissingGroupKeyMessageIdsRef.current.has(messageId)) {
         return;
       }
 
@@ -1237,13 +1638,19 @@ export function MessengerPage() {
           const directDecryptErrors: unknown[] = [];
 
           try {
-            return await vectorCrypto.decryptGroupMessage({
+            const directDecryptResponse = await vectorCrypto.decryptGroupMessage({
               accountId: profile.accountId,
               deviceId,
               chatId: message.chatId,
               messageId,
               encryptedPayload: message.encryptedPayload!,
             });
+
+            if (!directDecryptResponse.plainText) {
+              throw new Error('Group key is not available on this device. Restore key backup or receive a key distribution package.');
+            }
+
+            return directDecryptResponse;
           }
           catch (firstError) {
             directDecryptErrors.push(firstError);
@@ -1266,13 +1673,19 @@ export function MessengerPage() {
                 groupKeyPackagePlainText: groupKeyPackage.plainText,
               });
 
-              return await vectorCrypto.decryptGroupMessage({
+              const decryptResponseAfterImport = await vectorCrypto.decryptGroupMessage({
                 accountId: profile.accountId,
                 deviceId,
                 chatId: message.chatId,
                 messageId,
                 encryptedPayload: message.encryptedPayload!,
               });
+
+              if (!decryptResponseAfterImport.plainText) {
+                throw new Error('Group key is not available on this device. Restore key backup or receive a key distribution package.');
+              }
+
+              return decryptResponseAfterImport;
             }
             catch (candidateError) {
               directDecryptErrors.push(candidateError);
@@ -1284,13 +1697,30 @@ export function MessengerPage() {
 
         decryptGroupMessageWithAvailableKey()
           .then((decryptResponse) => {
+            const plainText = decryptResponse.plainText;
+
+            if (!plainText) {
+              throw new Error('Group key is not available on this device. Restore key backup or receive a key distribution package.');
+            }
+
+            temporarilyMissingGroupKeyMessageIdsRef.current.delete(messageId);
             setDecryptedMessagesById((previousValue) => ({
               ...previousValue,
-              [messageId]: decryptResponse.plainText,
+              [messageId]: plainText,
             }));
           })
           .catch((error) => {
-            console.error(error);
+            const errorMessageText = error instanceof Error ? error.message : String(error);
+            const isMissingGroupKey = errorMessageText.includes('Group key is not available');
+
+            if (isMissingGroupKey) {
+              temporarilyMissingGroupKeyMessageIdsRef.current.add(messageId);
+              console.warn(errorMessageText);
+            }
+            else {
+              console.error(error);
+            }
+
             setDecryptedMessagesById((previousValue) => {
               const previousPlainText = previousValue[messageId];
 
@@ -1300,7 +1730,7 @@ export function MessengerPage() {
 
               return {
                 ...previousValue,
-                [messageId]: '[Не удалось расшифровать сообщение]',
+                [messageId]: isMissingGroupKey ? '[Ключ группы пока недоступен]' : '[Не удалось расшифровать сообщение]',
               };
             });
           })
@@ -1331,7 +1761,29 @@ export function MessengerPage() {
       decryptingMessageIdsRef.current.add(messageId);
 
       decryptDirectMessageWithAvailablePayloads(message, currentDevicePayloads, profile.accountId, vectorCrypto)
-        .then((decryptResponse) => {
+        .then(async (decryptResponse) => {
+          if (message.messageType === 'GROUP_KEY_DISTRIBUTION') {
+            await vectorCrypto.importGroupKey({
+              accountId: profile.accountId,
+              chatId: message.chatId,
+              groupKeyPackagePlainText: decryptResponse.plainText,
+            });
+
+            temporarilyMissingGroupKeyMessageIdsRef.current.clear();
+            setDecryptedMessagesById((previousValue) => {
+              const nextValue = { ...previousValue, [messageId]: '[Ключ группы обновлён]' };
+
+              Object.keys(nextValue).forEach((cachedMessageId) => {
+                if (nextValue[cachedMessageId] === '[Ключ группы пока недоступен]' || nextValue[cachedMessageId] === '[Не удалось расшифровать сообщение]') {
+                  delete nextValue[cachedMessageId];
+                }
+              });
+
+              return nextValue;
+            });
+            return;
+          }
+
           setDecryptedMessagesById((previousValue) => ({
             ...previousValue,
             [messageId]: decryptResponse.plainText,
@@ -1370,6 +1822,24 @@ export function MessengerPage() {
       return `${presentation.title} ${presentation.subtitle}`.toLowerCase().includes(normalizedQuery);
     });
   }, [chatSearchQuery, chats, profile, profilesById]);
+
+  async function refreshSelectedChat(options?: { silent?: boolean }) {
+    if (!selectedChatId) {
+      return null;
+    }
+
+    try {
+      const refreshedChat = await getChat(selectedChatId);
+      upsertChat(refreshedChat);
+      return refreshedChat;
+    }
+    catch (error) {
+      if (!options?.silent) {
+        console.error(error);
+      }
+      return null;
+    }
+  }
 
   useEffect(() => {
     async function loadChats() {
@@ -1422,11 +1892,39 @@ export function MessengerPage() {
   }, [selectedChatId, setMessages]);
 
   useEffect(() => {
+    if (!selectedChatId) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    const refreshChat = async () => {
+      if (isCancelled) {
+        return;
+      }
+
+      await refreshSelectedChat({ silent: true });
+    };
+
+    void refreshChat();
+    const intervalId = window.setInterval(refreshChat, 2500);
+
+    return () => {
+      isCancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [selectedChatId]);
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [selectedChatId, selectedMessages.length]);
 
   useEffect(() => {
-    if (!selectedChatId || !profile?.accountId || selectedMessages.length === 0) {
+    setReadDetailsMessageId(null);
+  }, [selectedChatId]);
+
+  useEffect(() => {
+    if (!selectedChatId || !profile?.accountId || selectedMessages.length === 0 || !isSelectedChatWritable) {
       return;
     }
 
@@ -1461,16 +1959,16 @@ export function MessengerPage() {
     markChatRead(selectedChatId, lastIncomingMessage.messageId).catch((error) => {
       console.error(error);
     });
-  }, [profile?.accountId, selectedChatId, selectedMessages]);
+  }, [isSelectedChatWritable, profile?.accountId, selectedChatId, selectedMessages]);
 
-  async function buildEncryptedDevicePayloads(plainText: string) {
-    if (!selectedChat || !deviceId || !profile?.accountId) {
-      throw new Error('Chat, profile or local device is not available.');
+  async function buildEncryptedDevicePayloadsForAccounts(plainText: string, targetAccountIds: string[]) {
+    if (!deviceId || !profile?.accountId) {
+      throw new Error('Profile or local device is not available.');
     }
 
-    const targetAccountIds = selectedChat.participantAccountIds;
+    const uniqueTargetAccountIds = Array.from(new Set(targetAccountIds));
     const activeDevicesByAccount = await Promise.all(
-      targetAccountIds.map(async (targetAccountId) => ({
+      uniqueTargetAccountIds.map(async (targetAccountId) => ({
         targetAccountId,
         devices: await getActiveAccountDevices(targetAccountId),
       })),
@@ -1518,13 +2016,29 @@ export function MessengerPage() {
     }));
   }
 
+  async function buildEncryptedDevicePayloads(plainText: string, chatForRecipients: ChatResponseDto | null = selectedChat) {
+    if (!chatForRecipients) {
+      throw new Error('Chat is not available.');
+    }
+
+    return buildEncryptedDevicePayloadsForAccounts(plainText, getActiveGroupParticipantAccountIds(chatForRecipients));
+  }
+
   async function sendEncryptedChatContent(plainText: string, messageType: 'TEXT' | 'FILE' = 'TEXT') {
     if (!selectedChatId || !deviceId) {
       throw new Error('Chat or local device is not available.');
     }
 
-    const groupEpoch = selectedChat?.currentKeyEpoch ?? 1;
-    const groupEncryptedMessage = selectedChat?.type === 'GROUP' && window.vectorCrypto
+    const currentChatState = selectedChat?.type === 'GROUP'
+      ? await refreshSelectedChat({ silent: true }) ?? selectedChat
+      : selectedChat;
+
+    if (!isCurrentAccountActiveInChat(currentChatState, profile?.accountId)) {
+      throw new Error('Current account is not an active participant of this chat.');
+    }
+
+    const groupEpoch = currentChatState?.currentKeyEpoch ?? 1;
+    const groupEncryptedMessage = currentChatState?.type === 'GROUP' && window.vectorCrypto
       ? await window.vectorCrypto.encryptGroupMessage({
         accountId: profile?.accountId ?? '',
         deviceId,
@@ -1534,8 +2048,8 @@ export function MessengerPage() {
       })
       : null;
     const devicePayloads = groupEncryptedMessage
-      ? await buildEncryptedDevicePayloads(groupEncryptedMessage.groupKeyPackagePlainText)
-      : await buildEncryptedDevicePayloads(plainText);
+      ? await buildEncryptedDevicePayloads(groupEncryptedMessage.groupKeyPackagePlainText, currentChatState)
+      : await buildEncryptedDevicePayloads(plainText, currentChatState);
 
     const savedMessage = await sendMessage(selectedChatId, {
       senderDeviceId: deviceId,
@@ -1556,7 +2070,7 @@ export function MessengerPage() {
   }
 
   async function handleSendCurrentMessage() {
-    if (!messageText.trim()) {
+    if (!messageText.trim() || !isSelectedChatWritable) {
       return;
     }
 
@@ -1611,8 +2125,8 @@ export function MessengerPage() {
       return;
     }
 
-    if (!selectedChatId || !selectedChat || !deviceId) {
-      setErrorMessage('Сначала выбери чат для отправки файла.');
+    if (!selectedChatId || !selectedChat || !deviceId || !isSelectedChatWritable) {
+      setErrorMessage(isSelectedChatWritable ? 'Сначала выбери чат для отправки файла.' : 'Вы исключены из группы и не можете отправлять файлы.');
       return;
     }
 
@@ -1655,8 +2169,8 @@ export function MessengerPage() {
       return;
     }
 
-    if (!selectedChatId || !selectedChat || !deviceId) {
-      setErrorMessage('Сначала выбери чат для отправки документа.');
+    if (!selectedChatId || !selectedChat || !deviceId || !isSelectedChatWritable) {
+      setErrorMessage(isSelectedChatWritable ? 'Сначала выбери чат для отправки документа.' : 'Вы исключены из группы и не можете отправлять документы.');
       return;
     }
 
@@ -1828,12 +2342,104 @@ export function MessengerPage() {
     setIsCreateChatOpen(false);
   }
 
+
+  async function sendGroupKeyDistributionPackage(targetAccountIds: string[], groupKeyPackagePlainText: string) {
+    if (!selectedChatId || !deviceId || !profile?.accountId || targetAccountIds.length === 0) {
+      return;
+    }
+
+    const devicePayloads = await buildEncryptedDevicePayloadsForAccounts(groupKeyPackagePlainText, targetAccountIds);
+
+    await sendMessage(selectedChatId, {
+      senderDeviceId: deviceId,
+      clientMessageId: crypto.randomUUID(),
+      messageType: 'GROUP_KEY_DISTRIBUTION',
+      encryptionType: 'SIGNAL',
+      encryptedPayload: null,
+      devicePayloads,
+    });
+  }
+
+  async function shareHistoricalGroupKeysWithParticipant(participantAccountId: string) {
+    if (!selectedChatId || !profile?.accountId || !window.vectorCrypto) {
+      return;
+    }
+
+    const exportedGroupKeys = await window.vectorCrypto.exportGroupKeyPackagesForChat({
+      accountId: profile.accountId,
+      chatId: selectedChatId,
+    });
+
+    for (const groupKeyPackagePlainText of exportedGroupKeys.packages) {
+      await sendGroupKeyDistributionPackage([participantAccountId], groupKeyPackagePlainText);
+    }
+  }
+
+  async function handleAddGroupParticipant(profileToAdd: ProfileResponseDto, historyAccessMode: GroupHistoryAccessMode) {
+    if (!selectedChat || selectedChat.type !== 'GROUP') {
+      return;
+    }
+
+    setErrorMessage(null);
+    const updatedChat = await addGroupParticipant(selectedChat.chatId, {
+      accountId: profileToAdd.accountId,
+      historyAccessMode,
+      historyVisibleFromMessageId: null,
+    });
+
+    upsertProfile(profileToAdd);
+    upsertChat(updatedChat);
+
+    if (historyAccessMode === 'FULL_HISTORY') {
+      await shareHistoricalGroupKeysWithParticipant(profileToAdd.accountId);
+    }
+    else if (window.vectorCrypto && deviceId && profile?.accountId) {
+      const currentGroupKeyPackage = await window.vectorCrypto.encryptGroupMessage({
+        accountId: profile.accountId,
+        deviceId,
+        chatId: updatedChat.chatId,
+        epoch: updatedChat.currentKeyEpoch ?? 1,
+        plainText: '[Состав группы обновлён]',
+      });
+      await sendGroupKeyDistributionPackage([profileToAdd.accountId], currentGroupKeyPackage.groupKeyPackagePlainText);
+    }
+  }
+
+  async function handleRemoveGroupParticipant(participantAccountId: string) {
+    if (!selectedChat || selectedChat.type !== 'GROUP') {
+      return;
+    }
+
+    setErrorMessage(null);
+    const updatedChat = await removeGroupParticipant(selectedChat.chatId, participantAccountId);
+    upsertChat(updatedChat);
+    temporarilyMissingGroupKeyMessageIdsRef.current.clear();
+
+    if (window.vectorCrypto && deviceId && profile?.accountId) {
+      const activeRecipientAccountIds = getActiveGroupParticipantAccountIds(updatedChat).filter((accountId) => accountId !== profile.accountId);
+      const currentGroupKeyPackage = await window.vectorCrypto.encryptGroupMessage({
+        accountId: profile.accountId,
+        deviceId,
+        chatId: updatedChat.chatId,
+        epoch: updatedChat.currentKeyEpoch ?? 1,
+        plainText: '[Состав группы обновлён]',
+      });
+      await sendGroupKeyDistributionPackage(activeRecipientAccountIds, currentGroupKeyPackage.groupKeyPackagePlainText);
+    }
+
+    setDecryptedMessagesById((previousValue) => ({ ...previousValue }));
+  }
+
   function sendCurrentTypingState(isTyping: boolean) {
     if (!selectedChat || !profile?.accountId || selectedChat.type === 'SELF') {
       return;
     }
 
-    const recipientAccountIds = selectedChat.participantAccountIds.filter((participantAccountId) => participantAccountId !== profile.accountId);
+    if (!isSelectedChatWritable) {
+      return;
+    }
+
+    const recipientAccountIds = getActiveGroupParticipantAccountIds(selectedChat).filter((participantAccountId) => participantAccountId !== profile.accountId);
 
     if (recipientAccountIds.length === 0) {
       return;
@@ -1847,6 +2453,12 @@ export function MessengerPage() {
   }
 
   function handleMessageTextChange(value: string) {
+    if (!isSelectedChatWritable) {
+      setMessageText('');
+      sendCurrentTypingState(false);
+      return;
+    }
+
     setMessageText(value);
 
     const now = Date.now();
@@ -1878,9 +2490,16 @@ export function MessengerPage() {
     }
   }
 
+  useEffect(() => {
+    if (!isSelectedChatWritable) {
+      setMessageText('');
+      sendCurrentTypingState(false);
+    }
+  }, [isSelectedChatWritable, selectedChatId]);
+
   const selectedChatPresentation = selectedChat ? getChatPresentation(selectedChat, profile, profilesById) : null;
   const currentUserDisplayName = profile ? getDisplayName(profile) : 'Vector user';
-  const selectedTypingText = selectedTypingStates.length > 0
+  const selectedTypingText = isSelectedChatWritable && selectedTypingStates.length > 0
     ? selectedTypingStates.length === 1
       ? `${selectedTypingStates[0].username || 'Пользователь'} печатает…`
       : 'Несколько пользователей печатают…'
@@ -1908,6 +2527,17 @@ export function MessengerPage() {
         onBackupRestored={handleKeyBackupRestored}
       />
 
+
+
+      <GroupManagementModal
+        isOpen={isGroupManagementOpen}
+        chat={selectedChat}
+        currentAccountId={profile?.accountId}
+        profilesById={profilesById}
+        onClose={() => setIsGroupManagementOpen(false)}
+        onAddParticipant={handleAddGroupParticipant}
+        onRemoveParticipant={handleRemoveGroupParticipant}
+      />
 
       <DocumentsPanel
         isOpen={isDocumentsPanelOpen}
@@ -2080,6 +2710,16 @@ export function MessengerPage() {
               </div>
 
               <div className="flex items-center gap-2">
+                {selectedChat.type === 'GROUP' && (
+                  <button
+                    onClick={() => setIsGroupManagementOpen(true)}
+                    className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-zinc-300 transition hover:border-violet-300/25 hover:text-white"
+                    title="Участники группы"
+                  >
+                    <Users size={14} />
+                    Участники
+                  </button>
+                )}
                 <button
                   onClick={() => void openDocumentsPanel()}
                   className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-zinc-300 transition hover:border-violet-300/25 hover:text-white"
@@ -2100,6 +2740,12 @@ export function MessengerPage() {
               </div>
             )}
 
+            {selectedChat.type === 'GROUP' && !isSelectedChatWritable && (
+              <div className="border-b border-amber-300/20 bg-amber-500/10 px-7 py-3 text-sm text-amber-100">
+                Вы исключены из группы. Вы можете читать доступную историю, но отправка сообщений, файлов, документов и typing отключены.
+              </div>
+            )}
+
             <div className="min-h-0 flex-1 overflow-y-auto px-8 py-6">
               <div className="mx-auto flex max-w-4xl flex-col gap-3">
                 {selectedMessages.length === 0 && (
@@ -2108,25 +2754,36 @@ export function MessengerPage() {
                   </div>
                 )}
 
-                {selectedMessages.map((message) => {
+                {selectedMessages.filter((message) => message.messageType !== 'GROUP_KEY_DISTRIBUTION').map((message) => {
                   const isOwnMessage = message.senderAccountId === profile?.accountId;
                   const messageStatus = getOutgoingMessageStatus(message, profile?.accountId);
                   const decryptedMessage = decryptedMessagesById[message.messageId] ?? 'Расшифровка…';
                   const fileAttachment = parseFileAttachmentMessageContent(decryptedMessage);
                   const documentAttachment = parseDocumentAttachmentMessageContent(decryptedMessage);
+                  const senderProfile = profilesById[message.senderAccountId] ?? null;
+                  const senderDisplayName = senderProfile ? getDisplayName(senderProfile) : `${message.senderAccountId.slice(0, 8)}…`;
+                  const readReceiptDetails = getReadReceiptDetails(message, selectedChat, profilesById, profile?.accountId);
+                  const shouldShowGroupSender = selectedChat.type === 'GROUP' && !isOwnMessage;
+                  const shouldShowGroupReadDetails = selectedChat.type === 'GROUP' && isOwnMessage && readDetailsMessageId === message.messageId;
 
                   return (
                     <div key={message.messageId} className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
                       <div className={`flex max-w-[74%] items-end gap-3 ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
-                        {!isOwnMessage && <Avatar label={selectedChatPresentation.avatarLabel} size="sm" />}
+                        {!isOwnMessage && <Avatar label={senderDisplayName} size="sm" />}
 
-                        <div
-                          className={`rounded-[1.5rem] px-4 py-3 shadow-lg ${
+                        <div className="relative">
+                          <div
+                            className={`rounded-[1.5rem] px-4 py-3 shadow-lg ${
                             isOwnMessage
                               ? 'rounded-br-md bg-gradient-to-br from-violet-500 to-fuchsia-600 text-white shadow-violet-950/25'
                               : 'rounded-bl-md border border-white/10 bg-[#24262d] text-zinc-100 shadow-black/20'
                           }`}
                         >
+                          {shouldShowGroupSender && (
+                            <div className="mb-1 text-xs font-semibold text-violet-200">
+                              {senderDisplayName}
+                            </div>
+                          )}
                           {documentAttachment ? (
                             <DocumentAttachmentPreview attachment={documentAttachment} isOwnMessage={isOwnMessage} onDownload={handleDownloadAttachment} />
                           ) : fileAttachment ? (
@@ -2161,7 +2818,7 @@ export function MessengerPage() {
                           )}
                           <div className={`mt-2 flex items-center gap-2 text-[11px] ${isOwnMessage ? 'justify-end text-violet-100/80' : 'justify-end text-zinc-500'}`}>
                             <span>{formatMessageTime(message.createdAt)}</span>
-                            {isOwnMessage && (
+                            {isOwnMessage && selectedChat.type !== 'GROUP' && (
                               <span className="inline-flex items-center gap-1">
                                 {messageStatus === 'READ' ? <CheckCheck size={13} /> : messageStatus === 'DELIVERED' ? <CheckCheck size={13} /> : <Check size={13} />}
                                 <span>
@@ -2169,7 +2826,52 @@ export function MessengerPage() {
                                 </span>
                               </span>
                             )}
+                            {isOwnMessage && selectedChat.type === 'GROUP' && (
+                              <button
+                                type="button"
+                                onClick={() => setReadDetailsMessageId((currentValue) => currentValue === message.messageId ? null : message.messageId)}
+                                className="inline-flex items-center gap-1 rounded-full px-1 transition hover:bg-white/10"
+                                title="Кто прочитал сообщение"
+                              >
+                                {readReceiptDetails.readCount > 0 ? <CheckCheck size={13} /> : <Check size={13} />}
+                                <span>
+                                  {readReceiptDetails.readCount > 0
+                                    ? `Прочитано ${readReceiptDetails.readCount}/${readReceiptDetails.totalCount}`
+                                    : readReceiptDetails.deliveredCount > 0
+                                      ? `Доставлено ${readReceiptDetails.deliveredCount}/${readReceiptDetails.totalCount}`
+                                      : 'Отправлено'}
+                                </span>
+                              </button>
+                            )}
                           </div>
+                          </div>
+                          {shouldShowGroupReadDetails && (
+                            <div className="absolute right-0 top-full z-20 mt-2 w-72 rounded-3xl border border-white/10 bg-[#202127] p-4 text-left shadow-2xl shadow-black/50">
+                              <div className="text-sm font-semibold text-zinc-100">Статус прочтения</div>
+                              <div className="mt-3 grid gap-3 text-xs">
+                                <div>
+                                  <div className="mb-2 text-zinc-500">Прочитали</div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {readReceiptDetails.readParticipants.length > 0 ? readReceiptDetails.readParticipants.map((participant) => (
+                                      <span key={getParticipantDisplayName(participant)} className="rounded-full bg-emerald-400/10 px-2 py-1 text-emerald-200">
+                                        {getParticipantDisplayName(participant)}
+                                      </span>
+                                    )) : <span className="text-zinc-500">Пока никто</span>}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="mb-2 text-zinc-500">Ещё не прочитали</div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {readReceiptDetails.unreadParticipants.length > 0 ? readReceiptDetails.unreadParticipants.map((participant) => (
+                                      <span key={getParticipantDisplayName(participant)} className="rounded-full bg-white/[0.06] px-2 py-1 text-zinc-300">
+                                        {getParticipantDisplayName(participant)}
+                                      </span>
+                                    )) : <span className="text-zinc-500">Все прочитали</span>}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -2234,7 +2936,7 @@ export function MessengerPage() {
                   <div className="relative">
                     <button
                       onClick={() => setIsAttachmentMenuOpen((previousValue) => !previousValue)}
-                      disabled={isSending || isUploadingFile || !selectedChat}
+                      disabled={isSending || isUploadingFile || !selectedChat || !isSelectedChatWritable}
                       className="flex h-[52px] w-[52px] items-center justify-center rounded-2xl border border-white/10 bg-white/[0.05] text-zinc-300 transition hover:border-violet-300/25 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                       title="Прикрепить"
                     >
@@ -2285,14 +2987,15 @@ export function MessengerPage() {
                       textarea.style.height = '0px';
                       textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`;
                     }}
-                    placeholder="Напишите сообщение…"
+                    placeholder={isSelectedChatWritable ? 'Напишите сообщение…' : 'Вы исключены из группы'}
                     rows={1}
-                    className="max-h-40 min-h-[24px] flex-1 resize-none bg-transparent py-2 text-sm leading-6 text-zinc-100 outline-none placeholder:text-zinc-600"
+                    disabled={!isSelectedChatWritable}
+                    className="max-h-40 min-h-[24px] flex-1 resize-none bg-transparent py-2 text-sm leading-6 text-zinc-100 outline-none placeholder:text-zinc-600 disabled:cursor-not-allowed disabled:text-zinc-600"
                   />
 
                   <button
                     onClick={() => void handleSendCurrentMessage()}
-                    disabled={isSending || !messageText.trim()}
+                    disabled={isSending || !messageText.trim() || !isSelectedChatWritable}
                     className="flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-lg shadow-violet-950/40 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
                     title="Отправить"
                   >

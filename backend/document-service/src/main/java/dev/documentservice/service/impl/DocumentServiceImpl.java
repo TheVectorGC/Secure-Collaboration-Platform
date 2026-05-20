@@ -12,6 +12,7 @@ import dev.documentservice.model.dto.request.SignDocumentRequestDto;
 import dev.documentservice.model.dto.response.DocumentResponseDto;
 import dev.documentservice.model.dto.response.DocumentSignatureResponseDto;
 import dev.documentservice.model.dto.response.InternalChatParticipantResponseDto;
+import dev.documentservice.model.dto.response.InternalChatParticipantVisibilityWindowResponseDto;
 import dev.documentservice.model.dto.response.InternalChatResponseDto;
 import dev.documentservice.model.entity.DeviceDocumentSigningKeyEntity;
 import dev.documentservice.model.entity.DocumentEntity;
@@ -52,7 +53,7 @@ public class DocumentServiceImpl implements dev.documentservice.service.Document
     @Override
     @Transactional
     public DocumentResponseDto createDocument(UUID currentAccountId, CreateDocumentRequestDto requestDto) {
-        messagingAccessClient.validateCurrentAccountCanAccessChat(requestDto.chatId());
+        validateActiveDocumentChatAccess(requestDto.chatId(), currentAccountId);
         OffsetDateTime now = OffsetDateTime.now();
         DocumentEntity documentEntity = DocumentEntity.builder()
                 .id(UUID.randomUUID())
@@ -78,24 +79,32 @@ public class DocumentServiceImpl implements dev.documentservice.service.Document
     @Transactional(readOnly = true)
     public DocumentResponseDto getDocument(UUID currentAccountId, UUID documentId) {
         DocumentEntity documentEntity = getDocumentEntity(documentId);
-        validateDocumentChatAccess(currentAccountId, documentEntity);
+        InternalChatResponseDto chatResponseDto = messagingAccessClient.validateCurrentAccountCanAccessChat(documentEntity.getChatId());
+
+        if (!isDocumentVisibleToAccount(documentEntity, chatResponseDto, currentAccountId)) {
+            throw new DocumentAccessDeniedException("Current account cannot access this document because it is outside visible group history.");
+        }
+
         return toResponseDto(documentEntity, documentSignatureRepository.findByDocumentId(documentId));
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<DocumentResponseDto> getCurrentAccountDocuments(UUID currentAccountId) {
-        Map<UUID, InternalChatResponseDto> accessibleChatsById = messagingAccessClient.getCurrentAccountChats()
-                .stream()
-                .collect(Collectors.toMap(InternalChatResponseDto::chatId, Function.identity()));
+        List<InternalChatResponseDto> currentChats = messagingAccessClient.getCurrentAccountChats();
+        List<UUID> accessibleChatIds = currentChats.stream()
+                .map(InternalChatResponseDto::chatId)
+                .toList();
 
-        if (accessibleChatsById.isEmpty()) {
+        if (accessibleChatIds.isEmpty()) {
             return List.of();
         }
 
-        List<DocumentEntity> documents = documentRepository.findByChatIdInOrderByCreatedAtDesc(accessibleChatsById.keySet())
+        Map<UUID, InternalChatResponseDto> chatsById = currentChats.stream()
+                .collect(Collectors.toMap(InternalChatResponseDto::chatId, Function.identity(), (left, right) -> left));
+        List<DocumentEntity> documents = documentRepository.findByChatIdInOrderByCreatedAtDesc(accessibleChatIds)
                 .stream()
-                .filter(documentEntity -> isDocumentVisibleToCurrentAccount(currentAccountId, accessibleChatsById.get(documentEntity.getChatId()), documentEntity))
+                .filter(documentEntity -> isDocumentVisibleToAccount(documentEntity, chatsById.get(documentEntity.getChatId()), currentAccountId))
                 .toList();
         Map<UUID, List<DocumentSignatureEntity>> signaturesByDocumentId = loadSignaturesByDocumentId(documents.stream().map(DocumentEntity::getId).toList());
 
@@ -110,7 +119,7 @@ public class DocumentServiceImpl implements dev.documentservice.service.Document
         InternalChatResponseDto chatResponseDto = messagingAccessClient.validateCurrentAccountCanAccessChat(chatId);
         List<DocumentEntity> documents = documentRepository.findByChatIdOrderByCreatedAtDesc(chatId)
                 .stream()
-                .filter(documentEntity -> isDocumentVisibleToCurrentAccount(currentAccountId, chatResponseDto, documentEntity))
+                .filter(documentEntity -> isDocumentVisibleToAccount(documentEntity, chatResponseDto, currentAccountId))
                 .toList();
         Map<UUID, List<DocumentSignatureEntity>> signaturesByDocumentId = loadSignaturesByDocumentId(documents.stream().map(DocumentEntity::getId).toList());
 
@@ -123,7 +132,7 @@ public class DocumentServiceImpl implements dev.documentservice.service.Document
     @Transactional
     public DocumentResponseDto signDocument(UUID currentAccountId, UUID documentId, SignDocumentRequestDto requestDto) {
         DocumentEntity documentEntity = getDocumentEntity(documentId);
-        validateDocumentChatAccess(currentAccountId, documentEntity);
+        validateActiveDocumentChatAccess(documentEntity.getChatId(), currentAccountId);
 
         if (documentEntity.getStatus() == DocumentStatus.REJECTED) {
             throw new DocumentRejectedException("Rejected document cannot be signed.");
@@ -171,7 +180,7 @@ public class DocumentServiceImpl implements dev.documentservice.service.Document
     @Transactional
     public DocumentResponseDto rejectDocument(UUID currentAccountId, UUID documentId) {
         DocumentEntity documentEntity = getDocumentEntity(documentId);
-        validateDocumentChatAccess(currentAccountId, documentEntity);
+        validateActiveDocumentChatAccess(documentEntity.getChatId(), currentAccountId);
 
         if (documentSignatureRepository.existsByDocumentIdAndSignerAccountId(documentId, currentAccountId)) {
             throw new DocumentValidationException("Signed document cannot be rejected by the same account.");
@@ -185,38 +194,63 @@ public class DocumentServiceImpl implements dev.documentservice.service.Document
         return toResponseDto(savedDocumentEntity, documentSignatureRepository.findByDocumentId(documentId));
     }
 
-    private void validateDocumentChatAccess(UUID currentAccountId, DocumentEntity documentEntity) {
-        InternalChatResponseDto chatResponseDto = messagingAccessClient.validateCurrentAccountCanAccessChat(documentEntity.getChatId());
+    private void validateActiveDocumentChatAccess(UUID chatId, UUID currentAccountId) {
+        InternalChatResponseDto chatResponseDto = messagingAccessClient.validateCurrentAccountCanAccessChat(chatId);
 
-        if (!isDocumentVisibleToCurrentAccount(currentAccountId, chatResponseDto, documentEntity)) {
-            throw new DocumentAccessDeniedException("Current account does not have access to this document history.");
+        boolean activeParticipantExists = chatResponseDto.participants() != null
+                && chatResponseDto.participants().stream()
+                .anyMatch(participant -> currentAccountId.equals(participant.accountId()) && "ACTIVE".equals(participant.status()));
+
+        if (!activeParticipantExists) {
+            throw new DocumentAccessDeniedException("Only active chat participants can change documents.");
         }
     }
 
-    private boolean isDocumentVisibleToCurrentAccount(UUID currentAccountId, InternalChatResponseDto chatResponseDto, DocumentEntity documentEntity) {
+    private boolean isDocumentVisibleToAccount(DocumentEntity documentEntity, InternalChatResponseDto chatResponseDto, UUID currentAccountId) {
         InternalChatParticipantResponseDto currentParticipant = findCurrentParticipant(chatResponseDto, currentAccountId);
-
-        if (currentParticipant == null || !"ACTIVE".equals(currentParticipant.status())) {
-            return false;
-        }
-
-        if (currentParticipant.historyVisibleFromCreatedAt() != null && documentEntity.getCreatedAt().isBefore(currentParticipant.historyVisibleFromCreatedAt())) {
-            return false;
-        }
-
-        return currentParticipant.removedAt() == null || !documentEntity.getCreatedAt().isAfter(currentParticipant.removedAt());
+        return isVisibleAt(currentParticipant, documentEntity.getCreatedAt());
     }
 
     private InternalChatParticipantResponseDto findCurrentParticipant(InternalChatResponseDto chatResponseDto, UUID currentAccountId) {
-        if (chatResponseDto == null || chatResponseDto.participants() == null) {
-            return null;
-        }
-
-        return chatResponseDto.participants()
-                .stream()
+        return chatResponseDto == null || chatResponseDto.participants() == null
+                ? null
+                : chatResponseDto.participants().stream()
                 .filter(participant -> currentAccountId.equals(participant.accountId()))
                 .findFirst()
                 .orElse(null);
+    }
+
+    private boolean isVisibleAt(InternalChatParticipantResponseDto participant, OffsetDateTime createdAt) {
+        if (participant == null) {
+            return false;
+        }
+
+        if (participant.visibilityWindows() != null && !participant.visibilityWindows().isEmpty()) {
+            return participant.visibilityWindows().stream()
+                    .anyMatch(visibilityWindow -> isInsideWindow(createdAt, visibilityWindow));
+        }
+
+        if (participant.historyVisibleFromCreatedAt() != null && createdAt.isBefore(participant.historyVisibleFromCreatedAt())) {
+            return false;
+        }
+
+        if (participant.removedAt() != null && createdAt.isAfter(participant.removedAt())) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private boolean isInsideWindow(OffsetDateTime createdAt, InternalChatParticipantVisibilityWindowResponseDto visibilityWindow) {
+        if (visibilityWindow.visibleFromCreatedAt() != null && createdAt.isBefore(visibilityWindow.visibleFromCreatedAt())) {
+            return false;
+        }
+
+        if (visibilityWindow.visibleUntilCreatedAt() != null && createdAt.isAfter(visibilityWindow.visibleUntilCreatedAt())) {
+            return false;
+        }
+
+        return true;
     }
 
     private DocumentEntity getDocumentEntity(UUID documentId) {

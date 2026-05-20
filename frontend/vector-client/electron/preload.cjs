@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('vectorCrypto', {
   encryptGroupMessage: (request) => ipcRenderer.invoke('vectorCrypto:encryptGroupMessage', request),
   decryptGroupMessage: (request) => ipcRenderer.invoke('vectorCrypto:decryptGroupMessage', request),
   importGroupKey: (request) => ipcRenderer.invoke('vectorCrypto:importGroupKey', request),
+  exportGroupKeyPackagesForChat: (request) => ipcRenderer.invoke('vectorCrypto:exportGroupKeyPackagesForChat', request),
   encryptLocalMessage: (request) => ipcRenderer.invoke('vectorCrypto:encryptLocalMessage', request),
   decryptMessage: (request) => ipcRenderer.invoke('vectorCrypto:decryptMessage', request),
   exportEncryptedKeyBackup: (request) => ipcRenderer.invoke('vectorCrypto:exportEncryptedKeyBackup', request),

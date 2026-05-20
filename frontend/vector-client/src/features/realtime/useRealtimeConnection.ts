@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react';
-import { getChat } from '../chats/api/chatsApi';
 import { serviceUrls } from '../../shared/config/serviceUrls';
 import type {
   MessageCreatedPayload,
@@ -22,7 +21,15 @@ function isMessageCreatedPayload(payload: unknown): payload is MessageCreatedPay
   return isObjectPayload(payload)
     && typeof payload.chatId === 'string'
     && typeof payload.messageId === 'string'
-    && Array.isArray(payload.devicePayloads);
+    && typeof payload.senderAccountId === 'string'
+    && typeof payload.senderDeviceId === 'string'
+    && typeof payload.messageType === 'string'
+    && typeof payload.encryptionType === 'string'
+    && (
+      typeof payload.encryptedPayload === 'string'
+      || payload.encryptedPayload === null
+      || Array.isArray(payload.devicePayloads)
+    );
 }
 
 function isMessageDeliveredPayload(payload: unknown): payload is MessageDeliveredPayload {
@@ -63,30 +70,42 @@ export function useRealtimeConnection() {
   const accessToken = useAuthStore((state) => state.accessToken);
   const accessTokenExpiresAt = useAuthStore((state) => state.accessTokenExpiresAt);
   const currentDeviceId = useAuthStore((state) => state.deviceId);
-  const currentAccountId = useAuthStore((state) => state.profile?.accountId);
   const upsertMessage = useMessengerStore((state) => state.upsertMessage);
-  const upsertChat = useMessengerStore((state) => state.upsertChat);
   const touchChat = useMessengerStore((state) => state.touchChat);
   const applyMessageDelivered = useMessengerStore((state) => state.applyMessageDelivered);
   const applyMessageRead = useMessengerStore((state) => state.applyMessageRead);
   const setStatus = useRealtimeStore((state) => state.setStatus);
   const setLastError = useRealtimeStore((state) => state.setLastError);
   const setTyping = useRealtimeStore((state) => state.setTyping);
-  const clearExpiredTyping = useRealtimeStore((state) => state.clearExpiredTyping);
   const setTypingSender = useRealtimeStore((state) => state.setTypingSender);
   const reconnectAttemptRef = useRef(0);
   const reconnectTimeoutRef = useRef<number | null>(null);
   const refreshTimeoutRef = useRef<number | null>(null);
+  const webSocketRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    const intervalId = window.setInterval(clearExpiredTyping, 1000);
-    return () => window.clearInterval(intervalId);
-  }, [clearExpiredTyping]);
+    setTypingSender((request) => {
+      const webSocket = webSocketRef.current;
+
+      if (!webSocket || webSocket.readyState !== WebSocket.OPEN) {
+        return;
+      }
+
+      webSocket.send(JSON.stringify({
+        type: 'TYPING',
+        chatId: request.chatId,
+        recipientAccountIds: request.recipientAccountIds,
+        isTyping: request.isTyping,
+      }));
+    });
+
+    return () => setTypingSender(null);
+  }, [setTypingSender]);
 
   useEffect(() => {
     if (!accessToken) {
       setStatus('disconnected');
-      setTypingSender(null);
+      webSocketRef.current = null;
       return;
     }
 
@@ -105,6 +124,7 @@ export function useRealtimeConnection() {
       if (realtimeEvent.type === 'MESSAGE_CREATED' && isMessageCreatedPayload(realtimeEvent.payload)) {
         const payload = realtimeEvent.payload;
         const devicePayloads = payload.devicePayloads ?? [];
+        const currentDevicePayload = devicePayloads.find((devicePayload) => devicePayload.targetDeviceId === currentDeviceId);
         const message: MessageResponseDto = {
           messageId: payload.messageId,
           chatId: payload.chatId,
@@ -113,30 +133,14 @@ export function useRealtimeConnection() {
           clientMessageId: null,
           messageType: payload.messageType,
           encryptionType: payload.encryptionType,
-          encryptedPayload: payload.encryptedPayload ?? null,
+          encryptedPayload: payload.encryptedPayload ?? currentDevicePayload?.encryptedPayload ?? null,
           devicePayloads,
           createdAt: payload.createdAt,
           deliveryStates: [],
         };
 
-        const knownChat = useMessengerStore.getState().chats.some((chat) => chat.chatId === payload.chatId);
-
-        if (!knownChat) {
-          getChat(payload.chatId)
-            .then((chat) => {
-              upsertChat(chat);
-              touchChat(payload.chatId, payload.createdAt, payload.messageId);
-            })
-            .catch((error) => {
-              console.error('Failed to load realtime chat.', error);
-            });
-        }
-        else {
-          touchChat(payload.chatId, payload.createdAt, payload.messageId);
-        }
-
-        setTyping(payload.chatId, payload.senderAccountId, '', false);
         upsertMessage(message);
+        touchChat(payload.chatId, payload.createdAt, payload.messageId);
         return;
       }
 
@@ -154,10 +158,7 @@ export function useRealtimeConnection() {
 
       if (realtimeEvent.type === 'TYPING' && isTypingPayload(realtimeEvent.payload)) {
         const payload = realtimeEvent.payload;
-
-        if (payload.typingAccountId !== currentAccountId) {
-          setTyping(payload.chatId, payload.typingAccountId, payload.username, payload.isTyping);
-        }
+        setTyping(payload.chatId, payload.typingAccountId, payload.username, payload.isTyping);
       }
     }
 
@@ -167,23 +168,12 @@ export function useRealtimeConnection() {
 
       const webSocketUrl = `${serviceUrls.realtimeWebSocketUrl}?accessToken=${encodeURIComponent(activeAccessToken)}`;
       webSocket = new WebSocket(webSocketUrl);
+      webSocketRef.current = webSocket;
 
       webSocket.onopen = () => {
         reconnectAttemptRef.current = 0;
         setStatus('connected');
         setLastError(null);
-        setTypingSender((request) => {
-          if (webSocket?.readyState !== WebSocket.OPEN) {
-            return;
-          }
-
-          webSocket.send(JSON.stringify({
-            type: 'TYPING',
-            chatId: request.chatId,
-            recipientAccountIds: request.recipientAccountIds,
-            isTyping: request.isTyping,
-          }));
-        });
         webSocket?.send('ping');
       };
 
@@ -207,7 +197,9 @@ export function useRealtimeConnection() {
       };
 
       webSocket.onclose = () => {
-        setTypingSender(null);
+        if (webSocketRef.current === webSocket) {
+          webSocketRef.current = null;
+        }
 
         if (isClosedByEffect) {
           setStatus('disconnected');
@@ -239,7 +231,6 @@ export function useRealtimeConnection() {
 
     return () => {
       isClosedByEffect = true;
-      setTypingSender(null);
       clearReconnectTimeout();
 
       if (refreshTimeoutRef.current !== null) {
@@ -250,20 +241,21 @@ export function useRealtimeConnection() {
       if (webSocket && webSocket.readyState !== WebSocket.CLOSED) {
         webSocket.close();
       }
+
+      if (webSocketRef.current === webSocket) {
+        webSocketRef.current = null;
+      }
     };
   }, [
     accessToken,
     accessTokenExpiresAt,
+    currentDeviceId,
     applyMessageDelivered,
     applyMessageRead,
-    currentAccountId,
-    currentDeviceId,
     setLastError,
     setStatus,
     setTyping,
-    setTypingSender,
     touchChat,
-    upsertChat,
     upsertMessage,
   ]);
 }

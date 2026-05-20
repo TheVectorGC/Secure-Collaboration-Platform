@@ -495,6 +495,38 @@ async function decryptGroupMessage(request) {
   }
 }
 
+
+async function exportGroupKeyPackagesForChat(request) {
+  validateGroupCryptoRequest(request, false);
+
+  const database = encryptedDatabase.openDatabase();
+
+  try {
+    const rows = database
+      .prepare(`
+        SELECT epoch, sender_device_id, key_base64
+        FROM group_keys
+        WHERE account_id = ? AND chat_id = ?
+        ORDER BY epoch ASC, sender_device_id ASC
+      `)
+      .all(request.accountId, request.chatId);
+
+    return {
+      chatId: request.chatId,
+      packages: rows.map((row) => buildGroupKeyDistributionPackage(
+        request.accountId,
+        request.chatId,
+        Number(row.epoch),
+        row.sender_device_id,
+        Buffer.from(row.key_base64, 'base64')
+      )),
+    };
+  }
+  finally {
+    database.close();
+  }
+}
+
 async function importGroupKey(request) {
   validateGroupCryptoRequest(request, false);
 
@@ -544,5 +576,6 @@ module.exports = {
   decryptMessage,
   encryptGroupMessage,
   decryptGroupMessage,
+  exportGroupKeyPackagesForChat,
   importGroupKey,
 };

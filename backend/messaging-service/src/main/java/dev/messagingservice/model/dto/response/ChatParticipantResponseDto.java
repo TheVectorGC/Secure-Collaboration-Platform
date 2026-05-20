@@ -3,6 +3,7 @@ package dev.messagingservice.model.dto.response;
 import dev.messagingservice.model.enumeration.ChatParticipantRole;
 import dev.messagingservice.model.enumeration.ChatParticipantStatus;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 public record ChatParticipantResponseDto(
@@ -12,5 +13,6 @@ public record ChatParticipantResponseDto(
     UUID historyVisibleFromMessageId,
     OffsetDateTime historyVisibleFromCreatedAt,
     OffsetDateTime joinedAt,
-    OffsetDateTime removedAt
+    OffsetDateTime removedAt,
+    List<ChatParticipantVisibilityWindowResponseDto> visibilityWindows
 ) {}

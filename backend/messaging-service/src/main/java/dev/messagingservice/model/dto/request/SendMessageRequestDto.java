@@ -33,6 +33,6 @@ public record SendMessageRequestDto(
 
     @Valid
     @Size(max = 5000, message = "Device payload list is too large.")
-    @Schema(description = "Encrypted payloads, one per target device. Used for SIGNAL encryption and future key distribution messages.")
+    @Schema(description = "Encrypted payloads, one per target device. Used for SIGNAL encryption and group key distribution messages.")
     List<DeviceMessagePayloadRequestDto> devicePayloads
 ) {}

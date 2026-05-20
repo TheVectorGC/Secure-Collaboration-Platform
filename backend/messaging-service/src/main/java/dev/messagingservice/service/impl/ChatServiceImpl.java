@@ -7,8 +7,10 @@ import dev.messagingservice.model.dto.request.CreateDirectChatRequestDto;
 import dev.messagingservice.model.dto.request.CreateGroupChatRequestDto;
 import dev.messagingservice.model.dto.response.ChatParticipantResponseDto;
 import dev.messagingservice.model.dto.response.ChatResponseDto;
+import dev.messagingservice.model.dto.response.ChatParticipantVisibilityWindowResponseDto;
 import dev.messagingservice.model.entity.ChatEntity;
 import dev.messagingservice.model.entity.ChatParticipantEntity;
+import dev.messagingservice.model.entity.ChatParticipantVisibilityWindowEntity;
 import dev.messagingservice.model.entity.MessageEntity;
 import dev.messagingservice.model.enumeration.ChatParticipantRole;
 import dev.messagingservice.model.enumeration.ChatParticipantStatus;
@@ -16,6 +18,7 @@ import dev.messagingservice.model.enumeration.ChatType;
 import dev.messagingservice.model.enumeration.GroupHistoryAccessMode;
 import dev.messagingservice.repository.ChatParticipantRepository;
 import dev.messagingservice.repository.ChatRepository;
+import dev.messagingservice.repository.ChatParticipantVisibilityWindowRepository;
 import dev.messagingservice.repository.MessageRepository;
 import dev.messagingservice.service.ChatService;
 import java.time.OffsetDateTime;
@@ -35,6 +38,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class ChatServiceImpl implements ChatService {
     private final ChatRepository chatRepository;
     private final ChatParticipantRepository chatParticipantRepository;
+    private final ChatParticipantVisibilityWindowRepository chatParticipantVisibilityWindowRepository;
     private final MessageRepository messageRepository;
 
     @Override
@@ -80,6 +84,7 @@ public class ChatServiceImpl implements ChatService {
         );
 
         if (insertedRows > 0) {
+            openVisibilityWindow(chatEntity.getId(), currentAccountId, null, now);
             log.info("Self chat created. Chat ID: {}.", chatEntity.getId());
         }
 
@@ -119,6 +124,12 @@ public class ChatServiceImpl implements ChatService {
             .toList();
 
         chatParticipantRepository.saveAll(participantEntities);
+        participantEntities.forEach(participantEntity -> openVisibilityWindow(
+            participantEntity.getChatId(),
+            participantEntity.getAccountId(),
+            participantEntity.getHistoryVisibleFromCreatedAt(),
+            now
+        ));
         log.info("Group chat created. Chat ID: {}, participants: {}.", savedChatEntity.getId(), participantEntities.size());
         return mapToChatResponseDto(savedChatEntity, participantEntities);
     }
@@ -141,6 +152,7 @@ public class ChatServiceImpl implements ChatService {
             ));
 
         chatParticipantRepository.save(participantEntity);
+        updateVisibilityWindows(chatId, requestDto, historyBoundary, now);
         rotateGroupKeyEpoch(chatEntity, now);
         return mapToChatResponseDto(chatEntity, chatParticipantRepository.findByChatId(chatId));
     }
@@ -161,6 +173,7 @@ public class ChatServiceImpl implements ChatService {
         participantEntity.setStatus(ChatParticipantStatus.REMOVED);
         participantEntity.setRemovedAt(now);
         chatParticipantRepository.save(participantEntity);
+        closeOpenVisibilityWindow(participantEntity, now);
         rotateGroupKeyEpoch(chatEntity, now);
         return mapToChatResponseDto(chatEntity, chatParticipantRepository.findByChatId(chatId));
     }
@@ -168,10 +181,7 @@ public class ChatServiceImpl implements ChatService {
     @Override
     @Transactional(readOnly = true)
     public List<ChatResponseDto> getCurrentAccountChats(UUID currentAccountId) {
-        List<ChatParticipantEntity> currentParticipants = chatParticipantRepository.findByAccountIdAndStatus(
-            currentAccountId,
-            ChatParticipantStatus.ACTIVE
-        );
+        List<ChatParticipantEntity> currentParticipants = chatParticipantRepository.findByAccountId(currentAccountId);
 
         return currentParticipants.stream()
             .map(ChatParticipantEntity::getChatId)
@@ -228,6 +238,8 @@ public class ChatServiceImpl implements ChatService {
         );
 
         if (insertedRows > 0) {
+            openVisibilityWindow(chatEntity.getId(), currentAccountId, null, now);
+            openVisibilityWindow(chatEntity.getId(), recipientAccountId, null, now);
             log.info("Direct chat created. Chat ID: {}.", chatEntity.getId());
         }
 
@@ -317,9 +329,61 @@ public class ChatServiceImpl implements ChatService {
         ChatParticipantEntity participantEntity = chatParticipantRepository.findByChatIdAndAccountId(chatId, accountId)
             .orElseThrow(() -> new ChatAccessDeniedException("Current account does not have access to this chat."));
 
-        if (participantEntity.getStatus() != ChatParticipantStatus.ACTIVE) {
+        if (participantEntity.getStatus() == ChatParticipantStatus.LEFT) {
             throw new ChatAccessDeniedException("Current account does not have access to this chat.");
         }
+    }
+
+
+    private void updateVisibilityWindows(
+        UUID chatId,
+        AddGroupParticipantRequestDto requestDto,
+        HistoryBoundary historyBoundary,
+        OffsetDateTime now
+    ) {
+        if (requestDto.historyAccessMode() == GroupHistoryAccessMode.FULL_HISTORY
+                || requestDto.historyAccessMode() == GroupHistoryAccessMode.FROM_MESSAGE) {
+            chatParticipantVisibilityWindowRepository.deleteByChatIdAndAccountId(chatId, requestDto.accountId());
+        }
+
+        openVisibilityWindow(chatId, requestDto.accountId(), historyBoundary.historyVisibleFromCreatedAt(), now);
+    }
+
+    private void openVisibilityWindow(UUID chatId, UUID accountId, OffsetDateTime visibleFromCreatedAt, OffsetDateTime now) {
+        boolean openWindowExists = chatParticipantVisibilityWindowRepository
+            .findFirstByChatIdAndAccountIdAndVisibleUntilCreatedAtIsNullOrderByCreatedAtDesc(chatId, accountId)
+            .isPresent();
+
+        if (openWindowExists) {
+            return;
+        }
+
+        ChatParticipantVisibilityWindowEntity visibilityWindowEntity = ChatParticipantVisibilityWindowEntity.builder()
+            .chatId(chatId)
+            .accountId(accountId)
+            .visibleFromCreatedAt(visibleFromCreatedAt)
+            .visibleUntilCreatedAt(null)
+            .createdAt(now)
+            .build();
+
+        chatParticipantVisibilityWindowRepository.save(visibilityWindowEntity);
+    }
+
+    private void closeOpenVisibilityWindow(ChatParticipantEntity participantEntity, OffsetDateTime now) {
+        ChatParticipantVisibilityWindowEntity visibilityWindowEntity = chatParticipantVisibilityWindowRepository
+            .findFirstByChatIdAndAccountIdAndVisibleUntilCreatedAtIsNullOrderByCreatedAtDesc(
+                participantEntity.getChatId(),
+                participantEntity.getAccountId()
+            )
+            .orElseGet(() -> ChatParticipantVisibilityWindowEntity.builder()
+                .chatId(participantEntity.getChatId())
+                .accountId(participantEntity.getAccountId())
+                .visibleFromCreatedAt(participantEntity.getHistoryVisibleFromCreatedAt())
+                .createdAt(participantEntity.getJoinedAt())
+                .build());
+
+        visibilityWindowEntity.setVisibleUntilCreatedAt(now);
+        chatParticipantVisibilityWindowRepository.save(visibilityWindowEntity);
     }
 
     private List<ChatParticipantEntity> loadActiveParticipants(UUID chatId) {
@@ -355,6 +419,15 @@ public class ChatServiceImpl implements ChatService {
     }
 
     private ChatParticipantResponseDto mapToParticipantResponseDto(ChatParticipantEntity participantEntity) {
+        List<ChatParticipantVisibilityWindowResponseDto> visibilityWindows = chatParticipantVisibilityWindowRepository
+            .findByChatIdAndAccountIdOrderByCreatedAtAsc(participantEntity.getChatId(), participantEntity.getAccountId())
+            .stream()
+            .map(visibilityWindowEntity -> new ChatParticipantVisibilityWindowResponseDto(
+                visibilityWindowEntity.getVisibleFromCreatedAt(),
+                visibilityWindowEntity.getVisibleUntilCreatedAt()
+            ))
+            .toList();
+
         return new ChatParticipantResponseDto(
             participantEntity.getAccountId(),
             participantEntity.getRole(),
@@ -362,7 +435,8 @@ public class ChatServiceImpl implements ChatService {
             participantEntity.getHistoryVisibleFromMessageId(),
             participantEntity.getHistoryVisibleFromCreatedAt(),
             participantEntity.getJoinedAt(),
-            participantEntity.getRemovedAt()
+            participantEntity.getRemovedAt(),
+            visibilityWindows
         );
     }
 

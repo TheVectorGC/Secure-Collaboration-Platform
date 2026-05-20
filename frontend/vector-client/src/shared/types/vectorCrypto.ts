@@ -104,6 +104,12 @@ export type DecryptMessageResponse = {
   fromCache?: boolean;
 };
 
+export type DecryptGroupMessageResponse = {
+  plainText: string | null;
+  missingGroupKey?: boolean;
+  fromCache?: boolean;
+};
+
 export type ClearLocalVaultResponse = {
   cleared: boolean;
 };
@@ -169,6 +175,16 @@ export type ImportGroupKeyResponse = {
   epoch: number;
 };
 
+export type ExportGroupKeyPackagesForChatRequest = {
+  accountId: string;
+  chatId: string;
+};
+
+export type ExportGroupKeyPackagesForChatResponse = {
+  chatId: string;
+  packages: string[];
+};
+
 
 export type ExportEncryptedKeyBackupRequest = {
   accountId: string;
@@ -222,8 +238,9 @@ export type VectorCryptoApi = {
   encryptMessage: (request: EncryptMessageRequest) => Promise<EncryptMessageResponse>;
   encryptLocalMessage: (request: EncryptLocalMessageRequest) => Promise<EncryptMessageResponse>;
   encryptGroupMessage: (request: EncryptGroupMessageRequest) => Promise<EncryptGroupMessageResponse>;
-  decryptGroupMessage: (request: DecryptGroupMessageRequest) => Promise<DecryptMessageResponse>;
+  decryptGroupMessage: (request: DecryptGroupMessageRequest) => Promise<DecryptGroupMessageResponse>;
   importGroupKey: (request: ImportGroupKeyRequest) => Promise<ImportGroupKeyResponse>;
+  exportGroupKeyPackagesForChat: (request: ExportGroupKeyPackagesForChatRequest) => Promise<ExportGroupKeyPackagesForChatResponse>;
   decryptMessage: (request: DecryptMessageRequest) => Promise<DecryptMessageResponse>;
   exportEncryptedKeyBackup: (request: ExportEncryptedKeyBackupRequest) => Promise<ExportEncryptedKeyBackupResponse>;
   importEncryptedKeyBackup: (request: ImportEncryptedKeyBackupRequest) => Promise<ImportEncryptedKeyBackupResponse>;

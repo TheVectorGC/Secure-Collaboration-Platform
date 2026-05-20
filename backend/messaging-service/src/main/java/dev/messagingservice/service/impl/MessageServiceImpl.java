@@ -13,6 +13,7 @@ import dev.messagingservice.model.dto.response.MessageResponseDto;
 import dev.messagingservice.model.entity.ChatEntity;
 import dev.messagingservice.model.entity.ChatParticipantEntity;
 import dev.messagingservice.model.entity.MessageDeliveryStateEntity;
+import dev.messagingservice.model.entity.ChatParticipantVisibilityWindowEntity;
 import dev.messagingservice.model.entity.MessageDevicePayloadEntity;
 import dev.messagingservice.model.entity.MessageEntity;
 import dev.messagingservice.model.enumeration.ChatParticipantStatus;
@@ -20,6 +21,7 @@ import dev.messagingservice.model.enumeration.MessageDeliveryStatus;
 import dev.messagingservice.model.enumeration.MessageEncryptionType;
 import dev.messagingservice.repository.ChatParticipantRepository;
 import dev.messagingservice.repository.ChatRepository;
+import dev.messagingservice.repository.ChatParticipantVisibilityWindowRepository;
 import dev.messagingservice.repository.MessageDeliveryStateRepository;
 import dev.messagingservice.repository.MessageDevicePayloadRepository;
 import dev.messagingservice.repository.MessageRepository;
@@ -27,7 +29,6 @@ import dev.messagingservice.service.MessageService;
 import dev.messagingservice.service.MessagingEventFactory;
 import dev.messagingservice.service.MessagingEventPublisher;
 import java.time.OffsetDateTime;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -46,6 +47,7 @@ import org.springframework.util.StringUtils;
 public class MessageServiceImpl implements MessageService {
     private final ChatRepository chatRepository;
     private final ChatParticipantRepository chatParticipantRepository;
+    private final ChatParticipantVisibilityWindowRepository chatParticipantVisibilityWindowRepository;
     private final MessageRepository messageRepository;
     private final MessageDeliveryStateRepository messageDeliveryStateRepository;
     private final MessageDevicePayloadRepository messageDevicePayloadRepository;
@@ -112,10 +114,11 @@ public class MessageServiceImpl implements MessageService {
     public List<MessageResponseDto> getChatMessages(UUID currentAccountId, UUID chatId) {
         ChatParticipantEntity currentParticipant = getKnownParticipant(chatId, currentAccountId);
 
-        List<MessageEntity> messageEntities = messageRepository.findTop50ByChatIdOrderByCreatedAtDesc(chatId).stream()
+        List<MessageEntity> visibleMessages = messageRepository.findByChatIdOrderByCreatedAtAsc(chatId).stream()
             .filter(messageEntity -> isVisibleToParticipant(messageEntity, currentParticipant))
-            .sorted(Comparator.comparing(MessageEntity::getCreatedAt))
             .toList();
+        int firstMessageIndex = Math.max(visibleMessages.size() - 50, 0);
+        List<MessageEntity> messageEntities = visibleMessages.subList(firstMessageIndex, visibleMessages.size());
         List<UUID> messageIds = messageEntities.stream()
             .map(MessageEntity::getId)
             .toList();
@@ -198,7 +201,7 @@ public class MessageServiceImpl implements MessageService {
         ChatParticipantEntity participantEntity = chatParticipantRepository.findByChatIdAndAccountId(chatId, accountId)
             .orElseThrow(() -> new ChatAccessDeniedException("Current account does not have access to this chat."));
 
-        if (participantEntity.getStatus() != ChatParticipantStatus.ACTIVE) {
+        if (participantEntity.getStatus() == ChatParticipantStatus.LEFT) {
             throw new ChatAccessDeniedException("Current account does not have access to this chat.");
         }
 
@@ -206,12 +209,39 @@ public class MessageServiceImpl implements MessageService {
     }
 
     private boolean isVisibleToParticipant(MessageEntity messageEntity, ChatParticipantEntity participantEntity) {
+        List<ChatParticipantVisibilityWindowEntity> visibilityWindowEntities = chatParticipantVisibilityWindowRepository
+            .findByChatIdAndAccountIdOrderByCreatedAtAsc(participantEntity.getChatId(), participantEntity.getAccountId());
+
+        if (!visibilityWindowEntities.isEmpty()) {
+            return visibilityWindowEntities.stream()
+                .anyMatch(visibilityWindowEntity -> isMessageInsideVisibilityWindow(messageEntity, visibilityWindowEntity));
+        }
+
         if (participantEntity.getHistoryVisibleFromCreatedAt() != null
                 && messageEntity.getCreatedAt().isBefore(participantEntity.getHistoryVisibleFromCreatedAt())) {
             return false;
         }
 
         if (participantEntity.getRemovedAt() != null && messageEntity.getCreatedAt().isAfter(participantEntity.getRemovedAt())) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private boolean isMessageInsideVisibilityWindow(
+        MessageEntity messageEntity,
+        ChatParticipantVisibilityWindowEntity visibilityWindowEntity
+    ) {
+        OffsetDateTime messageCreatedAt = messageEntity.getCreatedAt();
+        OffsetDateTime visibleFromCreatedAt = visibilityWindowEntity.getVisibleFromCreatedAt();
+        OffsetDateTime visibleUntilCreatedAt = visibilityWindowEntity.getVisibleUntilCreatedAt();
+
+        if (visibleFromCreatedAt != null && messageCreatedAt.isBefore(visibleFromCreatedAt)) {
+            return false;
+        }
+
+        if (visibleUntilCreatedAt != null && messageCreatedAt.isAfter(visibleUntilCreatedAt)) {
             return false;
         }
 

@@ -6,6 +6,7 @@ import dev.mediaservice.exception.MediaFileNotFoundException;
 import dev.mediaservice.exception.MediaStorageException;
 import dev.mediaservice.model.dto.request.UploadEncryptedMediaRequestDto;
 import dev.mediaservice.model.dto.response.InternalChatParticipantResponseDto;
+import dev.mediaservice.model.dto.response.InternalChatParticipantVisibilityWindowResponseDto;
 import dev.mediaservice.model.dto.response.InternalChatResponseDto;
 import dev.mediaservice.model.dto.response.MediaFileResponseDto;
 import dev.mediaservice.model.dto.response.StoredMediaResourceDto;
@@ -47,7 +48,7 @@ public class MediaFileServiceImpl implements MediaFileService {
         UUID currentAccountId = currentAccountService.getCurrentAccountId();
         UUID chatId = requestDto.chatId();
         String expectedSha256Base64 = requestDto.encryptedSha256Base64();
-        messagingAccessClient.validateCurrentAccountCanAccessChat(chatId);
+        validateActiveMediaChatAccess(chatId, currentAccountId);
         StoredMediaResourceDto storedMediaResourceDto = null;
 
         try {
@@ -134,6 +135,18 @@ public class MediaFileServiceImpl implements MediaFileService {
         log.info("Encrypted media file deleted. Media file ID: {}.", mediaFileId);
     }
 
+    private void validateActiveMediaChatAccess(UUID chatId, UUID currentAccountId) {
+        InternalChatResponseDto chatResponseDto = messagingAccessClient.validateCurrentAccountCanAccessChat(chatId);
+
+        boolean activeParticipantExists = chatResponseDto.participants() != null
+                && chatResponseDto.participants().stream()
+                .anyMatch(participant -> currentAccountId.equals(participant.accountId()) && "ACTIVE".equals(participant.status()));
+
+        if (!activeParticipantExists) {
+            throw new MediaAccessDeniedException("Only active chat participants can upload media files.");
+        }
+    }
+
     private MediaFileEntity getActiveMediaFile(UUID mediaFileId) {
         return mediaFileRepository.findByIdAndStatus(mediaFileId, MediaFileStatus.ACTIVE)
                 .orElseThrow(() -> new MediaFileNotFoundException(mediaFileId));
@@ -145,37 +158,59 @@ public class MediaFileServiceImpl implements MediaFileService {
             throw new MediaAccessDeniedException("Media file is not linked to a chat.");
         }
 
-        InternalChatResponseDto chatResponseDto = messagingAccessClient.validateCurrentAccountCanAccessChat(mediaFileEntity.getChatId());
-        validateMediaVisibilityForCurrentAccount(chatResponseDto, mediaFileEntity.getCreatedAt());
+        validateVisibleMediaChatAccess(mediaFileEntity.getChatId(), mediaFileEntity.getCreatedAt());
     }
 
-    private void validateMediaVisibilityForCurrentAccount(InternalChatResponseDto chatResponseDto, OffsetDateTime mediaCreatedAt) {
+    private void validateVisibleMediaChatAccess(UUID chatId, OffsetDateTime mediaCreatedAt) {
         UUID currentAccountId = currentAccountService.getCurrentAccountId();
+        InternalChatResponseDto chatResponseDto = messagingAccessClient.validateCurrentAccountCanAccessChat(chatId);
         InternalChatParticipantResponseDto currentParticipant = findCurrentParticipant(chatResponseDto, currentAccountId);
 
-        if (currentParticipant == null || !"ACTIVE".equals(currentParticipant.status())) {
-            throw new MediaAccessDeniedException("Current account does not have access to this media file.");
-        }
-
-        if (currentParticipant.historyVisibleFromCreatedAt() != null && mediaCreatedAt.isBefore(currentParticipant.historyVisibleFromCreatedAt())) {
-            throw new MediaAccessDeniedException("Current account does not have access to this media file history.");
-        }
-
-        if (currentParticipant.removedAt() != null && mediaCreatedAt.isAfter(currentParticipant.removedAt())) {
-            throw new MediaAccessDeniedException("Current account does not have access to this media file.");
+        if (!isVisibleAt(currentParticipant, mediaCreatedAt)) {
+            throw new MediaAccessDeniedException("Current account cannot access this media file because it is outside visible group history.");
         }
     }
 
     private InternalChatParticipantResponseDto findCurrentParticipant(InternalChatResponseDto chatResponseDto, UUID currentAccountId) {
-        if (chatResponseDto == null || chatResponseDto.participants() == null) {
-            return null;
-        }
-
-        return chatResponseDto.participants()
-                .stream()
+        return chatResponseDto.participants() == null
+                ? null
+                : chatResponseDto.participants().stream()
                 .filter(participant -> currentAccountId.equals(participant.accountId()))
                 .findFirst()
                 .orElse(null);
+    }
+
+    private boolean isVisibleAt(InternalChatParticipantResponseDto participant, OffsetDateTime createdAt) {
+        if (participant == null) {
+            return false;
+        }
+
+        if (participant.visibilityWindows() != null && !participant.visibilityWindows().isEmpty()) {
+            return participant.visibilityWindows().stream()
+                    .anyMatch(visibilityWindow -> isInsideWindow(createdAt, visibilityWindow));
+        }
+
+        if (participant.historyVisibleFromCreatedAt() != null && createdAt.isBefore(participant.historyVisibleFromCreatedAt())) {
+            return false;
+        }
+
+        if (participant.removedAt() != null && createdAt.isAfter(participant.removedAt())) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private boolean isInsideWindow(OffsetDateTime createdAt, InternalChatParticipantVisibilityWindowResponseDto visibilityWindow) {
+        if (visibilityWindow.visibleFromCreatedAt() != null && createdAt.isBefore(visibilityWindow.visibleFromCreatedAt())) {
+            return false;
+        }
+
+        if (visibilityWindow.visibleUntilCreatedAt() != null && createdAt.isAfter(visibilityWindow.visibleUntilCreatedAt())) {
+            return false;
+        }
+
+        return true;
     }
 
     private MediaFileResponseDto toResponseDto(MediaFileEntity mediaFileEntity) {
