@@ -55,3 +55,83 @@ button {
 *::-webkit-scrollbar-thumb:hover {
   background: rgba(168, 85, 247, 0.42);
 }
+
+::selection {
+  background: rgba(168, 85, 247, 0.38);
+  color: #ffffff;
+}
+
+#root {
+  isolation: isolate;
+}
+
+.epr-main {
+  border: 0 !important;
+  background: transparent !important;
+  --epr-bg-color: transparent;
+  --epr-category-label-bg-color: rgba(31, 32, 39, 0.92);
+  --epr-hover-bg-color: rgba(168, 85, 247, 0.16);
+  --epr-focus-bg-color: rgba(168, 85, 247, 0.18);
+  --epr-search-input-bg-color: rgba(255, 255, 255, 0.06);
+  --epr-search-input-bg-color-active: rgba(255, 255, 255, 0.08);
+  --epr-text-color: #f4f4f5;
+  --epr-search-border-color: rgba(255, 255, 255, 0.08);
+  --epr-highlight-color: #c084fc;
+  --epr-header-padding: 10px;
+  --epr-picker-border-radius: 24px;
+  --epr-emoji-size: 25px;
+  --epr-emoji-gap: 8px;
+}
+
+.epr-main .epr-search-container input {
+  border-radius: 16px !important;
+  color: #f4f4f5 !important;
+}
+
+.epr-main .epr-category-nav {
+  padding: 8px 10px !important;
+}
+
+.epr-main .epr-body::-webkit-scrollbar {
+  width: 7px;
+}
+
+.epr-main .epr-emoji-category-label {
+  backdrop-filter: blur(18px);
+  border-radius: 999px;
+  margin: 6px 10px 8px !important;
+  padding: 5px 10px !important;
+  width: fit-content !important;
+  color: #a1a1aa !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+@keyframes vector-soft-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes vector-subtle-glow {
+  0%, 100% {
+    opacity: 0.42;
+  }
+
+  50% {
+    opacity: 0.78;
+  }
+}
+
+.vector-soft-rise {
+  animation: vector-soft-rise 180ms ease-out both;
+}
+
+.vector-ambient-glow {
+  animation: vector-subtle-glow 5s ease-in-out infinite;
+}

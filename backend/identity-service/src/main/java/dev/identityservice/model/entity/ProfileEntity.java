@@ -43,6 +43,9 @@ public class ProfileEntity {
     @Column(name = "avatar_file_id")
     private UUID avatarFileId;
 
+    @Column(name = "avatar_data_url", columnDefinition = "TEXT")
+    private String avatarDataUrl;
+
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 

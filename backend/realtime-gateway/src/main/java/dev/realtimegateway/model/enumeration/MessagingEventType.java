@@ -5,6 +5,7 @@ public enum MessagingEventType {
     MESSAGE_DELIVERED,
     MESSAGE_READ,
     CHAT_UPDATED,
-    TYPING
+    TYPING,
+    PRESENCE_UPDATED,
+    PRESENCE_SNAPSHOT
 }
-

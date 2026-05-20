@@ -58,6 +58,11 @@ export type ProfileResponseDto = {
   status?: string;
   avatarType?: string;
   avatarFileId?: string | null;
+  avatarDataUrl?: string | null;
+};
+
+export type UpdateProfileAvatarRequestDto = {
+  avatarDataUrl: string | null;
 };
 
 export type CreateAccountRegistrationRequestDto = {
@@ -297,7 +302,7 @@ export type SignDocumentRequestDto = {
   signatureBase64: string;
 };
 
-export type RealtimeEventType = 'MESSAGE_CREATED' | 'MESSAGE_DELIVERED' | 'MESSAGE_READ' | 'CHAT_UPDATED' | 'TYPING';
+export type RealtimeEventType = 'MESSAGE_CREATED' | 'MESSAGE_DELIVERED' | 'MESSAGE_READ' | 'CHAT_UPDATED' | 'TYPING' | 'PRESENCE_UPDATED' | 'PRESENCE_SNAPSHOT';
 
 export type RealtimeEventDto = {
   eventId: string;
@@ -341,4 +346,14 @@ export type TypingPayload = {
   typingAccountId: string;
   username: string;
   isTyping: boolean;
+};
+
+export type AccountPresencePayload = {
+  accountId: string;
+  online: boolean;
+  lastSeenAt: string | null;
+};
+
+export type PresenceSnapshotPayload = {
+  accounts: AccountPresencePayload[];
 };

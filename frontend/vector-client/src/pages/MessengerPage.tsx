@@ -1,22 +1,31 @@
-import { KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { DragEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
   CheckCheck,
+  Circle,
   LoaderCircle,
   LogOut,
   MessageCircle,
   Paperclip,
   FileText,
+  Eraser,
   Download,
   Image as ImageIcon,
   Plus,
   Search,
+  Smile,
   Send,
   Star,
   Users,
+  Trash2,
   UserPlus,
   UserMinus,
   KeyRound,
+  Clock3,
+  Mail,
+  MessageSquare,
+  User,
+  MoreVertical,
   LockKeyhole,
   Monitor,
   RefreshCw,
@@ -30,7 +39,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { addGroupParticipant, createDirectChat, createGroupChat, createSelfChat, getChat, getChats, removeGroupParticipant } from '../features/chats/api/chatsApi';
 import { createDocument, getChatDocuments, registerDocumentSigningKey, rejectDocument, signDocument } from '../features/documents/api/documentsApi';
-import { searchProfiles } from '../features/directory/api/profilesApi';
+import { searchProfiles, updateCurrentProfileAvatar } from '../features/directory/api/profilesApi';
 import { getActiveAccountDevices } from '../features/devices/api/devicesApi';
 import { useDirectoryStore } from '../features/directory/model/directoryStore';
 import { logout as logoutRequest } from '../features/auth/api/authApi';
@@ -40,16 +49,242 @@ import { downloadEncryptedMediaFile, uploadEncryptedMediaFile } from '../feature
 import { buildDocumentAttachmentContent, buildFileAttachmentContent, decryptDownloadedFile, encryptFileForUpload, formatFileSize, parseDocumentAttachmentMessageContent, parseFileAttachmentMessageContent } from '../features/media/lib/fileCrypto';
 import { useMessengerStore } from '../features/messenger/model/messengerStore';
 import { useRealtimeConnection } from '../features/realtime/useRealtimeConnection';
-import { useRealtimeStore } from '../features/realtime/model/realtimeStore';
+import { useRealtimeStore, type AccountPresenceState } from '../features/realtime/model/realtimeStore';
 import { DevAccountPanel } from '../features/admin/ui/DevAccountPanel';
+import { ChatComposer, type ChatAttachmentDisplayMode } from '../features/messenger/ui/ChatComposer';
+import { DocumentAttachmentPreview, ImageAttachmentPreview } from '../features/messenger/ui/MessageAttachments';
 import { useCryptoBootstrap } from '../features/crypto/useCryptoBootstrap';
 import { useCryptoStore } from '../features/crypto/model/cryptoStore';
 import { getPreKeyBundle } from '../features/crypto/api/cryptoKeysApi';
 import { downloadKeyBackup, getKeyBackupStatus, uploadKeyBackup, type KeyBackupStatusResponseDto } from '../features/crypto/api/keyBackupApi';
-import { formatChatTime, formatMessageTime } from '../shared/lib/dateFormat';
+import { formatChatTime, formatLastSeen, formatMessageDate, formatMessageTime } from '../shared/lib/dateFormat';
 import { getAvatarGradient, getInitials } from '../shared/lib/avatar';
 import { getDirectCompanionAccountId, getDisplayName } from '../shared/lib/profile';
 import type { ActiveDeviceResponseDto, AddGroupParticipantRequestDto, ChatResponseDto, DocumentAttachmentMessageContent, DocumentResponseDto, FileAttachmentMessageContent, MessageResponseDto, ProfileResponseDto } from '../shared/types/api';
+
+
+const IMAGE_FILE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'avif']);
+const CHAT_LOCAL_STATE_PREFIX = 'vector.chatLocalState';
+const EMOJI_ITEMS = ['😀', '😄', '😊', '😍', '😎', '🥳', '👍', '🙏', '🔥', '💪', '✅', '❤️', '😂', '🤝', '👀', '🚀', '📌', '📎', '📝', '🔒'];
+const STICKER_ITEMS = ['🐱', '🐶', '🦊', '🐼', '🤖', '👻', '💥', '✨', '🎉', '🏆', '☕', '🌙'];
+
+type LocalChatState = {
+  readAtByChatId: Record<string, string>;
+  clearedAtByChatId: Record<string, string>;
+  hiddenChatIds: string[];
+};
+
+type ChatListPreview = {
+  text: string;
+  accent: 'default' | 'media' | 'system' | 'muted';
+};
+
+function getLocalAvatarStorageKey(accountId: string | undefined): string {
+  return `vector.localAvatar.${accountId ?? 'anonymous'}`;
+}
+
+async function createLocalAvatarDataUrl(file: File): Promise<string> {
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const imageElement = new Image();
+
+    imageElement.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(imageElement);
+    };
+
+    imageElement.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Cannot read avatar image.'));
+    };
+
+    imageElement.src = objectUrl;
+  });
+
+  const size = 320;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext('2d');
+
+  if (!context) {
+    throw new Error('Canvas is not available.');
+  }
+
+  const sourceSize = Math.min(image.width, image.height);
+  const sourceX = Math.floor((image.width - sourceSize) / 2);
+  const sourceY = Math.floor((image.height - sourceSize) / 2);
+  context.drawImage(image, sourceX, sourceY, sourceSize, sourceSize, 0, 0, size, size);
+
+  return canvas.toDataURL('image/jpeg', 0.86);
+}
+
+
+function getLocalChatStateStorageKey(accountId: string | undefined): string {
+  return `${CHAT_LOCAL_STATE_PREFIX}.${accountId ?? 'anonymous'}`;
+}
+
+function createEmptyLocalChatState(): LocalChatState {
+  return {
+    readAtByChatId: {},
+    clearedAtByChatId: {},
+    hiddenChatIds: [],
+  };
+}
+
+function readLocalChatState(accountId: string | undefined): LocalChatState {
+  const serializedValue = localStorage.getItem(getLocalChatStateStorageKey(accountId));
+
+  if (!serializedValue) {
+    return createEmptyLocalChatState();
+  }
+
+  try {
+    const parsedValue = JSON.parse(serializedValue) as Partial<LocalChatState>;
+
+    return {
+      readAtByChatId: parsedValue.readAtByChatId ?? {},
+      clearedAtByChatId: parsedValue.clearedAtByChatId ?? {},
+      hiddenChatIds: parsedValue.hiddenChatIds ?? [],
+    };
+  }
+  catch {
+    return createEmptyLocalChatState();
+  }
+}
+
+function writeLocalChatState(accountId: string | undefined, localChatState: LocalChatState) {
+  localStorage.setItem(getLocalChatStateStorageKey(accountId), JSON.stringify(localChatState));
+}
+
+function isSameCalendarDate(leftValue: string, rightValue: string): boolean {
+  const leftDate = new Date(leftValue);
+  const rightDate = new Date(rightValue);
+
+  return leftDate.getFullYear() === rightDate.getFullYear()
+    && leftDate.getMonth() === rightDate.getMonth()
+    && leftDate.getDate() === rightDate.getDate();
+}
+
+function isImageFile(file: File): boolean {
+  if (file.type.startsWith('image/')) {
+    return true;
+  }
+
+  const extension = file.name.split('.').at(-1)?.toLowerCase();
+  return extension ? IMAGE_FILE_EXTENSIONS.has(extension) : false;
+}
+function isStickerMessageText(value: string): boolean {
+  return STICKER_ITEMS.includes(value.trim());
+}
+
+
+function getVisibleChatMessages(messages: MessageResponseDto[], clearedAt: string | null | undefined): MessageResponseDto[] {
+  if (!clearedAt) {
+    return messages;
+  }
+
+  const clearedAtTime = new Date(clearedAt).getTime();
+  return messages.filter((message) => new Date(message.createdAt).getTime() > clearedAtTime);
+}
+
+function getLastTimelineMessage(messages: MessageResponseDto[]): MessageResponseDto | null {
+  const visibleMessages = messages.filter((message) => message.messageType !== 'GROUP_KEY_DISTRIBUTION');
+  return visibleMessages.at(-1) ?? null;
+}
+
+function buildChatPreviewFromMessage(
+  message: MessageResponseDto | null,
+  decryptedMessagesById: Record<string, string>,
+  profilesById: Record<string, ProfileResponseDto>,
+): ChatListPreview {
+  if (!message) {
+    return { text: 'Нет сообщений', accent: 'muted' };
+  }
+
+  const decryptedMessage = decryptedMessagesById[message.messageId];
+
+  if (message.messageType === 'SYSTEM') {
+    return {
+      text: formatGroupSystemMessage(parseGroupSystemMessagePayload(decryptedMessage ?? message.encryptedPayload), profilesById),
+      accent: 'system',
+    };
+  }
+
+  const fileAttachment = parseFileAttachmentMessageContent(decryptedMessage ?? '');
+
+  if (fileAttachment) {
+    if (fileAttachment.attachmentDisplayMode === 'IMAGE') {
+      return { text: 'Фотография', accent: 'media' };
+    }
+
+    return { text: `Файл: ${fileAttachment.fileName}`, accent: 'media' };
+  }
+
+  const documentAttachment = parseDocumentAttachmentMessageContent(decryptedMessage ?? '');
+
+  if (documentAttachment) {
+    return { text: `Документ: ${documentAttachment.fileName}`, accent: 'media' };
+  }
+
+  if (!decryptedMessage || isDecryptionPlaceholder(decryptedMessage) || decryptedMessage === 'Расшифровка…') {
+    return { text: 'Зашифрованное сообщение', accent: 'muted' };
+  }
+
+  const compactText = decryptedMessage.replace(/\s+/g, ' ').trim();
+
+  if (!compactText) {
+    return { text: 'Сообщение', accent: 'muted' };
+  }
+
+  if (isStickerMessageText(compactText)) {
+    return { text: 'Стикер', accent: 'media' };
+  }
+
+  return {
+    text: compactText.length > 58 ? `${compactText.slice(0, 58)}…` : compactText,
+    accent: 'default',
+  };
+}
+
+function calculateUnreadCount(messages: MessageResponseDto[], currentAccountId: string | undefined, readAt: string | null | undefined): number {
+  if (!currentAccountId) {
+    return 0;
+  }
+
+  const readAtTime = readAt ? new Date(readAt).getTime() : 0;
+
+  return messages.filter((message) => (
+    message.senderAccountId !== currentAccountId
+    && message.messageType !== 'SYSTEM'
+    && message.messageType !== 'GROUP_KEY_DISTRIBUTION'
+    && new Date(message.createdAt).getTime() > readAtTime
+  )).length;
+}
+
+function getLastPeerActivityAt(messages: MessageResponseDto[], peerAccountId: string | null): string | null {
+  if (!peerAccountId) {
+    return null;
+  }
+
+  return [...messages].reverse().find((message) => message.senderAccountId === peerAccountId)?.createdAt ?? null;
+}
+
+function getPreviewTextColorClass(accent: ChatListPreview['accent']): string {
+  if (accent === 'media') {
+    return 'text-violet-300';
+  }
+
+  if (accent === 'system') {
+    return 'text-zinc-400';
+  }
+
+  if (accent === 'muted') {
+    return 'text-zinc-600';
+  }
+
+  return 'text-zinc-500';
+}
 
 function Avatar({ label, size = 'md' }: { label: string; size?: 'sm' | 'md' | 'lg' }) {
   const dimensions = size === 'sm' ? 'h-10 w-10 text-sm' : size === 'lg' ? 'h-14 w-14 text-lg' : 'h-12 w-12 text-base';
@@ -64,120 +299,116 @@ function Avatar({ label, size = 'md' }: { label: string; size?: 'sm' | 'md' | 'l
   );
 }
 
-function ImageAttachmentPreview({
-  attachment,
-  onDownload,
-}: {
-  attachment: FileAttachmentMessageContent;
-  onDownload: (attachment: FileAttachmentMessageContent) => Promise<void>;
-}) {
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
-  const [previewError, setPreviewError] = useState<string | null>(null);
+function UserAvatar({ label, imageUrl, size = 'md' }: { label: string; imageUrl?: string | null; size?: 'sm' | 'md' | 'lg' }) {
+  const dimensions = size === 'sm' ? 'h-10 w-10 text-sm' : size === 'lg' ? 'h-14 w-14 text-lg' : 'h-12 w-12 text-base';
 
-  useEffect(() => {
-    let isCancelled = false;
-    let objectUrl: string | null = null;
+  if (imageUrl) {
+    return <img src={imageUrl} alt={label} className={`shrink-0 rounded-2xl object-cover shadow-lg shadow-black/20 ${dimensions}`} />;
+  }
 
-    async function loadPreview() {
-      setIsLoadingPreview(true);
-      setPreviewError(null);
-
-      try {
-        const encryptedBytes = await downloadEncryptedMediaFile(attachment.mediaFileId);
-        const decryptedBlob = await decryptDownloadedFile(encryptedBytes, attachment);
-        objectUrl = URL.createObjectURL(decryptedBlob);
-
-        if (!isCancelled) {
-          setPreviewUrl(objectUrl);
-        }
-      }
-      catch (error) {
-        console.error(error);
-
-        if (!isCancelled) {
-          setPreviewError('Не удалось загрузить предпросмотр.');
-        }
-      }
-      finally {
-        if (!isCancelled) {
-          setIsLoadingPreview(false);
-        }
-      }
-    }
-
-    loadPreview();
-
-    return () => {
-      isCancelled = true;
-
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
-    };
-  }, [attachment]);
-
-  return (
-    <div className="min-w-[260px] max-w-[380px] overflow-hidden rounded-3xl border border-white/12 bg-black/15">
-      <div className="flex min-h-[180px] items-center justify-center bg-black/20">
-        {previewUrl ? (
-          <img src={previewUrl} alt={attachment.fileName} className="max-h-[360px] w-full object-cover" />
-        ) : (
-          <div className="flex flex-col items-center gap-3 px-6 py-10 text-center text-xs text-zinc-400">
-            {isLoadingPreview ? <LoaderCircle size={22} className="animate-spin" /> : <ImageIcon size={24} />}
-            <span>{previewError ?? 'Загружаем защищённый предпросмотр...'}</span>
-          </div>
-        )}
-      </div>
-      <div className="flex items-center justify-between gap-3 px-4 py-3">
-        <div className="min-w-0">
-          <div className="truncate text-sm font-semibold">{attachment.fileName}</div>
-          <div className="mt-1 text-xs opacity-70">{formatFileSize(attachment.sizeBytes)} • encrypted image</div>
-        </div>
-        <button
-          onClick={() => void onDownload(attachment)}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10 transition hover:bg-white/20"
-          title="Скачать и расшифровать"
-        >
-          <Download size={17} />
-        </button>
-      </div>
-    </div>
-  );
+  return <Avatar label={label} size={size} />;
 }
 
+async function readImageElementFromFile(file: File): Promise<HTMLImageElement> {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const imageElement = new Image();
 
-function DocumentAttachmentPreview({
-  attachment,
-  isOwnMessage,
-  onDownload,
-}: {
-  attachment: DocumentAttachmentMessageContent;
-  isOwnMessage: boolean;
-  onDownload: (attachment: DocumentAttachmentMessageContent) => Promise<void>;
-}) {
-  return (
-    <div className="min-w-[280px] max-w-[380px]">
-      <div className={`flex items-center gap-3 rounded-2xl border p-3 ${isOwnMessage ? 'border-white/20 bg-white/10' : 'border-white/10 bg-black/15'}`}>
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-black/20 text-white">
-          <ShieldCheck size={20} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold">{attachment.fileName}</div>
-          <div className={`mt-1 text-xs ${isOwnMessage ? 'text-violet-100/75' : 'text-zinc-500'}`}>
-            {formatFileSize(attachment.sizeBytes)} • encrypted document
-          </div>
-        </div>
-        <button
-          onClick={() => void onDownload(attachment)}
-          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition ${isOwnMessage ? 'bg-white/15 hover:bg-white/25' : 'bg-white/[0.06] hover:bg-white/[0.1]'}`}
-          title="Скачать и расшифровать"
-        >
-          <Download size={17} />
-        </button>
-      </div>
-    </div>
-  );
+    imageElement.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(imageElement);
+    };
+
+    imageElement.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Cannot read image.'));
+    };
+
+    imageElement.src = objectUrl;
+  });
+}
+
+function buildCompressedImageFileName(fileName: string): string {
+  const dotIndex = fileName.lastIndexOf('.');
+  const baseName = dotIndex > 0 ? fileName.slice(0, dotIndex) : fileName;
+  return `${baseName}.jpg`;
+}
+
+async function compressImageForChat(file: File): Promise<File> {
+  if (!file.type.startsWith('image/') || file.type === 'image/gif' || file.type === 'image/svg+xml') {
+    return file;
+  }
+
+  const image = await readImageElementFromFile(file);
+  const maximumSide = 1920;
+  const scale = Math.min(1, maximumSide / Math.max(image.width, image.height));
+  const targetWidth = Math.max(1, Math.round(image.width * scale));
+  const targetHeight = Math.max(1, Math.round(image.height * scale));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+  const context = canvas.getContext('2d');
+
+  if (!context) {
+    return file;
+  }
+
+  context.drawImage(image, 0, 0, targetWidth, targetHeight);
+
+  const compressedBlob = await new Promise<Blob | null>((resolve) => {
+    canvas.toBlob(resolve, 'image/jpeg', 0.84);
+  });
+
+  if (!compressedBlob || compressedBlob.size >= file.size * 0.96) {
+    return file;
+  }
+
+  return new File([compressedBlob], buildCompressedImageFileName(file.name), {
+    type: 'image/jpeg',
+    lastModified: Date.now(),
+  });
+}
+
+function getAccountAvatarUrl(profile: ProfileResponseDto | null | undefined, fallbackAvatarDataUrl?: string | null): string | null {
+  return profile?.avatarDataUrl ?? fallbackAvatarDataUrl ?? null;
+}
+
+function getAccountActivityLabel(
+  presence: AccountPresenceState | null | undefined,
+  fallbackLastActivityAt: string | null | undefined,
+): string {
+  if (presence?.isOnline) {
+    return 'в сети';
+  }
+
+  if (presence?.lastSeenAt) {
+    return formatLastSeen(presence.lastSeenAt);
+  }
+
+  if (fallbackLastActivityAt) {
+    return formatLastSeen(fallbackLastActivityAt);
+  }
+
+  return 'активность пока неизвестна';
+}
+
+function buildAccountLastActivityMap(messagesByChatId: Record<string, MessageResponseDto[]>): Record<string, string> {
+  const lastActivityByAccountId: Record<string, string> = {};
+
+  Object.values(messagesByChatId).flat().forEach((message) => {
+    if (message.messageType === 'GROUP_KEY_DISTRIBUTION') {
+      return;
+    }
+
+    const previousActivityAt = lastActivityByAccountId[message.senderAccountId];
+
+    if (!previousActivityAt || new Date(message.createdAt).getTime() > new Date(previousActivityAt).getTime()) {
+      lastActivityByAccountId[message.senderAccountId] = message.createdAt;
+    }
+  });
+
+  return lastActivityByAccountId;
 }
 
 function DocumentsPanel({
@@ -382,7 +613,7 @@ function getChatPresentation(
 
     return {
       title: chat.name ?? 'Групповой чат',
-      subtitle: `${activeParticipantsCount} участников • group E2EE`,
+      subtitle: `${activeParticipantsCount} участников • группа`,
       avatarLabel: chat.name ?? 'Группа',
       companionProfile: null,
     };
@@ -400,11 +631,12 @@ function getChatPresentation(
     };
   }
 
+  const fallbackTitle = chat.name?.trim() || 'Собеседник';
   const shortId = companionAccountId ? `${companionAccountId.slice(0, 8)}…` : 'неизвестный контакт';
   return {
-    title: 'Новый диалог',
+    title: fallbackTitle,
     subtitle: shortId,
-    avatarLabel: shortId,
+    avatarLabel: fallbackTitle,
     companionProfile: null,
   };
 }
@@ -801,17 +1033,23 @@ function GroupManagementModal({
   chat,
   currentAccountId,
   profilesById,
+  presenceByAccountId,
+  lastActivityByAccountId,
   onClose,
   onAddParticipant,
   onRemoveParticipant,
+  onOpenProfile,
 }: {
   isOpen: boolean;
   chat: ChatResponseDto | null;
   currentAccountId: string | undefined;
   profilesById: Record<string, ProfileResponseDto>;
+  presenceByAccountId: Record<string, AccountPresenceState>;
+  lastActivityByAccountId: Record<string, string>;
   onClose: () => void;
   onAddParticipant: (profile: ProfileResponseDto, historyAccessMode: GroupHistoryAccessMode) => Promise<void>;
   onRemoveParticipant: (participantAccountId: string) => Promise<void>;
+  onOpenProfile: (profile: ProfileResponseDto) => void;
 }) {
   const upsertProfiles = useDirectoryStore((state) => state.upsertProfiles);
   const [query, setQuery] = useState('');
@@ -936,27 +1174,40 @@ function GroupManagementModal({
 
           <div className="mt-6 rounded-3xl border border-white/10 bg-white/[0.03] p-4">
             <div className="text-sm font-semibold text-zinc-200">{chat.name ?? 'Групповой чат'}</div>
-            <div className="mt-1 text-xs text-zinc-500">{activeParticipants.length} активных участников • epoch {chat.currentKeyEpoch ?? 1}</div>
+            <div className="mt-1 text-xs text-zinc-500">{activeParticipants.length} активных участников • защищённый чат</div>
           </div>
 
           <div className="mt-5 max-h-[48vh] space-y-3 overflow-y-auto pr-1">
             {activeParticipants.map((participant) => {
               const participantProfile = profilesById[participant.accountId];
               const participantName = participantProfile ? getDisplayName(participantProfile) : `${participant.accountId.slice(0, 8)}…`;
+              const participantPresence = presenceByAccountId[participant.accountId];
+              const participantActivityLabel = getAccountActivityLabel(participantPresence, lastActivityByAccountId[participant.accountId]);
               const isCurrentUser = participant.accountId === currentAccountId;
               const canRemove = canManageMembers && !isCurrentUser && participant.role !== 'OWNER';
 
               return (
-                <div key={participant.accountId} className="flex items-center gap-3 rounded-3xl border border-white/8 bg-white/[0.03] px-4 py-3">
-                  <Avatar label={participantName} />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-semibold text-zinc-100">{participantName}{isCurrentUser ? ' • это вы' : ''}</div>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-                      <span>{participantProfile ? `@${participantProfile.username}` : participant.accountId}</span>
-                      <span className="rounded-full border border-violet-300/15 bg-violet-400/10 px-2 py-0.5 text-violet-200">{participant.role === 'OWNER' ? 'Владелец' : 'Участник'}</span>
-                      {participant.historyVisibleFromCreatedAt && <span>история с {formatMessageTime(participant.historyVisibleFromCreatedAt)}</span>}
+                <div key={participant.accountId} className="flex items-center gap-3 rounded-3xl border border-white/8 bg-white/[0.03] px-4 py-3 transition hover:bg-white/[0.05]">
+                  <button
+                    type="button"
+                    onClick={() => participantProfile && onOpenProfile(participantProfile)}
+                    disabled={!participantProfile}
+                    className="flex min-w-0 flex-1 items-center gap-3 text-left disabled:cursor-default"
+                  >
+                    <div className="relative shrink-0">
+                      <UserAvatar label={participantName} imageUrl={getAccountAvatarUrl(participantProfile)} />
+                      <span className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-[#1c1d22] ${participantPresence?.isOnline ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
                     </div>
-                  </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold text-zinc-100">{participantName}{isCurrentUser ? ' • это вы' : ''}</div>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+                        <span>{participantProfile ? `@${participantProfile.username}` : participant.accountId}</span>
+                        <span>{participantActivityLabel}</span>
+                        <span className="rounded-full border border-violet-300/15 bg-violet-400/10 px-2 py-0.5 text-violet-200">{participant.role === 'OWNER' ? 'Владелец' : 'Участник'}</span>
+                        {participant.historyVisibleFromCreatedAt && <span>история с {formatMessageTime(participant.historyVisibleFromCreatedAt)}</span>}
+                      </div>
+                    </div>
+                  </button>
                   {canRemove && (
                     <button
                       onClick={() => void handleRemove(participant.accountId)}
@@ -1109,7 +1360,7 @@ function CryptoStatusBadge({ status }: { status: string }) {
     }`}
     >
       <ShieldCheck size={13} />
-      {isReady ? 'E2EE активно' : isError ? 'Ошибка ключей' : 'Настройка E2EE'}
+      {isReady ? 'Сквозное шифрование активно' : isError ? 'Ошибка ключей' : 'Настройка шифрования'}
     </span>
   );
 }
@@ -1124,6 +1375,7 @@ function SettingsModal({
   onClose,
   onLogout,
   onBackupRestored,
+  onProfileUpdated,
 }: {
   isOpen: boolean;
   profile: ProfileResponseDto | null;
@@ -1134,6 +1386,7 @@ function SettingsModal({
   onClose: () => void;
   onLogout: () => Promise<void>;
   onBackupRestored: () => Promise<void>;
+  onProfileUpdated: (profile: ProfileResponseDto) => void;
 }) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
   const [devices, setDevices] = useState<ActiveDeviceResponseDto[]>([]);
@@ -1144,6 +1397,33 @@ function SettingsModal({
   const [backupError, setBackupError] = useState<string | null>(null);
   const [backupSuccess, setBackupSuccess] = useState<string | null>(null);
   const [isBackupBusy, setIsBackupBusy] = useState(false);
+  const [localAvatarDataUrl, setLocalAvatarDataUrl] = useState<string | null>(() => profile?.avatarDataUrl ?? localStorage.getItem(getLocalAvatarStorageKey(profile?.accountId)));
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+
+  async function handleLocalAvatarSelected(file: File | null | undefined) {
+    if (!file || !profile?.accountId) {
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      setAvatarError('Выберите изображение для аватарки.');
+      return;
+    }
+
+    setAvatarError(null);
+
+    try {
+      const dataUrl = await createLocalAvatarDataUrl(file);
+      const updatedProfile = await updateCurrentProfileAvatar({ avatarDataUrl: dataUrl });
+      localStorage.setItem(getLocalAvatarStorageKey(profile.accountId), dataUrl);
+      setLocalAvatarDataUrl(dataUrl);
+      onProfileUpdated(updatedProfile);
+    }
+    catch (error) {
+      console.error(error);
+      setAvatarError('Не удалось сохранить аватарку.');
+    }
+  }
 
   async function loadBackupStatus() {
     try {
@@ -1250,6 +1530,10 @@ function SettingsModal({
   }
 
   useEffect(() => {
+    setLocalAvatarDataUrl(profile?.avatarDataUrl ?? localStorage.getItem(getLocalAvatarStorageKey(profile?.accountId)));
+  }, [profile?.accountId]);
+
+  useEffect(() => {
     if (isOpen && activeTab === 'devices') {
       void loadDevices();
     }
@@ -1270,7 +1554,7 @@ function SettingsModal({
       <div className="flex h-[720px] w-full max-w-5xl overflow-hidden rounded-[2rem] border border-white/10 bg-[#15161a] shadow-2xl shadow-black/60">
         <aside className="w-[300px] shrink-0 border-r border-white/10 bg-white/[0.025] p-5">
           <div className="flex items-center gap-4 rounded-[1.75rem] border border-white/10 bg-white/[0.04] p-4">
-            <Avatar label={displayName} size="lg" />
+            <UserAvatar label={displayName} imageUrl={getAccountAvatarUrl(profile, localAvatarDataUrl)} size="lg" />
             <div className="min-w-0">
               <div className="truncate text-base font-semibold text-zinc-50">{displayName}</div>
               <div className="mt-1 truncate text-xs text-zinc-500">@{profile.username}</div>
@@ -1319,7 +1603,7 @@ function SettingsModal({
               <div className="text-xl font-semibold text-zinc-50">
                 {activeTab === 'profile' ? 'Настройки профиля' : activeTab === 'devices' ? 'Активные устройства' : 'Безопасность и шифрование'}
               </div>
-              <div className="mt-1 text-sm text-zinc-500">Vector desktop client</div>
+              <div className="mt-1 text-sm text-zinc-500">Настройки аккаунта</div>
             </div>
             <button
               onClick={onClose}
@@ -1335,10 +1619,24 @@ function SettingsModal({
               <div className="grid gap-5 lg:grid-cols-[220px_1fr]">
                 <div className="rounded-[2rem] border border-white/10 bg-white/[0.035] p-6 text-center">
                   <div className="mx-auto mb-4 w-max">
-                    <Avatar label={displayName} size="lg" />
+                    <UserAvatar label={displayName} imageUrl={getAccountAvatarUrl(profile, localAvatarDataUrl)} size="lg" />
                   </div>
                   <div className="text-lg font-semibold text-zinc-50">{displayName}</div>
                   <div className="mt-1 text-sm text-zinc-500">@{profile.username}</div>
+                  <label className="mt-5 inline-flex cursor-pointer items-center justify-center rounded-2xl border border-violet-300/20 bg-violet-500/10 px-4 py-2 text-sm text-violet-100 transition hover:bg-violet-500/15">
+                    Сменить аватар
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0] ?? null;
+                        event.target.value = '';
+                        void handleLocalAvatarSelected(file);
+                      }}
+                    />
+                  </label>
+                  {avatarError && <div className="mt-3 rounded-2xl border border-red-400/20 bg-red-500/10 p-3 text-xs text-red-200">{avatarError}</div>}
                 </div>
 
                 <div className="space-y-3 rounded-[2rem] border border-white/10 bg-white/[0.035] p-6">
@@ -1346,8 +1644,7 @@ function SettingsModal({
                     ['Email', profile.email],
                     ['Имя', profile.firstName],
                     ['Фамилия', profile.lastName],
-                    ['Статус', profile.status ?? 'ACTIVE'],
-                    ['Account ID', profile.accountId],
+                    ['Статус аккаунта', profile.status === 'ACTIVE' ? 'Активен' : profile.status ?? 'Активен'],
                   ].map(([label, value]) => (
                     <div key={label} className="flex items-center justify-between gap-4 border-b border-white/5 py-3 last:border-b-0">
                       <span className="text-sm text-zinc-500">{label}</span>
@@ -1363,7 +1660,7 @@ function SettingsModal({
                 <div className="flex items-center justify-between gap-4 rounded-[2rem] border border-white/10 bg-white/[0.035] p-5">
                   <div>
                     <div className="text-base font-semibold text-zinc-50">Устройства аккаунта</div>
-                    <div className="mt-1 text-sm text-zinc-500">Каждое устройство имеет собственные E2EE ключи.</div>
+                    <div className="mt-1 text-sm text-zinc-500">Здесь показаны устройства, на которых выполнен вход.</div>
                   </div>
                   <button
                     onClick={() => void loadDevices()}
@@ -1405,16 +1702,16 @@ function SettingsModal({
                                   <span className="rounded-full border border-emerald-300/20 bg-emerald-400/10 px-2 py-0.5 text-[11px] text-emerald-200">это устройство</span>
                                 )}
                               </div>
-                              <div className="mt-1 text-xs text-zinc-500">{device.platform} • версия {device.clientVersion ?? 'unknown'}</div>
+                              <div className="mt-1 text-xs text-zinc-500">{device.platform} • версия {device.clientVersion ?? 'неизвестна'}</div>
                             </div>
                           </div>
 
-                          <span className="rounded-full border border-emerald-300/20 bg-emerald-400/10 px-3 py-1 text-xs text-emerald-200">{device.status}</span>
+                          <span className="rounded-full border border-emerald-300/20 bg-emerald-400/10 px-3 py-1 text-xs text-emerald-200">{device.status === 'ACTIVE' ? 'активно' : device.status}</span>
                         </div>
 
                         <div className="mt-4 grid gap-3 text-xs text-zinc-500 sm:grid-cols-2">
                           <div className="rounded-2xl bg-black/15 p-3">Последняя активность: <span className="text-zinc-300">{formatDeviceTime(device.lastSeenAt)}</span></div>
-                          <div className="rounded-2xl bg-black/15 p-3">Device ID: <span className="text-zinc-300">{activeDeviceId.slice(0, 8)}…</span></div>
+                          <div className="rounded-2xl bg-black/15 p-3">Статус: <span className="text-zinc-300">{isCurrentDevice ? 'сейчас используется' : 'другое устройство'}</span></div>
                         </div>
                       </div>
                     );
@@ -1444,7 +1741,7 @@ function SettingsModal({
                       <div className="text-xs text-zinc-500">{realtimeStatus}</div>
                     </div>
                     <div className="rounded-2xl border border-white/8 bg-black/15 p-4 sm:col-span-2">
-                      <div className="mb-2 flex items-center gap-2 text-zinc-300"><LockKeyhole size={15} /> Crypto database</div>
+                      <div className="mb-2 flex items-center gap-2 text-zinc-300"><LockKeyhole size={15} /> Локальное хранилище ключей</div>
                       <div className="break-all text-xs text-zinc-500">{cryptoDatabasePath ?? 'путь недоступен'}</div>
                     </div>
                   </div>
@@ -1524,6 +1821,98 @@ function SettingsModal({
 }
 
 
+function MiniProfileModal({
+  profile,
+  isCurrentAccount,
+  lastActivityAt,
+  presence,
+  localAvatarDataUrl,
+  onClose,
+  onMessage,
+}: {
+  profile: ProfileResponseDto | null;
+  isCurrentAccount: boolean;
+  lastActivityAt: string | null | undefined;
+  presence: AccountPresenceState | null | undefined;
+  localAvatarDataUrl: string | null;
+  onClose: () => void;
+  onMessage: (profile: ProfileResponseDto) => Promise<void>;
+}) {
+  const [isOpeningChat, setIsOpeningChat] = useState(false);
+
+  if (!profile) {
+    return null;
+  }
+
+  const activeProfile = profile;
+  const displayName = getDisplayName(activeProfile);
+  const avatarUrl = getAccountAvatarUrl(activeProfile, isCurrentAccount ? localAvatarDataUrl : null);
+
+  async function handleMessageClick() {
+    setIsOpeningChat(true);
+
+    try {
+      await onMessage(activeProfile);
+      onClose();
+    }
+    finally {
+      setIsOpeningChat(false);
+    }
+  }
+
+  return (
+    <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md overflow-hidden rounded-[2rem] border border-white/10 bg-[#18191d] shadow-2xl shadow-black/60">
+        <div className="relative bg-gradient-to-br from-violet-500/25 via-fuchsia-500/10 to-transparent p-6">
+          <button
+            onClick={onClose}
+            className="absolute right-4 top-4 rounded-2xl border border-white/10 bg-black/15 p-2 text-zinc-300 transition hover:text-white"
+            title="Закрыть"
+          >
+            <X size={18} />
+          </button>
+          <div className="flex items-center gap-4">
+            <UserAvatar label={displayName} imageUrl={avatarUrl} size="lg" />
+            <div className="min-w-0 pr-10">
+              <div className="truncate text-xl font-semibold text-zinc-50">{displayName}</div>
+              <div className="mt-1 text-sm text-zinc-400">{getAccountActivityLabel(presence, lastActivityAt)}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-3 p-5">
+          <div className="rounded-3xl border border-white/10 bg-white/[0.035] p-4">
+            <div className="flex items-center gap-3 text-sm text-zinc-300">
+              <User size={16} className="text-violet-200" />
+              <span>@{profile.username}</span>
+            </div>
+            <div className="mt-3 flex items-center gap-3 text-sm text-zinc-300">
+              <Mail size={16} className="text-violet-200" />
+              <span className="truncate">{profile.email}</span>
+            </div>
+            <div className="mt-3 flex items-center gap-3 text-sm text-zinc-300">
+              <Clock3 size={16} className="text-violet-200" />
+              <span>{getAccountActivityLabel(presence, lastActivityAt)}</span>
+            </div>
+          </div>
+
+          {!isCurrentAccount && (
+            <button
+              onClick={() => void handleMessageClick()}
+              disabled={isOpeningChat}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-950/30 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isOpeningChat ? <LoaderCircle size={17} className="animate-spin" /> : <MessageSquare size={17} />}
+              Написать
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 async function decryptDirectMessageWithAvailablePayloads(
   message: MessageResponseDto,
   currentDevicePayloads: MessageResponseDto['devicePayloads'],
@@ -1557,9 +1946,13 @@ export function MessengerPage() {
   const deviceId = useAuthStore((state) => state.deviceId);
   const refreshToken = useAuthStore((state) => state.refreshToken);
   const clearAuthentication = useAuthStore((state) => state.clearAuthentication);
+  const setProfile = useAuthStore((state) => state.setProfile);
   const realtimeStatus = useRealtimeStore((state) => state.status);
   const [restoredDeviceIds, setRestoredDeviceIds] = useState<string[]>([]);
+  const [localAvatarDataUrl, setLocalAvatarDataUrl] = useState<string | null>(() => profile?.avatarDataUrl ?? localStorage.getItem(getLocalAvatarStorageKey(profile?.accountId)));
+  const [miniProfile, setMiniProfile] = useState<ProfileResponseDto | null>(null);
   const typingByChatId = useRealtimeStore((state) => state.typingByChatId);
+  const presenceByAccountId = useRealtimeStore((state) => state.presenceByAccountId);
   const sendTypingEvent = useRealtimeStore((state) => state.sendTypingEvent);
   const cryptoStatus = useCryptoStore((state) => state.status);
   const cryptoDatabasePath = useCryptoStore((state) => state.databasePath);
@@ -1591,6 +1984,11 @@ export function MessengerPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [decryptedMessagesById, setDecryptedMessagesById] = useState<Record<string, string>>({});
   const [readDetailsMessageId, setReadDetailsMessageId] = useState<string | null>(null);
+  const [localChatState, setLocalChatState] = useState<LocalChatState>(() => readLocalChatState(profile?.accountId));
+  const [openedChatMenuId, setOpenedChatMenuId] = useState<string | null>(null);
+  const [isChatActionsMenuOpen, setIsChatActionsMenuOpen] = useState(false);
+  const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
+  const [isDraggingFileOverChat, setIsDraggingFileOverChat] = useState(false);
 
   const decryptingMessageIdsRef = useRef<Set<string>>(new Set());
   const permanentlyUnavailableMessageIdsRef = useRef<Set<string>>(new Set());
@@ -1604,6 +2002,14 @@ export function MessengerPage() {
   const readMarkersRef = useRef<Set<string>>(new Set());
   const lastTypingSentAtRef = useRef(0);
   const typingStopTimeoutRef = useRef<number | null>(null);
+
+  function updateLocalChatState(updater: (previousValue: LocalChatState) => LocalChatState) {
+    setLocalChatState((previousValue) => {
+      const nextValue = updater(previousValue);
+      writeLocalChatState(profile?.accountId, nextValue);
+      return nextValue;
+    });
+  }
 
   async function loadRestoredDeviceIds() {
     if (!profile?.accountId || !window.vectorCrypto) {
@@ -1654,6 +2060,14 @@ export function MessengerPage() {
   }, [profile, upsertProfile]);
 
   useEffect(() => {
+    setLocalChatState(readLocalChatState(profile?.accountId));
+  }, [profile?.accountId]);
+
+  useEffect(() => {
+    setLocalAvatarDataUrl(profile?.avatarDataUrl ?? localStorage.getItem(getLocalAvatarStorageKey(profile?.accountId)));
+  }, [profile?.accountId]);
+
+  useEffect(() => {
     function handleKeyboardShortcut(event: globalThis.KeyboardEvent) {
       if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'd' && profile?.username === 'admin') {
         event.preventDefault();
@@ -1671,6 +2085,19 @@ export function MessengerPage() {
   );
 
   const selectedMessages = selectedChatId ? messagesByChatId[selectedChatId] ?? [] : [];
+  const visibleSelectedMessages = useMemo(
+    () => getVisibleChatMessages(selectedMessages, selectedChatId ? localChatState.clearedAtByChatId[selectedChatId] : null),
+    [localChatState.clearedAtByChatId, selectedChatId, selectedMessages],
+  );
+  const loadedMessages = useMemo(
+    () => Object.values(messagesByChatId).flat(),
+    [messagesByChatId],
+  );
+  const lastActivityByAccountId = useMemo(
+    () => buildAccountLastActivityMap(messagesByChatId),
+    [messagesByChatId],
+  );
+  const hiddenChatIdSet = useMemo(() => new Set(localChatState.hiddenChatIds), [localChatState.hiddenChatIds]);
   const selectedChatActiveParticipantAccountIds = useMemo(
     () => getActiveGroupParticipantAccountIds(selectedChat),
     [selectedChat],
@@ -1695,7 +2122,7 @@ export function MessengerPage() {
       return;
     }
 
-    selectedMessages.forEach((message) => {
+    loadedMessages.forEach((message) => {
       const messageId = message.messageId;
 
       const cachedPlainText = decryptedMessagesById[messageId];
@@ -1896,20 +2323,37 @@ export function MessengerPage() {
           decryptingMessageIdsRef.current.delete(messageId);
         });
     });
-  }, [decryptedMessagesById, deviceId, profile?.accountId, restoredDeviceIds, selectedMessages]);
+  }, [decryptedMessagesById, deviceId, loadedMessages, profile?.accountId, restoredDeviceIds]);
 
   const filteredChats = useMemo(() => {
     const normalizedQuery = chatSearchQuery.trim().toLowerCase();
 
+    const visibleChats = chats.filter((chat) => {
+      if (hiddenChatIdSet.has(chat.chatId)) {
+        return false;
+      }
+
+      if (chat.type === 'DIRECT') {
+        const chatMessages = messagesByChatId[chat.chatId] ?? [];
+        const hasTimelineMessage = Boolean(getLastTimelineMessage(chatMessages));
+
+        if (!chat.lastMessageId && !hasTimelineMessage) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
     if (!normalizedQuery) {
-      return chats;
+      return visibleChats;
     }
 
-    return chats.filter((chat) => {
+    return visibleChats.filter((chat) => {
       const presentation = getChatPresentation(chat, profile, profilesById);
       return `${presentation.title} ${presentation.subtitle}`.toLowerCase().includes(normalizedQuery);
     });
-  }, [chatSearchQuery, chats, profile, profilesById]);
+  }, [chatSearchQuery, chats, hiddenChatIdSet, messagesByChatId, profile, profilesById]);
 
   async function refreshSelectedChat(options?: { silent?: boolean }) {
     if (!selectedChatId) {
@@ -1980,6 +2424,65 @@ export function MessengerPage() {
   }, [selectedChatId, setMessages]);
 
   useEffect(() => {
+    let isCancelled = false;
+
+    async function loadMissingChatMessages() {
+      const chatsWithoutMessages = chats.filter((chat) => (
+        !hiddenChatIdSet.has(chat.chatId)
+        && !messagesByChatId[chat.chatId]
+      ));
+
+      await Promise.all(chatsWithoutMessages.map(async (chat) => {
+        try {
+          const loadedMessagesForChat = await getChatMessages(chat.chatId);
+
+          if (!isCancelled) {
+            setMessages(chat.chatId, loadedMessagesForChat);
+          }
+        }
+        catch (error) {
+          console.warn('Failed to load chat messages for sidebar preview.', error);
+        }
+      }));
+    }
+
+    void loadMissingChatMessages();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [chats, hiddenChatIdSet, messagesByChatId, setMessages]);
+
+  useEffect(() => {
+    if (!profile?.accountId || localChatState.hiddenChatIds.length === 0) {
+      return;
+    }
+
+    const hiddenChatIdsToRestore = localChatState.hiddenChatIds.filter((hiddenChatId) => {
+      const chatMessages = messagesByChatId[hiddenChatId] ?? [];
+      const clearedAt = localChatState.clearedAtByChatId[hiddenChatId];
+      const clearedAtTime = clearedAt ? new Date(clearedAt).getTime() : 0;
+
+      return chatMessages.some((message) => (
+        message.senderAccountId !== profile.accountId
+        && message.messageType !== 'GROUP_KEY_DISTRIBUTION'
+        && new Date(message.createdAt).getTime() > clearedAtTime
+      ));
+    });
+
+    if (hiddenChatIdsToRestore.length === 0) {
+      return;
+    }
+
+    const hiddenChatIdRestoreSet = new Set(hiddenChatIdsToRestore);
+
+    updateLocalChatState((previousValue) => ({
+      ...previousValue,
+      hiddenChatIds: previousValue.hiddenChatIds.filter((hiddenChatId) => !hiddenChatIdRestoreSet.has(hiddenChatId)),
+    }));
+  }, [localChatState.clearedAtByChatId, localChatState.hiddenChatIds, messagesByChatId, profile?.accountId]);
+
+  useEffect(() => {
     if (!selectedChatId) {
       return;
     }
@@ -2004,19 +2507,39 @@ export function MessengerPage() {
   }, [selectedChatId]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [selectedChatId, selectedMessages.length]);
+    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+  }, [selectedChatId]);
 
   useEffect(() => {
     setReadDetailsMessageId(null);
   }, [selectedChatId]);
 
   useEffect(() => {
-    if (!selectedChatId || !profile?.accountId || selectedMessages.length === 0 || !isSelectedChatWritable) {
+    if (!selectedChatId || visibleSelectedMessages.length === 0) {
       return;
     }
 
-    const incomingMessages = selectedMessages.filter((message) => (
+    const lastVisibleMessage = getLastTimelineMessage(visibleSelectedMessages);
+
+    if (!lastVisibleMessage) {
+      return;
+    }
+
+    updateLocalChatState((previousValue) => ({
+      ...previousValue,
+      readAtByChatId: {
+        ...previousValue.readAtByChatId,
+        [selectedChatId]: lastVisibleMessage.createdAt,
+      },
+    }));
+  }, [selectedChatId, visibleSelectedMessages]);
+
+  useEffect(() => {
+    if (!selectedChatId || !profile?.accountId || visibleSelectedMessages.length === 0 || !isSelectedChatWritable) {
+      return;
+    }
+
+    const incomingMessages = visibleSelectedMessages.filter((message) => (
       message.senderAccountId !== profile.accountId
       && message.messageType !== 'SYSTEM'
       && message.messageType !== 'GROUP_KEY_DISTRIBUTION'
@@ -2051,7 +2574,7 @@ export function MessengerPage() {
     markChatRead(selectedChatId, lastIncomingMessage.messageId).catch((error) => {
       console.error(error);
     });
-  }, [isSelectedChatWritable, profile?.accountId, selectedChatId, selectedMessages]);
+  }, [isSelectedChatWritable, profile?.accountId, selectedChatId, visibleSelectedMessages]);
 
   async function buildEncryptedDevicePayloadsForAccounts(plainText: string, targetAccountIds: string[]) {
     if (!deviceId || !profile?.accountId) {
@@ -2161,8 +2684,10 @@ export function MessengerPage() {
     return savedMessage;
   }
 
-  async function handleSendCurrentMessage() {
-    if (!messageText.trim() || !isSelectedChatWritable) {
+  async function handleSendCurrentMessage(overrideText?: string) {
+    const trimmedMessageText = (overrideText ?? messageText).trim();
+
+    if (!trimmedMessageText || !isSelectedChatWritable) {
       return;
     }
 
@@ -2170,7 +2695,6 @@ export function MessengerPage() {
     setErrorMessage(null);
 
     try {
-      const trimmedMessageText = messageText.trim();
       await sendEncryptedChatContent(trimmedMessageText);
       setMessageText('');
       sendCurrentTypingState(false);
@@ -2212,7 +2736,7 @@ export function MessengerPage() {
     await loadChatDocuments();
   }
 
-  async function handleAttachFile(file: File | null | undefined, attachmentDisplayMode: 'FILE' | 'IMAGE') {
+  async function handleAttachFile(file: File | null | undefined, attachmentDisplayMode: ChatAttachmentDisplayMode) {
     if (!file) {
       return;
     }
@@ -2228,14 +2752,15 @@ export function MessengerPage() {
     setErrorMessage(null);
 
     try {
-      const encryptionResult = await encryptFileForUpload(file);
+      const preparedFile = attachmentDisplayMode === 'IMAGE' ? await compressImageForChat(file) : file;
+      const encryptionResult = await encryptFileForUpload(preparedFile);
       const uploadedFile = await uploadEncryptedMediaFile(
         selectedChatId,
         encryptionResult.encryptedBlob,
         encryptionResult.encryptedSha256Base64,
       );
       const attachmentContent = buildFileAttachmentContent(
-        file,
+        preparedFile,
         uploadedFile.id,
         uploadedFile.encryptedSizeBytes,
         encryptionResult,
@@ -2582,6 +3107,85 @@ export function MessengerPage() {
     }
   }
 
+  function appendEmojiToMessage(emoji: string) {
+    setMessageText((previousValue) => `${previousValue}${emoji}`);
+    setIsEmojiPickerOpen(false);
+  }
+
+  function sendSticker(sticker: string) {
+    setIsEmojiPickerOpen(false);
+    void handleSendCurrentMessage(sticker);
+  }
+
+  function handleClearSelectedChatHistory() {
+    if (!selectedChatId) {
+      return;
+    }
+
+    const clearedAt = new Date().toISOString();
+
+    updateLocalChatState((previousValue) => ({
+      ...previousValue,
+      clearedAtByChatId: {
+        ...previousValue.clearedAtByChatId,
+        [selectedChatId]: clearedAt,
+      },
+      readAtByChatId: {
+        ...previousValue.readAtByChatId,
+        [selectedChatId]: clearedAt,
+      },
+    }));
+
+    setIsChatActionsMenuOpen(false);
+  }
+
+  function handleDeleteSelectedChatLocally() {
+    if (!selectedChatId) {
+      return;
+    }
+
+    const chatIdToHide = selectedChatId;
+
+    updateLocalChatState((previousValue) => ({
+      ...previousValue,
+      clearedAtByChatId: {
+        ...previousValue.clearedAtByChatId,
+        [chatIdToHide]: new Date().toISOString(),
+      },
+      hiddenChatIds: Array.from(new Set([...previousValue.hiddenChatIds, chatIdToHide])),
+    }));
+
+    const nextChat = filteredChats.find((chat) => chat.chatId !== chatIdToHide && chat.type === 'SELF')
+      ?? filteredChats.find((chat) => chat.chatId !== chatIdToHide)
+      ?? null;
+
+    if (nextChat) {
+      selectChat(nextChat.chatId);
+    }
+
+    setIsChatActionsMenuOpen(false);
+  }
+
+  async function handleDroppedFiles(files: FileList | File[]) {
+    const droppedFiles = Array.from(files).slice(0, 8);
+
+    for (const droppedFile of droppedFiles) {
+      await handleAttachFile(droppedFile, isImageFile(droppedFile) ? 'IMAGE' : 'FILE');
+    }
+  }
+
+  function handleChatDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setIsDraggingFileOverChat(false);
+
+    if (!isSelectedChatWritable) {
+      return;
+    }
+
+    void handleDroppedFiles(event.dataTransfer.files);
+  }
+
+
   useEffect(() => {
     if (!isSelectedChatWritable) {
       setMessageText('');
@@ -2596,9 +3200,34 @@ export function MessengerPage() {
       ? `${selectedTypingStates[0].username || 'Пользователь'} печатает…`
       : 'Несколько пользователей печатают…'
     : null;
+  const selectedDirectCompanionAccountId = selectedChat?.type === 'DIRECT' ? getDirectCompanionAccountId(selectedChat, profile?.accountId) : null;
+  const selectedDirectLastActivityAt = getLastPeerActivityAt(visibleSelectedMessages, selectedDirectCompanionAccountId);
+  const selectedDirectPresence = selectedDirectCompanionAccountId ? presenceByAccountId[selectedDirectCompanionAccountId] : null;
+  const selectedChatSubtitle = selectedTypingText
+    ?? (selectedChat?.type === 'SELF'
+      ? 'Личный чат'
+      : selectedChat?.type === 'DIRECT'
+        ? getAccountActivityLabel(selectedDirectPresence, selectedDirectLastActivityAt)
+        : selectedChatPresentation?.subtitle ?? '');
 
   return (
-    <div className="relative flex h-screen overflow-hidden bg-[#111214] text-zinc-100">
+    <div
+      className="relative flex h-screen overflow-hidden bg-[#0d0e12] text-zinc-100 before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_16%_12%,rgba(139,92,246,0.20),transparent_30rem),radial-gradient(circle_at_92%_8%,rgba(236,72,153,0.14),transparent_26rem),radial-gradient(circle_at_60%_110%,rgba(14,165,233,0.10),transparent_32rem)] before:content-[\'\']"
+      onDragOver={(event) => {
+        if (!isSelectedChatWritable) {
+          return;
+        }
+
+        event.preventDefault();
+        setIsDraggingFileOverChat(true);
+      }}
+      onDragLeave={(event) => {
+        if (event.currentTarget === event.target) {
+          setIsDraggingFileOverChat(false);
+        }
+      }}
+      onDrop={handleChatDrop}
+    >
       <NewChatModal
         isOpen={isCreateChatOpen}
         currentAccountId={profile?.accountId}
@@ -2617,18 +3246,36 @@ export function MessengerPage() {
         onClose={() => setIsSettingsOpen(false)}
         onLogout={handleLogout}
         onBackupRestored={handleKeyBackupRestored}
+        onProfileUpdated={(updatedProfile) => {
+          setProfile(updatedProfile);
+          upsertProfile(updatedProfile);
+          setLocalAvatarDataUrl(updatedProfile.avatarDataUrl ?? null);
+        }}
       />
 
 
+
+      <MiniProfileModal
+        profile={miniProfile}
+        isCurrentAccount={miniProfile?.accountId === profile?.accountId}
+        lastActivityAt={miniProfile ? lastActivityByAccountId[miniProfile.accountId] : null}
+        presence={miniProfile ? presenceByAccountId[miniProfile.accountId] : null}
+        localAvatarDataUrl={localAvatarDataUrl}
+        onClose={() => setMiniProfile(null)}
+        onMessage={handleCreateDirectChat}
+      />
 
       <GroupManagementModal
         isOpen={isGroupManagementOpen}
         chat={selectedChat}
         currentAccountId={profile?.accountId}
         profilesById={profilesById}
+        presenceByAccountId={presenceByAccountId}
+        lastActivityByAccountId={lastActivityByAccountId}
         onClose={() => setIsGroupManagementOpen(false)}
         onAddParticipant={handleAddGroupParticipant}
         onRemoveParticipant={handleRemoveGroupParticipant}
+        onOpenProfile={setMiniProfile}
       />
 
       <DocumentsPanel
@@ -2642,6 +3289,12 @@ export function MessengerPage() {
         onSign={handleSignDocument}
         onReject={handleRejectDocument}
       />
+
+      {isDraggingFileOverChat && isSelectedChatWritable && (
+        <div className="pointer-events-none absolute inset-4 z-50 flex items-center justify-center rounded-[2rem] border-2 border-dashed border-violet-300/45 bg-violet-500/12 text-lg font-semibold text-violet-100 shadow-2xl shadow-violet-950/30 backdrop-blur-xl">
+          Отпустите файл, чтобы отправить его в чат
+        </div>
+      )}
 
       {isDevToolsOpen && profile?.username === 'admin' && (
         <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
@@ -2665,12 +3318,12 @@ export function MessengerPage() {
         </div>
       )}
 
-      <aside className="flex w-[380px] shrink-0 flex-col border-r border-white/10 bg-[#17181c]/95">
+      <aside className="relative z-10 flex w-[392px] shrink-0 flex-col border-r border-white/10 bg-[#15161b]/86 shadow-2xl shadow-black/30 backdrop-blur-2xl">
         <div className="border-b border-white/10 p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
-              <div className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">Messenger</div>
-              <div className="mt-1 text-2xl font-semibold tracking-tight text-zinc-50">Chats</div>
+              <div className="text-[11px] uppercase tracking-[0.18em] text-violet-300/70">Vector Messenger</div>
+              <div className="mt-1 text-2xl font-semibold tracking-tight text-zinc-50">Чаты</div>
             </div>
 
             <button
@@ -2682,7 +3335,7 @@ export function MessengerPage() {
             </button>
           </div>
 
-          <div className="flex items-center gap-3 rounded-3xl border border-white/10 bg-white/[0.04] px-4 py-3 text-zinc-500">
+          <div className="flex items-center gap-3 rounded-3xl border border-white/10 bg-black/18 px-4 py-3 text-zinc-500 shadow-inner shadow-black/20">
             <Search size={17} />
             <input
               value={chatSearchQuery}
@@ -2703,31 +3356,59 @@ export function MessengerPage() {
           ) : (
             filteredChats.map((chat) => {
               const presentation = getChatPresentation(chat, profile, profilesById);
+              const chatMessages = getVisibleChatMessages(messagesByChatId[chat.chatId] ?? [], localChatState.clearedAtByChatId[chat.chatId]);
+              const lastTimelineMessage = getLastTimelineMessage(chatMessages);
+              const preview = buildChatPreviewFromMessage(lastTimelineMessage, decryptedMessagesById, profilesById);
+              const unreadCount = selectedChatId === chat.chatId ? 0 : calculateUnreadCount(chatMessages, profile?.accountId, localChatState.readAtByChatId[chat.chatId]);
+              const isOwnLastMessage = Boolean(lastTimelineMessage && lastTimelineMessage.senderAccountId === profile?.accountId);
+              const lastMessageStatus = lastTimelineMessage && isOwnLastMessage ? getOutgoingMessageStatus(lastTimelineMessage, profile?.accountId) : null;
+              const companionAccountId = chat.type === 'DIRECT' ? getDirectCompanionAccountId(chat, profile?.accountId) : null;
+              const companionPresence = companionAccountId ? presenceByAccountId[companionAccountId] : null;
 
               return (
                 <button
                   key={chat.chatId}
-                  onClick={() => selectChat(chat.chatId)}
+                  onClick={() => {
+                    selectChat(chat.chatId);
+                    setOpenedChatMenuId(null);
+                  }}
                   className={`mb-2 flex w-full items-center gap-3 rounded-[1.6rem] px-3 py-3 text-left transition ${
                     selectedChatId === chat.chatId
-                      ? 'bg-gradient-to-r from-violet-500/22 to-fuchsia-500/10 ring-1 ring-violet-300/20'
-                      : 'hover:bg-white/[0.04]'
+                      ? 'bg-gradient-to-r from-violet-500/25 via-fuchsia-500/10 to-transparent ring-1 ring-violet-300/20 shadow-lg shadow-violet-950/10'
+                      : 'hover:bg-white/[0.05] hover:shadow-lg hover:shadow-black/10'
                   }`}
                 >
-                  {chat.type === 'SELF' ? (
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-lg shadow-black/20">
-                      <Star size={18} />
-                    </div>
-                  ) : (
-                    <Avatar label={presentation.avatarLabel} />
-                  )}
+                  <div className="relative shrink-0">
+                    {chat.type === 'SELF' ? (
+                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-lg shadow-black/20">
+                        <Star size={18} />
+                      </div>
+                    ) : (
+                      <UserAvatar label={presentation.avatarLabel} imageUrl={getAccountAvatarUrl(presentation.companionProfile)} />
+                    )}
+                    {chat.type === 'DIRECT' && (
+                      <span className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-[#17181c] ${companionPresence?.isOnline ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
+                    )}
+                  </div>
 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-3">
                       <div className="truncate text-sm font-semibold text-zinc-100">{presentation.title}</div>
-                      <div className="text-[11px] text-zinc-600">{formatChatTime(chat.lastMessageCreatedAt ?? chat.updatedAt)}</div>
+                      <div className="shrink-0 text-[11px] text-zinc-600">{formatChatTime(lastTimelineMessage?.createdAt ?? chat.lastMessageCreatedAt ?? chat.updatedAt)}</div>
                     </div>
-                    <div className="mt-1 truncate text-xs text-zinc-500">{presentation.subtitle}</div>
+                    <div className="mt-1 flex items-center gap-2">
+                      {chat.type !== 'SELF' && isOwnLastMessage && lastMessageStatus && (
+                        <span className="inline-flex shrink-0 text-violet-300">
+                          {lastMessageStatus === 'READ' ? <CheckCheck size={13} /> : lastMessageStatus === 'DELIVERED' ? <CheckCheck size={13} /> : <Check size={13} />}
+                        </span>
+                      )}
+                      <div className={`min-w-0 flex-1 truncate text-xs ${getPreviewTextColorClass(preview.accent)}`}>{preview.text}</div>
+                      {unreadCount > 0 && (
+                        <span className="flex min-w-5 shrink-0 items-center justify-center rounded-full bg-violet-500 px-1.5 py-0.5 text-[11px] font-semibold text-white shadow-lg shadow-violet-950/30">
+                          {unreadCount > 99 ? '99+' : unreadCount}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </button>
               );
@@ -2742,7 +3423,7 @@ export function MessengerPage() {
               className="flex min-w-0 flex-1 items-center gap-3 rounded-[1.35rem] p-2 text-left transition hover:bg-white/[0.05]"
               title="Открыть настройки"
             >
-              <Avatar label={currentUserDisplayName} size="sm" />
+              <UserAvatar label={currentUserDisplayName} imageUrl={getAccountAvatarUrl(profile, localAvatarDataUrl)} size="sm" />
 
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-semibold text-zinc-100">{currentUserDisplayName}</div>
@@ -2750,7 +3431,7 @@ export function MessengerPage() {
                   {realtimeStatus === 'connected'
                     ? <Wifi size={13} className="text-emerald-300" />
                     : <WifiOff size={13} className="text-zinc-600" />}
-                  <span>@{profile?.username ?? 'user'} • crypto {cryptoStatus}</span>
+                  <span>@{profile?.username ?? 'user'} • {cryptoStatus === 'ready' ? 'защищено' : 'настройка'}</span>
                 </div>
               </div>
             </button>
@@ -2768,7 +3449,7 @@ export function MessengerPage() {
         </div>
       </aside>
 
-      <main className="flex min-w-0 flex-1 flex-col bg-[#111214]">
+      <main className="relative z-10 flex min-w-0 flex-1 flex-col bg-[#101116]/74 backdrop-blur-sm">
         {!selectedChat || !selectedChatPresentation ? (
           <div className="flex flex-1 items-center justify-center px-8">
             <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-10 text-center shadow-2xl shadow-black/30">
@@ -2783,22 +3464,38 @@ export function MessengerPage() {
           </div>
         ) : (
           <>
-            <header className="flex h-[84px] items-center justify-between border-b border-white/10 bg-[#18191d]/72 px-7 backdrop-blur-xl">
+            <header className="flex h-[84px] items-center justify-between border-b border-white/10 bg-[#16171d]/82 px-7 shadow-lg shadow-black/10 backdrop-blur-2xl">
               <div className="flex min-w-0 items-center gap-4">
-                {selectedChat.type === 'SELF'
-                  ? (
-                    <div className="flex h-14 w-14 items-center justify-center rounded-3xl bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-lg shadow-black/20">
-                      <Star size={20} />
-                    </div>
-                    )
-                  : <Avatar label={selectedChatPresentation.avatarLabel} size="lg" />}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (selectedChat.type === 'GROUP') {
+                      setIsGroupManagementOpen(true);
+                    }
+                    else if (selectedChat.type === 'DIRECT' && selectedChatPresentation.companionProfile) {
+                      setMiniProfile(selectedChatPresentation.companionProfile);
+                    }
+                  }}
+                  className="flex min-w-0 items-center gap-4 rounded-3xl px-1 py-1 text-left transition hover:bg-white/[0.04]"
+                  title={selectedChat.type === 'GROUP' ? 'Открыть участников группы' : 'Открыть профиль'}
+                >
+                  {selectedChat.type === 'SELF'
+                    ? (
+                      <div className="flex h-14 w-14 items-center justify-center rounded-3xl bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-lg shadow-black/20">
+                        <Star size={20} />
+                      </div>
+                      )
+                    : <UserAvatar label={selectedChatPresentation.avatarLabel} imageUrl={getAccountAvatarUrl(selectedChatPresentation.companionProfile)} size="lg" />}
 
-                <div className="min-w-0">
-                  <div className="truncate text-lg font-semibold text-zinc-50">{selectedChatPresentation.title}</div>
-                  <div className="mt-1 truncate text-sm text-zinc-500">
-                    {selectedTypingText ?? (selectedChat.type === 'SELF' ? 'Личный чат' : selectedChatPresentation.subtitle)}
+                  <div className="min-w-0">
+                    <div className="truncate text-lg font-semibold text-zinc-50 transition group-hover:text-violet-100">
+                      {selectedChatPresentation.title}
+                    </div>
+                    <div className="mt-1 truncate text-sm text-zinc-500">
+                      {selectedChatSubtitle}
+                    </div>
                   </div>
-                </div>
+                </button>
               </div>
 
               <div className="flex items-center gap-2">
@@ -2820,8 +3517,35 @@ export function MessengerPage() {
                   <ShieldCheck size={14} />
                   Документы
                 </button>
-                <div className="rounded-full border border-violet-300/20 bg-violet-400/10 px-3 py-1 text-xs text-violet-200">
-                  {realtimeStatus === 'connected' ? 'online' : realtimeStatus}
+                <div className="relative">
+                  <button
+                    onClick={() => setIsChatActionsMenuOpen((previousValue) => !previousValue)}
+                    className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-zinc-300 transition hover:border-violet-300/25 hover:text-white"
+                    title="Действия с чатом"
+                  >
+                    <MoreVertical size={16} />
+                  </button>
+
+                  {isChatActionsMenuOpen && (
+                    <div className="absolute right-0 top-11 z-30 w-64 rounded-3xl border border-white/10 bg-[#202127] p-2 text-sm shadow-2xl shadow-black/50">
+                      <button
+                        onClick={handleClearSelectedChatHistory}
+                        className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-zinc-200 transition hover:bg-white/[0.06]"
+                      >
+                        <Eraser size={17} className="text-zinc-400" />
+                        Очистить историю у меня
+                      </button>
+                      {selectedChat.type !== 'SELF' && (
+                        <button
+                          onClick={handleDeleteSelectedChatLocally}
+                          className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-red-200 transition hover:bg-red-500/10"
+                        >
+                          <Trash2 size={17} />
+                          Удалить чат у меня
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </header>
@@ -2840,21 +3564,32 @@ export function MessengerPage() {
 
             <div className="min-h-0 flex-1 overflow-y-auto px-8 py-6">
               <div className="mx-auto flex max-w-4xl flex-col gap-3">
-                {selectedMessages.length === 0 && (
+                {visibleSelectedMessages.length === 0 && (
                   <div className="rounded-[1.8rem] border border-dashed border-white/10 bg-white/[0.02] p-8 text-center text-sm text-zinc-500">
                     Пока сообщений нет. Напиши первое сообщение ниже.
                   </div>
                 )}
 
-                {selectedMessages.filter((message) => message.messageType !== 'GROUP_KEY_DISTRIBUTION').map((message) => {
+                {visibleSelectedMessages.filter((message) => message.messageType !== 'GROUP_KEY_DISTRIBUTION').map((message, messageIndex, renderedMessages) => {
+                  const previousMessage = messageIndex > 0 ? renderedMessages[messageIndex - 1] : null;
+                  const shouldShowDateSeparator = !previousMessage || !isSameCalendarDate(previousMessage.createdAt, message.createdAt);
                   const decryptedMessage = decryptedMessagesById[message.messageId] ?? 'Расшифровка…';
 
                   if (message.messageType === 'SYSTEM') {
                     const systemPayload = parseGroupSystemMessagePayload(decryptedMessage);
                     return (
-                      <div key={message.messageId} className="flex justify-center py-1">
-                        <div className="max-w-[80%] rounded-full border border-white/10 bg-white/[0.06] px-4 py-1.5 text-center text-xs text-zinc-400 shadow-sm shadow-black/10">
-                          {formatGroupSystemMessage(systemPayload, profilesById)}
+                      <div key={message.messageId}>
+                        {shouldShowDateSeparator && (
+                          <div className="sticky top-3 z-10 my-3 flex justify-center">
+                            <div className="rounded-full border border-white/10 bg-[#22242a]/90 px-3 py-1 text-xs text-zinc-400 shadow-lg shadow-black/20 backdrop-blur">
+                              {formatMessageDate(message.createdAt)}
+                            </div>
+                          </div>
+                        )}
+                        <div className="flex justify-center py-1">
+                          <div className="max-w-[80%] rounded-full border border-white/10 bg-white/[0.06] px-4 py-1.5 text-center text-xs text-zinc-400 shadow-sm shadow-black/10">
+                            {formatGroupSystemMessage(systemPayload, profilesById)}
+                          </div>
                         </div>
                       </div>
                     );
@@ -2868,19 +3603,27 @@ export function MessengerPage() {
                   const senderDisplayName = senderProfile ? getDisplayName(senderProfile) : `${message.senderAccountId.slice(0, 8)}…`;
                   const readReceiptDetails = getReadReceiptDetails(message, selectedChat, profilesById, profile?.accountId);
                   const shouldShowGroupSender = selectedChat.type === 'GROUP' && !isOwnMessage;
-                  const shouldShowGroupReadDetails = selectedChat.type === 'GROUP' && isOwnMessage && readDetailsMessageId === message.messageId;
+                  const shouldShowGroupReadDetails = selectedChat.type === 'GROUP' && readDetailsMessageId === message.messageId;
 
                   return (
-                    <div key={message.messageId} className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
+                    <div key={message.messageId}>
+                      {shouldShowDateSeparator && (
+                        <div className="sticky top-3 z-10 my-3 flex justify-center">
+                          <div className="rounded-full border border-white/10 bg-[#22242a]/90 px-3 py-1 text-xs text-zinc-400 shadow-lg shadow-black/20 backdrop-blur">
+                            {formatMessageDate(message.createdAt)}
+                          </div>
+                        </div>
+                      )}
+                      <div className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
                       <div className={`flex max-w-[74%] items-end gap-3 ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
-                        {!isOwnMessage && <Avatar label={senderDisplayName} size="sm" />}
+                        {!isOwnMessage && <UserAvatar label={senderDisplayName} imageUrl={getAccountAvatarUrl(senderProfile)} size="sm" />}
 
                         <div className="relative">
                           <div
                             className={`rounded-[1.5rem] px-4 py-3 shadow-lg ${
                             isOwnMessage
-                              ? 'rounded-br-md bg-gradient-to-br from-violet-500 to-fuchsia-600 text-white shadow-violet-950/25'
-                              : 'rounded-bl-md border border-white/10 bg-[#24262d] text-zinc-100 shadow-black/20'
+                              ? 'rounded-br-md bg-gradient-to-br from-violet-500 via-fuchsia-600 to-pink-600 text-white shadow-violet-950/30'
+                              : 'rounded-bl-md border border-white/10 bg-[#24262d]/96 text-zinc-100 shadow-black/20 backdrop-blur'
                           }`}
                         >
                           {shouldShowGroupSender && (
@@ -2916,9 +3659,15 @@ export function MessengerPage() {
                               </div>
                             )
                           ) : (
-                            <div className="whitespace-pre-wrap text-sm leading-6">
-                              {decryptedMessage}
-                            </div>
+                            isStickerMessageText(decryptedMessage) ? (
+                              <div className="select-none px-2 py-1 text-6xl leading-none">
+                                {decryptedMessage.trim()}
+                              </div>
+                            ) : (
+                              <div className="whitespace-pre-wrap text-sm leading-6">
+                                {decryptedMessage}
+                              </div>
+                            )
                           )}
                           <div className={`mt-2 flex items-center gap-2 text-[11px] ${isOwnMessage ? 'justify-end text-violet-100/80' : 'justify-end text-zinc-500'}`}>
                             <span>{formatMessageTime(message.createdAt)}</span>
@@ -2930,7 +3679,7 @@ export function MessengerPage() {
                                 </span>
                               </span>
                             )}
-                            {isOwnMessage && selectedChat.type === 'GROUP' && (
+                            {selectedChat.type === 'GROUP' && (
                               <button
                                 type="button"
                                 onClick={() => setReadDetailsMessageId((currentValue) => currentValue === message.messageId ? null : message.messageId)}
@@ -2956,21 +3705,41 @@ export function MessengerPage() {
                                 <div>
                                   <div className="mb-2 text-zinc-500">Прочитали</div>
                                   <div className="flex flex-wrap gap-1.5">
-                                    {readReceiptDetails.readParticipants.length > 0 ? readReceiptDetails.readParticipants.map((participant) => (
-                                      <span key={getParticipantDisplayName(participant)} className="rounded-full bg-emerald-400/10 px-2 py-1 text-emerald-200">
-                                        {getParticipantDisplayName(participant)}
-                                      </span>
-                                    )) : <span className="text-zinc-500">Пока никто</span>}
+                                    {readReceiptDetails.readParticipants.length > 0 ? readReceiptDetails.readParticipants.map((participant) => {
+                                      const participantName = getParticipantDisplayName(participant);
+                                      return typeof participant === 'string' ? (
+                                        <span key={participantName} className="rounded-full bg-emerald-400/10 px-2 py-1 text-emerald-200">{participantName}</span>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          key={participant.accountId}
+                                          onClick={() => setMiniProfile(participant)}
+                                          className="rounded-full bg-emerald-400/10 px-2 py-1 text-emerald-200 transition hover:bg-emerald-400/18"
+                                        >
+                                          {participantName}
+                                        </button>
+                                      );
+                                    }) : <span className="text-zinc-500">Пока никто</span>}
                                   </div>
                                 </div>
                                 <div>
                                   <div className="mb-2 text-zinc-500">Ещё не прочитали</div>
                                   <div className="flex flex-wrap gap-1.5">
-                                    {readReceiptDetails.unreadParticipants.length > 0 ? readReceiptDetails.unreadParticipants.map((participant) => (
-                                      <span key={getParticipantDisplayName(participant)} className="rounded-full bg-white/[0.06] px-2 py-1 text-zinc-300">
-                                        {getParticipantDisplayName(participant)}
-                                      </span>
-                                    )) : <span className="text-zinc-500">Все прочитали</span>}
+                                    {readReceiptDetails.unreadParticipants.length > 0 ? readReceiptDetails.unreadParticipants.map((participant) => {
+                                      const participantName = getParticipantDisplayName(participant);
+                                      return typeof participant === 'string' ? (
+                                        <span key={participantName} className="rounded-full bg-white/[0.06] px-2 py-1 text-zinc-300">{participantName}</span>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          key={participant.accountId}
+                                          onClick={() => setMiniProfile(participant)}
+                                          className="rounded-full bg-white/[0.06] px-2 py-1 text-zinc-300 transition hover:bg-white/[0.1]"
+                                        >
+                                          {participantName}
+                                        </button>
+                                      );
+                                    }) : <span className="text-zinc-500">Все прочитали</span>}
                                   </div>
                                 </div>
                               </div>
@@ -2979,6 +3748,7 @@ export function MessengerPage() {
                         </div>
                       </div>
                     </div>
+                  </div>
                   );
                 })}
 
@@ -2999,120 +3769,22 @@ export function MessengerPage() {
               </div>
             </div>
 
-            <div className="border-t border-white/10 bg-[#18191d]/85 p-5 backdrop-blur-xl">
-              <div className="mx-auto max-w-4xl">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  className="hidden"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0] ?? null;
-                    event.target.value = '';
-                    void handleAttachFile(file, 'FILE');
-                  }}
-                />
-
-                <input
-                  ref={imageInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0] ?? null;
-                    event.target.value = '';
-                    void handleAttachFile(file, 'IMAGE');
-                  }}
-                />
-
-
-                <input
-                  ref={documentInputRef}
-                  type="file"
-                  className="hidden"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0] ?? null;
-                    event.target.value = '';
-                    void handleAttachDocument(file);
-                  }}
-                />
-
-                <div className="flex items-end gap-3 rounded-[2rem] border border-white/10 bg-white/[0.04] px-4 py-3 shadow-xl shadow-black/20">
-                  <div className="relative">
-                    <button
-                      onClick={() => setIsAttachmentMenuOpen((previousValue) => !previousValue)}
-                      disabled={isSending || isUploadingFile || !selectedChat || !isSelectedChatWritable}
-                      className="flex h-[52px] w-[52px] items-center justify-center rounded-2xl border border-white/10 bg-white/[0.05] text-zinc-300 transition hover:border-violet-300/25 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-                      title="Прикрепить"
-                    >
-                      {isUploadingFile ? <LoaderCircle size={18} className="animate-spin" /> : <Paperclip size={19} />}
-                    </button>
-
-                    {isAttachmentMenuOpen && (
-                      <div className="absolute bottom-[62px] left-0 z-20 w-64 rounded-3xl border border-white/10 bg-[#202127] p-2 shadow-2xl shadow-black/40">
-                        <button
-                          onClick={() => imageInputRef.current?.click()}
-                          className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm text-zinc-200 transition hover:bg-white/[0.06]"
-                        >
-                          <ImageIcon size={18} className="text-violet-200" />
-                          <span>Отправить как изображение</span>
-                        </button>
-                        <button
-                          onClick={() => fileInputRef.current?.click()}
-                          className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm text-zinc-200 transition hover:bg-white/[0.06]"
-                        >
-                          <FileText size={18} className="text-violet-200" />
-                          <span>Отправить как файл</span>
-                        </button>
-                        <button
-                          onClick={() => documentInputRef.current?.click()}
-                          className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm text-zinc-200 transition hover:bg-white/[0.06]"
-                        >
-                          <ShieldCheck size={18} className="text-violet-200" />
-                          <span>Отправить как документ</span>
-                        </button>
-                        <button
-                          onClick={() => void openDocumentsPanel()}
-                          className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm text-zinc-200 transition hover:bg-white/[0.06]"
-                        >
-                          <FileText size={18} className="text-violet-200" />
-                          <span>Открыть документы чата</span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  <textarea
-                    value={messageText}
-                    onChange={(event) => handleMessageTextChange(event.target.value)}
-                    onBlur={() => sendCurrentTypingState(false)}
-                    onKeyDown={handleTextareaKeyDown}
-                    onInput={(event) => {
-                      const textarea = event.currentTarget;
-                      textarea.style.height = '0px';
-                      textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`;
-                    }}
-                    placeholder={isSelectedChatWritable ? 'Напишите сообщение…' : 'Вы исключены из группы'}
-                    rows={1}
-                    disabled={!isSelectedChatWritable}
-                    className="max-h-40 min-h-[24px] flex-1 resize-none bg-transparent py-2 text-sm leading-6 text-zinc-100 outline-none placeholder:text-zinc-600 disabled:cursor-not-allowed disabled:text-zinc-600"
-                  />
-
-                  <button
-                    onClick={() => void handleSendCurrentMessage()}
-                    disabled={isSending || !messageText.trim() || !isSelectedChatWritable}
-                    className="flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-lg shadow-violet-950/40 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-                    title="Отправить"
-                  >
-                    {isSending && !isUploadingFile ? <LoaderCircle size={18} className="animate-spin" /> : <Send size={19} />}
-                  </button>
-                </div>
-
-                <div className="mt-3 flex items-center justify-between px-2 text-xs text-zinc-600">
-                  <span>Enter — отправить, Shift + Enter — новая строка. Файлы шифруются локально перед отправкой.</span>
-                  <span>{selectedChat.type === 'SELF' ? 'Личный чат' : selectedChat.type === 'GROUP' ? 'Group sender-key E2EE' : 'Direct chat'}</span>
-                </div>
-              </div>
-            </div>
+            <ChatComposer
+              messageText={messageText}
+              placeholder={isSelectedChatWritable ? 'Напишите сообщение…' : 'Вы исключены из группы'}
+              isSending={isSending}
+              isUploadingFile={isUploadingFile}
+              isWritable={Boolean(selectedChat && isSelectedChatWritable)}
+              onMessageTextChange={handleMessageTextChange}
+              onMessageBlur={() => sendCurrentTypingState(false)}
+              onTextareaKeyDown={handleTextareaKeyDown}
+              onAttachFile={handleAttachFile}
+              onAttachDocument={handleAttachDocument}
+              onOpenDocumentsPanel={openDocumentsPanel}
+              onAppendEmoji={appendEmojiToMessage}
+              onSendSticker={sendSticker}
+              onSendCurrentMessage={() => handleSendCurrentMessage()}
+            />
           </>
         )}
       </main>

@@ -6,8 +6,10 @@ import type {
   MessageDeliveredPayload,
   MessageReadPayload,
   MessageResponseDto,
+  PresenceSnapshotPayload,
   RealtimeEventDto,
   TypingPayload,
+  AccountPresencePayload,
 } from '../../shared/types/api';
 import { refreshAuthenticationToken } from '../auth/api/authApi';
 import { getChatMessages } from '../messages/api/messagesApi';
@@ -65,6 +67,19 @@ function isTypingPayload(payload: unknown): payload is TypingPayload {
     && typeof payload.isTyping === 'boolean';
 }
 
+function isAccountPresencePayload(payload: unknown): payload is AccountPresencePayload {
+  return isObjectPayload(payload)
+    && typeof payload.accountId === 'string'
+    && typeof payload.online === 'boolean'
+    && (typeof payload.lastSeenAt === 'string' || payload.lastSeenAt === null);
+}
+
+function isPresenceSnapshotPayload(payload: unknown): payload is PresenceSnapshotPayload {
+  return isObjectPayload(payload)
+    && Array.isArray(payload.accounts)
+    && payload.accounts.every(isAccountPresencePayload);
+}
+
 function getAccessTokenExpirationTime(accessTokenExpiresAt: string | null): number | null {
   if (!accessTokenExpiresAt) {
     return null;
@@ -116,6 +131,8 @@ export function useRealtimeConnection() {
   const setStatus = useRealtimeStore((state) => state.setStatus);
   const setLastError = useRealtimeStore((state) => state.setLastError);
   const setTyping = useRealtimeStore((state) => state.setTyping);
+  const setPresence = useRealtimeStore((state) => state.setPresence);
+  const applyPresenceSnapshot = useRealtimeStore((state) => state.applyPresenceSnapshot);
   const setTypingSender = useRealtimeStore((state) => state.setTypingSender);
   const reconnectAttemptRef = useRef(0);
   const reconnectTimeoutRef = useRef<number | null>(null);
@@ -203,6 +220,17 @@ export function useRealtimeConnection() {
         const chat = realtimeEvent.payload.chat;
         upsertChat(chat);
         refreshChatMessages(chat.chatId);
+        return;
+      }
+
+
+      if (realtimeEvent.type === 'PRESENCE_UPDATED' && isAccountPresencePayload(realtimeEvent.payload)) {
+        setPresence(realtimeEvent.payload);
+        return;
+      }
+
+      if (realtimeEvent.type === 'PRESENCE_SNAPSHOT' && isPresenceSnapshotPayload(realtimeEvent.payload)) {
+        applyPresenceSnapshot(realtimeEvent.payload.accounts);
         return;
       }
 
@@ -345,8 +373,10 @@ export function useRealtimeConnection() {
     selectedChatId,
     applyMessageDelivered,
     applyMessageRead,
+    applyPresenceSnapshot,
     setLastError,
     setMessages,
+    setPresence,
     setStatus,
     setTyping,
     touchChat,

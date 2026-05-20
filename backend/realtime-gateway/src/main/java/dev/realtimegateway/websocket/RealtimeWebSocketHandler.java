@@ -8,6 +8,8 @@ import dev.realtimegateway.security.AccountPrincipal;
 import dev.realtimegateway.service.WebSocketAuthenticationService;
 import dev.realtimegateway.session.ConnectionRegistry;
 import java.time.OffsetDateTime;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -32,7 +34,12 @@ public class RealtimeWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionEstablished(WebSocketSession webSocketSession) throws Exception {
         try {
             AccountPrincipal accountPrincipal = webSocketAuthenticationService.authenticate(webSocketSession);
-            connectionRegistry.register(webSocketSession, accountPrincipal);
+            boolean becameOnline = connectionRegistry.register(webSocketSession, accountPrincipal);
+            sendPresenceSnapshot(webSocketSession);
+
+            if (becameOnline) {
+                broadcastPresence(accountPrincipal.accountId(), true, null);
+            }
         }
         catch (RuntimeException exception) {
             log.warn("WebSocket authentication failed. Session ID: {}.", webSocketSession.getId(), exception);
@@ -60,10 +67,10 @@ public class RealtimeWebSocketHandler extends TextWebSocketHandler {
             return;
         }
 
-        handleClientEvent(webSocketSession, payload, accountPrincipal);
+        handleClientEvent(payload, accountPrincipal);
     }
 
-    private void handleClientEvent(WebSocketSession webSocketSession, String payload, AccountPrincipal accountPrincipal) {
+    private void handleClientEvent(String payload, AccountPrincipal accountPrincipal) {
         try {
             ClientTypingEventDto clientTypingEventDto = objectMapper.readValue(payload, ClientTypingEventDto.class);
 
@@ -77,22 +84,54 @@ public class RealtimeWebSocketHandler extends TextWebSocketHandler {
 
             Boolean typing = clientTypingEventDto.isTyping();
             RealtimeEnvelopeDto realtimeEnvelopeDto = new RealtimeEnvelopeDto(
-                UUID.randomUUID(),
-                MessagingEventType.TYPING,
-                OffsetDateTime.now(),
-                objectMapper.valueToTree(Map.of(
-                    "chatId", clientTypingEventDto.chatId(),
-                    "typingAccountId", accountPrincipal.accountId(),
-                    "username", accountPrincipal.username(),
-                    "isTyping", typing != null && typing
-                ))
+                    UUID.randomUUID(),
+                    MessagingEventType.TYPING,
+                    OffsetDateTime.now(),
+                    objectMapper.valueToTree(Map.of(
+                            "chatId", clientTypingEventDto.chatId(),
+                            "typingAccountId", accountPrincipal.accountId(),
+                            "username", accountPrincipal.username(),
+                            "isTyping", typing != null && typing
+                    ))
             );
-
             connectionRegistry.sendToAccounts(clientTypingEventDto.recipientAccountIds(), realtimeEnvelopeDto);
         }
         catch (Exception exception) {
-            log.debug("Ignoring unsupported WebSocket client event. Session ID: {}.", webSocketSession.getId(), exception);
+            log.debug("Ignoring unsupported WebSocket client event.", exception);
         }
+    }
+
+    private void sendPresenceSnapshot(WebSocketSession webSocketSession) {
+        List<Map<String, Object>> accounts = connectionRegistry.getOnlineAccountIds().stream()
+                .map(accountId -> {
+                    Map<String, Object> accountPresence = new LinkedHashMap<>();
+                    accountPresence.put("accountId", accountId);
+                    accountPresence.put("online", true);
+                    accountPresence.put("lastSeenAt", null);
+                    return accountPresence;
+                })
+                .toList();
+        RealtimeEnvelopeDto realtimeEnvelopeDto = new RealtimeEnvelopeDto(
+                UUID.randomUUID(),
+                MessagingEventType.PRESENCE_SNAPSHOT,
+                OffsetDateTime.now(),
+                objectMapper.valueToTree(Map.of("accounts", accounts))
+        );
+        connectionRegistry.sendToSession(webSocketSession, realtimeEnvelopeDto);
+    }
+
+    private void broadcastPresence(UUID accountId, boolean online, OffsetDateTime lastSeenAt) {
+        Map<String, Object> presencePayload = new LinkedHashMap<>();
+        presencePayload.put("accountId", accountId);
+        presencePayload.put("online", online);
+        presencePayload.put("lastSeenAt", lastSeenAt);
+        RealtimeEnvelopeDto realtimeEnvelopeDto = new RealtimeEnvelopeDto(
+                UUID.randomUUID(),
+                MessagingEventType.PRESENCE_UPDATED,
+                OffsetDateTime.now(),
+                objectMapper.valueToTree(presencePayload)
+        );
+        connectionRegistry.sendToAllAccounts(realtimeEnvelopeDto);
     }
 
     private void sendPongIfOpen(WebSocketSession webSocketSession) throws Exception {
@@ -109,15 +148,22 @@ public class RealtimeWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionClosed(WebSocketSession webSocketSession, CloseStatus closeStatus) {
-        connectionRegistry.unregister(webSocketSession);
+        AccountPrincipal accountPrincipal = connectionRegistry.getAccountPrincipal(webSocketSession);
+        boolean becameOffline = connectionRegistry.unregister(webSocketSession);
+
+        if (becameOffline && accountPrincipal != null) {
+            OffsetDateTime lastSeenAt = connectionRegistry.getLastSeenAt(accountPrincipal.accountId());
+            broadcastPresence(accountPrincipal.accountId(), false, lastSeenAt);
+        }
     }
 
     @Override
     public void handleTransportError(WebSocketSession webSocketSession, Throwable exception) throws Exception {
         log.warn("WebSocket transport error. Session ID: {}.", webSocketSession.getId(), exception);
-        connectionRegistry.unregister(webSocketSession);
-        webSocketSession.close(CloseStatus.SERVER_ERROR);
+        afterConnectionClosed(webSocketSession, CloseStatus.SERVER_ERROR);
+
+        if (webSocketSession.isOpen()) {
+            webSocketSession.close(CloseStatus.SERVER_ERROR);
+        }
     }
 }
-
-

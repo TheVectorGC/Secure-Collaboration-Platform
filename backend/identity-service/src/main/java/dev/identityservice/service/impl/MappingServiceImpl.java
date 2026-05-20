@@ -8,7 +8,6 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class MappingServiceImpl implements MappingService {
-
     @Override
     public AccountProfileResponseDto mapToAccountProfileResponseDto(
             AccountEntity accountEntity,
@@ -23,7 +22,8 @@ public class MappingServiceImpl implements MappingService {
                 profileEntity.getMiddleName(),
                 accountEntity.getStatus(),
                 profileEntity.getAvatarType(),
-                profileEntity.getAvatarFileId()
+                profileEntity.getAvatarFileId(),
+                profileEntity.getAvatarDataUrl()
         );
     }
 }
