@@ -24,6 +24,7 @@ import {
   Clock3,
   Mail,
   MessageSquare,
+  CornerUpLeft,
   User,
   MoreVertical,
   LockKeyhole,
@@ -51,7 +52,7 @@ import { useMessengerStore } from '../features/messenger/model/messengerStore';
 import { useRealtimeConnection } from '../features/realtime/useRealtimeConnection';
 import { useRealtimeStore, type AccountPresenceState } from '../features/realtime/model/realtimeStore';
 import { DevAccountPanel } from '../features/admin/ui/DevAccountPanel';
-import { ChatComposer, type ChatAttachmentDisplayMode } from '../features/messenger/ui/ChatComposer';
+import { ChatComposer, type ChatAttachmentDisplayMode, type ComposerForwardPreview, type ComposerReplyPreview } from '../features/messenger/ui/ChatComposer';
 import { DocumentAttachmentPreview, ImageAttachmentPreview } from '../features/messenger/ui/MessageAttachments';
 import { useCryptoBootstrap } from '../features/crypto/useCryptoBootstrap';
 import { useCryptoStore } from '../features/crypto/model/cryptoStore';
@@ -66,7 +67,46 @@ import type { ActiveDeviceResponseDto, AddGroupParticipantRequestDto, ChatRespon
 const IMAGE_FILE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'avif']);
 const CHAT_LOCAL_STATE_PREFIX = 'vector.chatLocalState';
 const EMOJI_ITEMS = ['😀', '😄', '😊', '😍', '😎', '🥳', '👍', '🙏', '🔥', '💪', '✅', '❤️', '😂', '🤝', '👀', '🚀', '📌', '📎', '📝', '🔒'];
-const STICKER_ITEMS = ['🐱', '🐶', '🦊', '🐼', '🤖', '👻', '💥', '✨', '🎉', '🏆', '☕', '🌙'];
+const QUICK_REACTION_ITEMS = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
+const LOCAL_REACTIONS_PREFIX = 'vector.localMessageReactions';
+
+type MessageContextMenuState = {
+  messageId: string;
+  x: number;
+  y: number;
+  placement: 'above' | 'below';
+};
+
+type ReplyDraft = {
+  messageId: string;
+  chatId: string;
+  senderAccountId: string;
+  senderName: string;
+  preview: string;
+  createdAt: string;
+};
+
+type ForwardedMessageSnapshot = {
+  messageId: string;
+  chatId: string;
+  senderAccountId: string;
+  senderName: string;
+  createdAt: string;
+  plainText: string;
+};
+
+type ForwardSelectionState = {
+  originChatId: string;
+  selectedMessageIds: string[];
+};
+
+type RichMessageContent = {
+  kind: 'VECTOR_RICH_MESSAGE';
+  version: 1;
+  text: string;
+  replyTo: ReplyDraft | null;
+  forwardedMessages: ForwardedMessageSnapshot[];
+};
 
 type LocalChatState = {
   readAtByChatId: Record<string, string>;
@@ -157,6 +197,31 @@ function writeLocalChatState(accountId: string | undefined, localChatState: Loca
   localStorage.setItem(getLocalChatStateStorageKey(accountId), JSON.stringify(localChatState));
 }
 
+
+function getLocalReactionsStorageKey(accountId: string | undefined): string {
+  return `${LOCAL_REACTIONS_PREFIX}.${accountId ?? 'anonymous'}`;
+}
+
+function readLocalReactions(accountId: string | undefined): Record<string, string> {
+  const serializedValue = localStorage.getItem(getLocalReactionsStorageKey(accountId));
+
+  if (!serializedValue) {
+    return {};
+  }
+
+  try {
+    const parsedValue = JSON.parse(serializedValue) as Record<string, string>;
+    return parsedValue && typeof parsedValue === 'object' ? parsedValue : {};
+  }
+  catch {
+    return {};
+  }
+}
+
+function writeLocalReactions(accountId: string | undefined, reactionsByMessageId: Record<string, string>) {
+  localStorage.setItem(getLocalReactionsStorageKey(accountId), JSON.stringify(reactionsByMessageId));
+}
+
 function isSameCalendarDate(leftValue: string, rightValue: string): boolean {
   const leftDate = new Date(leftValue);
   const rightDate = new Date(rightValue);
@@ -174,9 +239,6 @@ function isImageFile(file: File): boolean {
   const extension = file.name.split('.').at(-1)?.toLowerCase();
   return extension ? IMAGE_FILE_EXTENSIONS.has(extension) : false;
 }
-function isStickerMessageText(value: string): boolean {
-  return STICKER_ITEMS.includes(value.trim());
-}
 
 
 function getVisibleChatMessages(messages: MessageResponseDto[], clearedAt: string | null | undefined): MessageResponseDto[] {
@@ -191,6 +253,106 @@ function getVisibleChatMessages(messages: MessageResponseDto[], clearedAt: strin
 function getLastTimelineMessage(messages: MessageResponseDto[]): MessageResponseDto | null {
   const visibleMessages = messages.filter((message) => message.messageType !== 'GROUP_KEY_DISTRIBUTION');
   return visibleMessages.at(-1) ?? null;
+}
+
+
+function parseRichMessageContent(value: string | null | undefined): RichMessageContent | null {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const parsedValue = JSON.parse(value) as Partial<RichMessageContent>;
+
+    if (parsedValue.kind !== 'VECTOR_RICH_MESSAGE' || parsedValue.version !== 1) {
+      return null;
+    }
+
+    const forwardedMessages = Array.isArray(parsedValue.forwardedMessages)
+      ? parsedValue.forwardedMessages.filter((item): item is ForwardedMessageSnapshot => (
+        typeof item?.messageId === 'string'
+        && typeof item.chatId === 'string'
+        && typeof item.senderAccountId === 'string'
+        && typeof item.senderName === 'string'
+        && typeof item.createdAt === 'string'
+        && typeof item.plainText === 'string'
+      ))
+      : [];
+
+    const replyTo = parsedValue.replyTo
+      && typeof parsedValue.replyTo.messageId === 'string'
+      && typeof parsedValue.replyTo.chatId === 'string'
+      && typeof parsedValue.replyTo.senderAccountId === 'string'
+      && typeof parsedValue.replyTo.senderName === 'string'
+      && typeof parsedValue.replyTo.preview === 'string'
+      && typeof parsedValue.replyTo.createdAt === 'string'
+      ? parsedValue.replyTo
+      : null;
+
+    return {
+      kind: 'VECTOR_RICH_MESSAGE',
+      version: 1,
+      text: typeof parsedValue.text === 'string' ? parsedValue.text : '',
+      replyTo,
+      forwardedMessages,
+    };
+  }
+  catch {
+    return null;
+  }
+}
+
+function buildRichMessageContent(text: string, replyTo: ReplyDraft | null, forwardedMessages: ForwardedMessageSnapshot[]): string {
+  return JSON.stringify({
+    kind: 'VECTOR_RICH_MESSAGE',
+    version: 1,
+    text,
+    replyTo,
+    forwardedMessages,
+  } satisfies RichMessageContent);
+}
+
+function getMessageContentPreview(plainText: string | undefined, fallback = 'Сообщение'): string {
+  if (!plainText || isDecryptionPlaceholder(plainText) || plainText === 'Расшифровка…') {
+    return fallback;
+  }
+
+  const richMessageContent = parseRichMessageContent(plainText);
+
+  if (richMessageContent) {
+    const compactText = richMessageContent.text.replace(/\s+/g, ' ').trim();
+
+    if (compactText) {
+      return compactText.length > 90 ? `${compactText.slice(0, 90)}…` : compactText;
+    }
+
+    if (richMessageContent.forwardedMessages.length > 0) {
+      return `${richMessageContent.forwardedMessages.length} пересланных сообщений`;
+    }
+  }
+
+  const fileAttachment = parseFileAttachmentMessageContent(plainText);
+
+  if (fileAttachment) {
+    if (fileAttachment.attachmentDisplayMode === 'IMAGE') {
+      return 'Фотография';
+    }
+
+    return `Файл: ${fileAttachment.fileName}`;
+  }
+
+  const documentAttachment = parseDocumentAttachmentMessageContent(plainText);
+
+  if (documentAttachment) {
+    return `Документ: ${documentAttachment.fileName}`;
+  }
+
+  const compactText = plainText.replace(/\s+/g, ' ').trim();
+  return compactText ? (compactText.length > 90 ? `${compactText.slice(0, 90)}…` : compactText) : fallback;
+}
+
+function isForwardableMessage(message: MessageResponseDto): boolean {
+  return message.messageType !== 'SYSTEM' && message.messageType !== 'GROUP_KEY_DISTRIBUTION';
 }
 
 function buildChatPreviewFromMessage(
@@ -211,7 +373,11 @@ function buildChatPreviewFromMessage(
     };
   }
 
-  const fileAttachment = parseFileAttachmentMessageContent(decryptedMessage ?? '');
+  if (!decryptedMessage || isDecryptionPlaceholder(decryptedMessage) || decryptedMessage === 'Расшифровка…') {
+    return { text: 'Зашифрованное сообщение', accent: 'muted' };
+  }
+
+  const fileAttachment = parseFileAttachmentMessageContent(decryptedMessage);
 
   if (fileAttachment) {
     if (fileAttachment.attachmentDisplayMode === 'IMAGE') {
@@ -221,24 +387,33 @@ function buildChatPreviewFromMessage(
     return { text: `Файл: ${fileAttachment.fileName}`, accent: 'media' };
   }
 
-  const documentAttachment = parseDocumentAttachmentMessageContent(decryptedMessage ?? '');
+  const documentAttachment = parseDocumentAttachmentMessageContent(decryptedMessage);
 
   if (documentAttachment) {
     return { text: `Документ: ${documentAttachment.fileName}`, accent: 'media' };
   }
 
-  if (!decryptedMessage || isDecryptionPlaceholder(decryptedMessage) || decryptedMessage === 'Расшифровка…') {
-    return { text: 'Зашифрованное сообщение', accent: 'muted' };
+  const richMessageContent = parseRichMessageContent(decryptedMessage);
+
+  if (richMessageContent) {
+    const compactRichText = richMessageContent.text.replace(/\s+/g, ' ').trim();
+
+    if (compactRichText) {
+      return {
+        text: compactRichText.length > 58 ? `${compactRichText.slice(0, 58)}…` : compactRichText,
+        accent: 'default',
+      };
+    }
+
+    if (richMessageContent.forwardedMessages.length > 0) {
+      return { text: `${richMessageContent.forwardedMessages.length} пересланных сообщений`, accent: 'system' };
+    }
   }
 
   const compactText = decryptedMessage.replace(/\s+/g, ' ').trim();
 
   if (!compactText) {
     return { text: 'Сообщение', accent: 'muted' };
-  }
-
-  if (isStickerMessageText(compactText)) {
-    return { text: 'Стикер', accent: 'media' };
   }
 
   return {
@@ -663,7 +838,7 @@ function getReadReceiptDetails(
   currentAccountId: string | undefined,
 ) {
   const recipients = chat?.type === 'GROUP'
-    ? getActiveGroupParticipants(chat).filter((participant) => participant.accountId !== currentAccountId)
+    ? getActiveGroupParticipants(chat).filter((participant) => participant.accountId !== message.senderAccountId)
     : [];
   const readAccountIds = new Set(
     message.deliveryStates
@@ -777,6 +952,98 @@ function formatGroupSystemMessage(payload: GroupSystemMessagePayload | null, pro
   return 'Системное событие';
 }
 
+
+function ReplyReferenceBlock({
+  replyTo,
+  isOwnMessage,
+  onOpenOriginalMessage,
+}: {
+  replyTo: ReplyDraft;
+  isOwnMessage: boolean;
+  onOpenOriginalMessage?: (messageId: string) => void;
+}) {
+  const isClickable = Boolean(onOpenOriginalMessage);
+
+  return (
+    <button
+      type="button"
+      onClick={() => onOpenOriginalMessage?.(replyTo.messageId)}
+      disabled={!isClickable}
+      className={`mb-2 block w-full rounded-2xl border-l-2 px-3 py-2 text-left transition ${isOwnMessage ? 'border-white/60 bg-white/12' : 'border-violet-300/70 bg-violet-400/10'} ${isClickable ? 'cursor-pointer hover:brightness-110' : 'cursor-default'}`}
+      title={isClickable ? 'Перейти к сообщению' : undefined}
+    >
+      <div className={`text-xs font-semibold ${isOwnMessage ? 'text-white' : 'text-violet-200'}`}>{replyTo.senderName}</div>
+      <div className={`mt-0.5 line-clamp-2 text-xs ${isOwnMessage ? 'text-violet-50/75' : 'text-zinc-400'}`}>{replyTo.preview}</div>
+    </button>
+  );
+}
+
+function ForwardedMessageCard({
+  forwardedMessage,
+  profilesById,
+  onOpenProfile,
+  onDownload,
+}: {
+  forwardedMessage: ForwardedMessageSnapshot;
+  profilesById: Record<string, ProfileResponseDto>;
+  onOpenProfile: (profile: ProfileResponseDto) => void;
+  onDownload: (attachment: FileAttachmentMessageContent | DocumentAttachmentMessageContent) => Promise<void>;
+}) {
+  const senderProfile = profilesById[forwardedMessage.senderAccountId] ?? null;
+  const senderName = senderProfile ? getDisplayName(senderProfile) : forwardedMessage.senderName;
+  const richNestedContent = parseRichMessageContent(forwardedMessage.plainText);
+  const visiblePlainText = richNestedContent?.text ?? forwardedMessage.plainText;
+  const fileAttachment = parseFileAttachmentMessageContent(visiblePlainText);
+  const documentAttachment = parseDocumentAttachmentMessageContent(visiblePlainText);
+
+  return (
+    <div className="relative rounded-2xl border border-white/10 bg-black/16 p-3">
+      <div className="absolute -left-[18px] top-0 h-full w-px bg-violet-300/30" />
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => senderProfile && onOpenProfile(senderProfile)}
+          disabled={!senderProfile}
+          className="flex min-w-0 items-center gap-2 rounded-xl transition enabled:hover:bg-white/[0.06]"
+        >
+          <UserAvatar label={senderName} imageUrl={getAccountAvatarUrl(senderProfile)} size="sm" />
+          <span className="min-w-0 truncate text-xs font-semibold text-violet-100">{senderName}</span>
+        </button>
+        <span className="shrink-0 text-[11px] text-zinc-500">{formatMessageTime(forwardedMessage.createdAt)}</span>
+      </div>
+      <div className="mt-2">
+        {documentAttachment ? (
+          <DocumentAttachmentPreview attachment={documentAttachment} isOwnMessage={false} onDownload={onDownload} />
+        ) : fileAttachment ? (
+          fileAttachment.attachmentDisplayMode === 'IMAGE' ? (
+            <ImageAttachmentPreview attachment={fileAttachment} onDownload={onDownload} />
+          ) : (
+            <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/[0.06] text-zinc-100">
+                <FileText size={18} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium text-zinc-100">{fileAttachment.fileName}</div>
+                <div className="mt-0.5 text-xs text-zinc-500">{formatFileSize(fileAttachment.sizeBytes)}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => void onDownload(fileAttachment)}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-zinc-200 transition hover:bg-white/[0.1]"
+                title="Скачать"
+              >
+                <Download size={16} />
+              </button>
+            </div>
+          )
+        ) : (
+          <div className="whitespace-pre-wrap text-sm leading-6 text-zinc-200">{visiblePlainText || 'Сообщение'}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function NewChatModal({
   isOpen,
   currentAccountId,
@@ -880,151 +1147,157 @@ function NewChatModal({
   }
 
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-xl rounded-[2rem] border border-white/10 bg-[#18191d] p-6 shadow-2xl shadow-black/50">
-        <div className="mb-6 flex items-start justify-between gap-4">
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xl">
+      <div className="relative w-full max-w-3xl overflow-hidden rounded-[2rem] border border-white/10 bg-[#171820]/96 shadow-2xl shadow-black/60">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-[radial-gradient(circle_at_16%_0%,rgba(139,92,246,0.28),transparent_24rem),radial-gradient(circle_at_90%_0%,rgba(14,165,233,0.16),transparent_20rem)]" />
+        <div className="relative flex items-start justify-between gap-4 border-b border-white/10 px-6 py-5">
           <div>
-            <div className="text-2xl font-semibold text-zinc-50">Новый чат</div>
-            <div className="mt-2 text-sm text-zinc-500">
-              Найди сотрудников для direct-чата или собери группу.
-            </div>
+            <div className="text-2xl font-semibold tracking-tight text-zinc-50">Новый чат</div>
+            <div className="mt-1 text-sm text-zinc-400">Найди коллегу для личного диалога или выбери несколько участников для группы.</div>
           </div>
 
           <button
+            type="button"
             onClick={onClose}
-            className="rounded-2xl border border-white/10 bg-white/[0.04] p-2 text-zinc-400 transition hover:border-violet-300/30 hover:text-zinc-100"
+            className="rounded-2xl border border-white/10 bg-white/[0.045] p-2 text-zinc-400 transition hover:border-violet-300/30 hover:bg-white/[0.08] hover:text-zinc-100"
             title="Закрыть"
           >
             <X size={18} />
           </button>
         </div>
 
-        <div className="mb-4 rounded-3xl border border-white/10 bg-white/[0.035] p-3">
-          <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.2em] text-zinc-500">
-            <Users size={15} />
-            Группа
-          </div>
-          <input
-            value={groupName}
-            onChange={(event) => setGroupName(event.target.value)}
-            className="mb-3 w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-violet-300/35"
-            placeholder="Название группы"
-          />
-          <div className="mb-3 flex flex-wrap gap-2">
-            {selectedProfiles.length === 0 ? (
-              <span className="text-xs text-zinc-500">Выбери участников ниже.</span>
-            ) : selectedProfiles.map((profile) => (
-              <button
-                key={profile.accountId}
-                onClick={() => toggleSelectedProfile(profile)}
-                className="rounded-full border border-violet-300/20 bg-violet-500/10 px-3 py-1 text-xs text-violet-100"
-              >
-                {getDisplayName(profile)} ×
-              </button>
-            ))}
-          </div>
-          <button
-            onClick={() => void handleCreateSelectedGroup()}
-            disabled={isCreatingGroup || selectedProfiles.length === 0 || !groupName.trim()}
-            className="inline-flex items-center gap-2 rounded-2xl border border-violet-300/20 bg-violet-500/10 px-4 py-2 text-sm font-medium text-violet-100 transition hover:bg-violet-500/15 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {isCreatingGroup ? <LoaderCircle size={15} className="animate-spin" /> : <Users size={15} />}
-            Создать группу
-          </button>
-        </div>
-
-        <div className="mb-5 flex items-center gap-3 rounded-3xl border border-white/10 bg-white/[0.04] px-4 py-3 text-zinc-500">
-          <Search size={17} />
-          <input
-            autoFocus
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            className="w-full bg-transparent text-sm text-zinc-200 outline-none placeholder:text-zinc-600"
-            placeholder="Например: admin, ivan, ivan@company.local"
-          />
-        </div>
-
-        <div className="max-h-[420px] overflow-y-auto">
-          {query.trim().length < 2 && (
-            <div className="rounded-3xl border border-dashed border-white/10 bg-white/[0.025] p-8 text-center text-sm text-zinc-500">
-              Введи минимум 2 символа для поиска.
+        <div className="relative grid gap-5 p-6 md:grid-cols-[1fr_18rem]">
+          <div className="min-w-0">
+            <div className="mb-4 flex items-center gap-3 rounded-[1.6rem] border border-white/10 bg-white/[0.055] px-4 py-3 shadow-inner shadow-black/15 transition focus-within:border-violet-300/35 focus-within:bg-white/[0.075]">
+              <Search size={18} className="text-zinc-500" />
+              <input
+                autoFocus
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                className="w-full bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-600"
+                placeholder="Поиск по имени, username или email"
+              />
+              {isSearching && <LoaderCircle size={17} className="animate-spin text-violet-200" />}
             </div>
-          )}
 
-          {isSearching && (
-            <div className="flex items-center justify-center gap-3 rounded-3xl border border-white/10 bg-white/[0.03] p-8 text-sm text-zinc-400">
-              <LoaderCircle size={18} className="animate-spin" />
-              Ищем пользователей...
-            </div>
-          )}
-
-          {!isSearching && query.trim().length >= 2 && results.length === 0 && !errorMessage && (
-            <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-8 text-center text-sm text-zinc-500">
-              По запросу ничего не найдено.
-            </div>
-          )}
-
-          {errorMessage && (
-            <div className="rounded-3xl border border-red-400/20 bg-red-500/10 p-4 text-sm text-red-200">
-              {errorMessage}
-            </div>
-          )}
-
-          <div className="space-y-2">
-            {results.map((profile) => {
-              const displayName = getDisplayName(profile);
-              const isCreating = creatingAccountId === profile.accountId;
-              const isSelected = selectedProfiles.some((selectedProfile) => selectedProfile.accountId === profile.accountId);
-
-              return (
-                <div
-                  key={profile.accountId}
-                  className="flex w-full items-center gap-3 rounded-3xl border border-white/8 bg-white/[0.03] px-4 py-3 text-left transition hover:border-violet-300/25 hover:bg-white/[0.05]"
-                >
-                  <button
-                    onClick={() => toggleSelectedProfile(profile)}
-                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border text-xs transition ${isSelected ? 'border-violet-300/30 bg-violet-500/20 text-violet-100' : 'border-white/10 bg-white/[0.04] text-zinc-500'}`}
-                    title="Выбрать для группы"
-                  >
-                    {isSelected ? '✓' : '+'}
-                  </button>
-                  <Avatar label={displayName} />
-
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-semibold text-zinc-100">{displayName}</div>
-                    <div className="mt-1 truncate text-xs text-zinc-500">@{profile.username} • {profile.email}</div>
-                  </div>
-
-                  <button
-                    onClick={async () => {
-                      setCreatingAccountId(profile.accountId);
-                      setErrorMessage(null);
-
-                      try {
-                        await onCreateChat(profile);
-                      }
-                      catch (error) {
-                        console.error(error);
-                        setErrorMessage('Не удалось создать direct chat.');
-                      }
-                      finally {
-                        setCreatingAccountId(null);
-                      }
-                    }}
-                    className="rounded-full border border-violet-300/15 bg-violet-400/10 px-3 py-1 text-xs text-violet-200"
-                  >
-                    {isCreating ? 'Создаём…' : 'Direct'}
-                  </button>
+            <div className="max-h-[31rem] overflow-y-auto pr-1">
+              {query.trim().length < 2 && (
+                <div className="rounded-[1.75rem] border border-dashed border-white/10 bg-white/[0.025] px-6 py-10 text-center">
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-3xl bg-violet-500/12 text-violet-200"><Search size={24} /></div>
+                  <div className="mt-4 text-sm font-medium text-zinc-300">Начни вводить имя или логин</div>
+                  <div className="mt-1 text-xs text-zinc-500">Достаточно двух символов, чтобы найти сотрудника.</div>
                 </div>
-              );
-            })}
+              )}
+
+              {!isSearching && query.trim().length >= 2 && results.length === 0 && !errorMessage && (
+                <div className="rounded-[1.75rem] border border-white/10 bg-white/[0.03] px-6 py-10 text-center text-sm text-zinc-500">Никого не нашли по этому запросу.</div>
+              )}
+
+              {errorMessage && (
+                <div className="rounded-[1.75rem] border border-red-400/20 bg-red-500/10 p-4 text-sm text-red-200">{errorMessage}</div>
+              )}
+
+              <div className="space-y-2">
+                {results.map((profile) => {
+                  const displayName = getDisplayName(profile);
+                  const isCreating = creatingAccountId === profile.accountId;
+                  const isSelected = selectedProfiles.some((selectedProfile) => selectedProfile.accountId === profile.accountId);
+
+                  return (
+                    <div
+                      key={profile.accountId}
+                      className="group flex w-full items-center gap-3 rounded-[1.5rem] border border-white/8 bg-white/[0.035] px-3 py-3 text-left transition hover:border-violet-300/25 hover:bg-white/[0.06]"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => toggleSelectedProfile(profile)}
+                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border text-sm font-semibold transition ${isSelected ? 'border-violet-300/35 bg-violet-500/22 text-violet-50' : 'border-white/10 bg-white/[0.045] text-zinc-500 hover:text-zinc-200'}`}
+                        title={isSelected ? 'Убрать из группы' : 'Добавить в группу'}
+                      >
+                        {isSelected ? '✓' : '+'}
+                      </button>
+                      <UserAvatar label={displayName} imageUrl={getAccountAvatarUrl(profile)} />
+
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-semibold text-zinc-100">{displayName}</div>
+                        <div className="mt-1 truncate text-xs text-zinc-500">@{profile.username} · {profile.email}</div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setCreatingAccountId(profile.accountId);
+                          setErrorMessage(null);
+
+                          try {
+                            await onCreateChat(profile);
+                          }
+                          catch (error) {
+                            console.error(error);
+                            setErrorMessage('Не удалось открыть личный чат.');
+                          }
+                          finally {
+                            setCreatingAccountId(null);
+                          }
+                        }}
+                        className="inline-flex items-center gap-2 rounded-2xl border border-violet-300/16 bg-violet-500/10 px-3 py-2 text-xs font-medium text-violet-100 transition hover:border-violet-300/30 hover:bg-violet-500/16"
+                      >
+                        {isCreating ? <LoaderCircle size={14} className="animate-spin" /> : <MessageCircle size={14} />}
+                        Написать
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
+
+          <aside className="rounded-[1.75rem] border border-white/10 bg-black/18 p-4">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-violet-200/80">
+              <Users size={15} />
+              Группа
+            </div>
+            <input
+              value={groupName}
+              onChange={(event) => setGroupName(event.target.value)}
+              className="mt-4 w-full rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 transition focus:border-violet-300/35 focus:bg-white/[0.065]"
+              placeholder="Название группы"
+            />
+            <div className="mt-4 min-h-24 rounded-2xl border border-white/8 bg-white/[0.025] p-3">
+              {selectedProfiles.length === 0 ? (
+                <div className="flex h-full min-h-16 items-center justify-center text-center text-xs leading-5 text-zinc-500">Отметь сотрудников плюсом слева — они появятся здесь.</div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {selectedProfiles.map((profile) => (
+                    <button
+                      type="button"
+                      key={profile.accountId}
+                      onClick={() => toggleSelectedProfile(profile)}
+                      className="inline-flex items-center gap-2 rounded-full border border-violet-300/20 bg-violet-500/12 py-1 pl-1 pr-3 text-xs text-violet-50 transition hover:bg-violet-500/18"
+                    >
+                      <UserAvatar label={getDisplayName(profile)} imageUrl={getAccountAvatarUrl(profile)} size="sm" />
+                      <span className="max-w-32 truncate">{getDisplayName(profile)}</span>
+                      <span className="text-violet-200/70">×</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleCreateSelectedGroup()}
+              disabled={isCreatingGroup || selectedProfiles.length === 0 || !groupName.trim()}
+              className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-950/35 transition hover:from-violet-400 hover:to-fuchsia-400 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {isCreatingGroup ? <LoaderCircle size={16} className="animate-spin" /> : <Users size={16} />}
+              Создать группу
+            </button>
+          </aside>
         </div>
       </div>
     </div>
   );
 }
-
 
 type GroupHistoryAccessMode = AddGroupParticipantRequestDto['historyAccessMode'];
 
@@ -1254,7 +1527,7 @@ function GroupManagementModal({
                 />
                 <div>
                   <div className="text-sm font-semibold text-zinc-100">Только новые сообщения</div>
-                  <div className="mt-1 text-xs leading-5 text-zinc-500">Участник получит ключи новой эпохи и будет читать сообщения после добавления.</div>
+                  <div className="mt-1 text-xs leading-5 text-zinc-500">Участник увидит только сообщения, которые появятся после добавления.</div>
                 </div>
               </div>
             </label>
@@ -1270,13 +1543,13 @@ function GroupManagementModal({
                 />
                 <div>
                   <div className="text-sm font-semibold text-zinc-100">Вся доступная история</div>
-                  <div className="mt-1 text-xs leading-5 text-zinc-500">Клиент передаст новому участнику локально доступные group keys для старых сообщений.</div>
+                  <div className="mt-1 text-xs leading-5 text-zinc-500">Участник сможет открыть всю доступную историю группы.</div>
                 </div>
               </div>
             </label>
           </div>
 
-          <div className="mt-5 rounded-3xl border border-white/10 bg-black/15 px-4 py-3">
+          <div className="mt-5 rounded-[1.6rem] border border-white/10 bg-white/[0.045] px-4 py-3 shadow-inner shadow-black/15 transition focus-within:border-violet-300/35 focus-within:bg-white/[0.065]">
             <div className="flex items-center gap-3">
               <Search size={18} className="text-zinc-500" />
               <input
@@ -1286,6 +1559,7 @@ function GroupManagementModal({
                 className="w-full bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-600 disabled:cursor-not-allowed"
                 placeholder="Найти пользователя по имени, username или email"
               />
+              {isSearching && <LoaderCircle size={16} className="animate-spin text-violet-200" />}
             </div>
           </div>
 
@@ -1984,17 +2258,27 @@ export function MessengerPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [decryptedMessagesById, setDecryptedMessagesById] = useState<Record<string, string>>({});
   const [readDetailsMessageId, setReadDetailsMessageId] = useState<string | null>(null);
+  const [messageContextMenu, setMessageContextMenu] = useState<MessageContextMenuState | null>(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  const [localReactionsByMessageId, setLocalReactionsByMessageId] = useState<Record<string, string>>({});
+  const [replyDraft, setReplyDraft] = useState<ReplyDraft | null>(null);
+  const [forwardSelection, setForwardSelection] = useState<ForwardSelectionState | null>(null);
+  const [forwardDraftItems, setForwardDraftItems] = useState<ForwardedMessageSnapshot[]>([]);
+  const [isForwardChatPickerOpen, setIsForwardChatPickerOpen] = useState(false);
+  const [forwardChatPickerQuery, setForwardChatPickerQuery] = useState('');
   const [localChatState, setLocalChatState] = useState<LocalChatState>(() => readLocalChatState(profile?.accountId));
   const [openedChatMenuId, setOpenedChatMenuId] = useState<string | null>(null);
   const [isChatActionsMenuOpen, setIsChatActionsMenuOpen] = useState(false);
-  const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
+  const [isDeleteChatConfirmOpen, setIsDeleteChatConfirmOpen] = useState(false);
   const [isDraggingFileOverChat, setIsDraggingFileOverChat] = useState(false);
+  const [droppedImageFile, setDroppedImageFile] = useState<File | null>(null);
 
   const decryptingMessageIdsRef = useRef<Set<string>>(new Set());
   const permanentlyUnavailableMessageIdsRef = useRef<Set<string>>(new Set());
   const temporarilyMissingGroupKeyMessageIdsRef = useRef<Set<string>>(new Set());
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const messageElementRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const documentInputRef = useRef<HTMLInputElement | null>(null);
@@ -2061,6 +2345,11 @@ export function MessengerPage() {
 
   useEffect(() => {
     setLocalChatState(readLocalChatState(profile?.accountId));
+  }, [profile?.accountId]);
+
+  useEffect(() => {
+    setLocalReactionsByMessageId(readLocalReactions(profile?.accountId));
+    setMessageContextMenu(null);
   }, [profile?.accountId]);
 
   useEffect(() => {
@@ -2354,6 +2643,19 @@ export function MessengerPage() {
       return `${presentation.title} ${presentation.subtitle}`.toLowerCase().includes(normalizedQuery);
     });
   }, [chatSearchQuery, chats, hiddenChatIdSet, messagesByChatId, profile, profilesById]);
+
+  const forwardTargetChats = useMemo(() => {
+    const normalizedQuery = forwardChatPickerQuery.trim().toLowerCase();
+
+    return filteredChats.filter((chat) => {
+      if (!normalizedQuery) {
+        return true;
+      }
+
+      const presentation = getChatPresentation(chat, profile, profilesById);
+      return `${presentation.title} ${presentation.subtitle}`.toLowerCase().includes(normalizedQuery);
+    });
+  }, [filteredChats, forwardChatPickerQuery, profile, profilesById]);
 
   async function refreshSelectedChat(options?: { silent?: boolean }) {
     if (!selectedChatId) {
@@ -2686,8 +2988,9 @@ export function MessengerPage() {
 
   async function handleSendCurrentMessage(overrideText?: string) {
     const trimmedMessageText = (overrideText ?? messageText).trim();
+    const hasRichMetadata = Boolean(replyDraft || forwardDraftItems.length > 0);
 
-    if (!trimmedMessageText || !isSelectedChatWritable) {
+    if ((!trimmedMessageText && !hasRichMetadata) || !isSelectedChatWritable) {
       return;
     }
 
@@ -2695,8 +2998,14 @@ export function MessengerPage() {
     setErrorMessage(null);
 
     try {
-      await sendEncryptedChatContent(trimmedMessageText);
+      const plainText = hasRichMetadata
+        ? buildRichMessageContent(trimmedMessageText, replyDraft, forwardDraftItems)
+        : trimmedMessageText;
+
+      await sendEncryptedChatContent(plainText);
       setMessageText('');
+      setReplyDraft(null);
+      setForwardDraftItems([]);
       sendCurrentTypingState(false);
     }
     catch (error) {
@@ -3109,13 +3418,180 @@ export function MessengerPage() {
 
   function appendEmojiToMessage(emoji: string) {
     setMessageText((previousValue) => `${previousValue}${emoji}`);
-    setIsEmojiPickerOpen(false);
   }
 
-  function sendSticker(sticker: string) {
-    setIsEmojiPickerOpen(false);
-    void handleSendCurrentMessage(sticker);
+  function openMessageContextMenu(event: React.MouseEvent<HTMLElement>, messageId: string, isOwnMessage: boolean) {
+    event.preventDefault();
+    event.stopPropagation();
+    setReadDetailsMessageId(null);
+
+    const menuWidth = 256;
+    const menuHeight = 226;
+    const viewportPadding = 12;
+    const messageRect = event.currentTarget.getBoundingClientRect();
+    const preferBelow = messageRect.top < menuHeight + viewportPadding;
+    const rawX = isOwnMessage
+      ? messageRect.right - menuWidth
+      : messageRect.left;
+    const rawY = preferBelow
+      ? messageRect.bottom + 8
+      : messageRect.top - menuHeight - 8;
+
+    setMessageContextMenu({
+      messageId,
+      x: Math.max(viewportPadding, Math.min(rawX, window.innerWidth - menuWidth - viewportPadding)),
+      y: Math.max(viewportPadding, Math.min(rawY, window.innerHeight - menuHeight - viewportPadding)),
+      placement: preferBelow ? 'below' : 'above',
+    });
   }
+
+  function scrollToMessage(messageId: string) {
+    const targetElement = messageElementRefs.current[messageId];
+
+    if (!targetElement) {
+      return;
+    }
+
+    targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setHighlightedMessageId(messageId);
+    window.setTimeout(() => {
+      setHighlightedMessageId((currentValue) => currentValue === messageId ? null : currentValue);
+    }, 1800);
+  }
+
+  function closeMessageContextMenu() {
+    setMessageContextMenu(null);
+  }
+
+  function setLocalMessageReaction(messageId: string, emoji: string) {
+    setLocalReactionsByMessageId((previousValue) => {
+      const nextValue = { ...previousValue };
+
+      if (nextValue[messageId] === emoji) {
+        delete nextValue[messageId];
+      }
+      else {
+        nextValue[messageId] = emoji;
+      }
+
+      writeLocalReactions(profile?.accountId, nextValue);
+      return nextValue;
+    });
+    closeMessageContextMenu();
+  }
+
+  function buildReplyDraftFromMessage(message: MessageResponseDto): ReplyDraft {
+    const decryptedMessage = decryptedMessagesById[message.messageId] ?? '';
+    const senderProfile = profilesById[message.senderAccountId] ?? null;
+    const senderName = senderProfile ? getDisplayName(senderProfile) : `${message.senderAccountId.slice(0, 8)}…`;
+
+    return {
+      messageId: message.messageId,
+      chatId: message.chatId,
+      senderAccountId: message.senderAccountId,
+      senderName,
+      preview: getMessageContentPreview(decryptedMessage, 'Вложение'),
+      createdAt: message.createdAt,
+    };
+  }
+
+  function buildForwardSnapshotFromMessage(message: MessageResponseDto): ForwardedMessageSnapshot {
+    const senderProfile = profilesById[message.senderAccountId] ?? null;
+
+    return {
+      messageId: message.messageId,
+      chatId: message.chatId,
+      senderAccountId: message.senderAccountId,
+      senderName: senderProfile ? getDisplayName(senderProfile) : `${message.senderAccountId.slice(0, 8)}…`,
+      createdAt: message.createdAt,
+      plainText: decryptedMessagesById[message.messageId] ?? '',
+    };
+  }
+
+  function startReplyFromContextMenu(message: MessageResponseDto | null) {
+    if (!message || !isForwardableMessage(message)) {
+      return;
+    }
+
+    setReplyDraft(buildReplyDraftFromMessage(message));
+    setForwardSelection(null);
+    closeMessageContextMenu();
+  }
+
+  function startForwardFromContextMenu(message: MessageResponseDto | null) {
+    if (!message || !selectedChatId || !isForwardableMessage(message)) {
+      return;
+    }
+
+    setReplyDraft(null);
+    setForwardDraftItems([]);
+    setForwardSelection({
+      originChatId: selectedChatId,
+      selectedMessageIds: [message.messageId],
+    });
+    closeMessageContextMenu();
+  }
+
+  function toggleForwardSelectedMessage(message: MessageResponseDto) {
+    if (!forwardSelection || !isForwardableMessage(message)) {
+      return;
+    }
+
+    setForwardSelection((previousValue) => {
+      if (!previousValue) {
+        return previousValue;
+      }
+
+      const selectedMessageIds = previousValue.selectedMessageIds.includes(message.messageId)
+        ? previousValue.selectedMessageIds.filter((messageId) => messageId !== message.messageId)
+        : [...previousValue.selectedMessageIds, message.messageId];
+
+      return {
+        ...previousValue,
+        selectedMessageIds,
+      };
+    });
+  }
+
+  function cancelForwardSelection() {
+    setForwardSelection(null);
+    setIsForwardChatPickerOpen(false);
+    setForwardChatPickerQuery('');
+  }
+
+  function openForwardChatPicker() {
+    if (!forwardSelection || forwardSelection.selectedMessageIds.length === 0) {
+      return;
+    }
+
+    setIsForwardChatPickerOpen(true);
+    setForwardChatPickerQuery('');
+  }
+
+  function selectForwardTargetChat(chat: ChatResponseDto) {
+    if (!forwardSelection) {
+      return;
+    }
+
+    const originMessages = messagesByChatId[forwardSelection.originChatId] ?? [];
+    const selectedMessageIdSet = new Set(forwardSelection.selectedMessageIds);
+    const forwardedMessages = originMessages
+      .filter((message) => selectedMessageIdSet.has(message.messageId) && isForwardableMessage(message))
+      .sort((leftMessage, rightMessage) => new Date(leftMessage.createdAt).getTime() - new Date(rightMessage.createdAt).getTime())
+      .map(buildForwardSnapshotFromMessage);
+
+    if (forwardedMessages.length === 0) {
+      cancelForwardSelection();
+      return;
+    }
+
+    setForwardDraftItems(forwardedMessages);
+    setForwardSelection(null);
+    setIsForwardChatPickerOpen(false);
+    setForwardChatPickerQuery('');
+    selectChat(chat.chatId);
+  }
+
 
   function handleClearSelectedChatHistory() {
     if (!selectedChatId) {
@@ -3148,10 +3624,6 @@ export function MessengerPage() {
 
     updateLocalChatState((previousValue) => ({
       ...previousValue,
-      clearedAtByChatId: {
-        ...previousValue.clearedAtByChatId,
-        [chatIdToHide]: new Date().toISOString(),
-      },
       hiddenChatIds: Array.from(new Set([...previousValue.hiddenChatIds, chatIdToHide])),
     }));
 
@@ -3163,15 +3635,32 @@ export function MessengerPage() {
       selectChat(nextChat.chatId);
     }
 
+    setIsDeleteChatConfirmOpen(false);
     setIsChatActionsMenuOpen(false);
   }
 
   async function handleDroppedFiles(files: FileList | File[]) {
     const droppedFiles = Array.from(files).slice(0, 8);
 
+    if (droppedFiles.length === 1 && isImageFile(droppedFiles[0])) {
+      setDroppedImageFile(droppedFiles[0]);
+      return;
+    }
+
     for (const droppedFile of droppedFiles) {
       await handleAttachFile(droppedFile, isImageFile(droppedFile) ? 'IMAGE' : 'FILE');
     }
+  }
+
+  async function sendDroppedImage(attachmentDisplayMode: ChatAttachmentDisplayMode) {
+    const file = droppedImageFile;
+    setDroppedImageFile(null);
+
+    if (!file) {
+      return;
+    }
+
+    await handleAttachFile(file, attachmentDisplayMode);
   }
 
   function handleChatDrop(event: DragEvent<HTMLDivElement>) {
@@ -3290,9 +3779,85 @@ export function MessengerPage() {
         onReject={handleRejectDocument}
       />
 
+      {isDeleteChatConfirmOpen && selectedChat && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-[#1d1f26] p-5 shadow-2xl shadow-black/60">
+            <div className="text-lg font-semibold text-white">Удалить чат?</div>
+            <div className="mt-2 text-sm leading-6 text-zinc-400">
+              Чат исчезнет из списка на этом устройстве. История переписки не очищается и может снова появиться, если собеседник напишет новое сообщение.
+            </div>
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsDeleteChatConfirmOpen(false)}
+                className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-zinc-300 transition hover:bg-white/[0.06] hover:text-white"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteSelectedChatLocally}
+                className="rounded-2xl bg-red-500/90 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-400"
+              >
+                Удалить чат
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {droppedImageFile && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-[#1d1f26] p-5 shadow-2xl shadow-black/60">
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-violet-500/15 text-violet-100">
+                <ImageIcon size={22} />
+              </div>
+              <div className="min-w-0">
+                <div className="text-lg font-semibold text-white">Как отправить изображение?</div>
+                <div className="mt-1 truncate text-sm text-zinc-500">{droppedImageFile.name}</div>
+              </div>
+            </div>
+            <div className="mt-5 grid gap-3">
+              <button
+                type="button"
+                onClick={() => void sendDroppedImage('IMAGE')}
+                className="flex w-full items-center gap-3 rounded-2xl border border-violet-300/20 bg-violet-500/12 px-4 py-3 text-left text-sm text-violet-50 transition hover:bg-violet-500/18"
+              >
+                <ImageIcon size={18} />
+                <span>
+                  <span className="block font-semibold">Отправить как изображение</span>
+                  <span className="block text-xs text-violet-100/60">Будет показано картинкой в ленте.</span>
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => void sendDroppedImage('FILE')}
+                className="flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-left text-sm text-zinc-100 transition hover:bg-white/[0.075]"
+              >
+                <FileText size={18} />
+                <span>
+                  <span className="block font-semibold">Отправить как файл</span>
+                  <span className="block text-xs text-zinc-500">Сохранится как обычное вложение.</span>
+                </span>
+              </button>
+            </div>
+            <div className="mt-5 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setDroppedImageFile(null)}
+                className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-zinc-300 transition hover:bg-white/[0.06] hover:text-white"
+              >
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isDraggingFileOverChat && isSelectedChatWritable && (
         <div className="pointer-events-none absolute inset-4 z-50 flex items-center justify-center rounded-[2rem] border-2 border-dashed border-violet-300/45 bg-violet-500/12 text-lg font-semibold text-violet-100 shadow-2xl shadow-violet-950/30 backdrop-blur-xl">
-          Отпустите файл, чтобы отправить его в чат
+          Отпустите файл, чтобы прикрепить его к чату
         </div>
       )}
 
@@ -3529,6 +4094,7 @@ export function MessengerPage() {
                   {isChatActionsMenuOpen && (
                     <div className="absolute right-0 top-11 z-30 w-64 rounded-3xl border border-white/10 bg-[#202127] p-2 text-sm shadow-2xl shadow-black/50">
                       <button
+                        type="button"
                         onClick={handleClearSelectedChatHistory}
                         className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-zinc-200 transition hover:bg-white/[0.06]"
                       >
@@ -3537,11 +4103,15 @@ export function MessengerPage() {
                       </button>
                       {selectedChat.type !== 'SELF' && (
                         <button
-                          onClick={handleDeleteSelectedChatLocally}
+                          type="button"
+                          onClick={() => {
+                            setIsChatActionsMenuOpen(false);
+                            setIsDeleteChatConfirmOpen(true);
+                          }}
                           className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-red-200 transition hover:bg-red-500/10"
                         >
                           <Trash2 size={17} />
-                          Удалить чат у меня
+                          Удалить чат
                         </button>
                       )}
                     </div>
@@ -3597,13 +4167,19 @@ export function MessengerPage() {
 
                   const isOwnMessage = message.senderAccountId === profile?.accountId;
                   const messageStatus = getOutgoingMessageStatus(message, profile?.accountId);
-                  const fileAttachment = parseFileAttachmentMessageContent(decryptedMessage);
-                  const documentAttachment = parseDocumentAttachmentMessageContent(decryptedMessage);
+                  const richMessageContent = parseRichMessageContent(decryptedMessage);
+                  const visibleMessageText = richMessageContent?.text ?? decryptedMessage;
+                  const fileAttachment = parseFileAttachmentMessageContent(visibleMessageText);
+                  const documentAttachment = parseDocumentAttachmentMessageContent(visibleMessageText);
                   const senderProfile = profilesById[message.senderAccountId] ?? null;
                   const senderDisplayName = senderProfile ? getDisplayName(senderProfile) : `${message.senderAccountId.slice(0, 8)}…`;
                   const readReceiptDetails = getReadReceiptDetails(message, selectedChat, profilesById, profile?.accountId);
                   const shouldShowGroupSender = selectedChat.type === 'GROUP' && !isOwnMessage;
                   const shouldShowGroupReadDetails = selectedChat.type === 'GROUP' && readDetailsMessageId === message.messageId;
+                  const localReaction = localReactionsByMessageId[message.messageId];
+                  const isForwardSelectionActive = Boolean(forwardSelection);
+                  const isForwardSelected = Boolean(forwardSelection?.selectedMessageIds.includes(message.messageId));
+                  const canSelectForForward = isForwardSelectionActive && isForwardableMessage(message);
 
                   return (
                     <div key={message.messageId}>
@@ -3614,141 +4190,231 @@ export function MessengerPage() {
                           </div>
                         </div>
                       )}
-                      <div className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`flex max-w-[74%] items-end gap-3 ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
-                        {!isOwnMessage && <UserAvatar label={senderDisplayName} imageUrl={getAccountAvatarUrl(senderProfile)} size="sm" />}
+                      <div
+                        ref={(element) => {
+                          messageElementRefs.current[message.messageId] = element;
+                        }}
+                        className={`group flex items-center gap-3 rounded-[1.75rem] transition ${isOwnMessage ? 'justify-end' : 'justify-start'} ${highlightedMessageId === message.messageId ? 'bg-violet-400/12 ring-1 ring-violet-300/20' : ''}`}
+                        onContextMenu={(event) => {
+                          if (!isForwardSelectionActive) {
+                            openMessageContextMenu(event, message.messageId, isOwnMessage);
+                          }
+                          else {
+                            event.preventDefault();
+                          }
+                        }}
+                        onClick={() => {
+                          if (canSelectForForward) {
+                            toggleForwardSelectedMessage(message);
+                          }
+                        }}
+                      >
+                        {canSelectForForward && isOwnMessage && (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              toggleForwardSelectedMessage(message);
+                            }}
+                            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition ${isForwardSelected ? 'border-violet-300 bg-violet-500 text-white shadow-lg shadow-violet-950/25' : 'border-white/20 bg-white/[0.04] text-transparent hover:border-violet-300/40'}`}
+                            title={isForwardSelected ? 'Убрать из пересылки' : 'Выбрать для пересылки'}
+                          >
+                            <Check size={15} />
+                          </button>
+                        )}
 
-                        <div className="relative">
-                          <div
-                            className={`rounded-[1.5rem] px-4 py-3 shadow-lg ${
-                            isOwnMessage
-                              ? 'rounded-br-md bg-gradient-to-br from-violet-500 via-fuchsia-600 to-pink-600 text-white shadow-violet-950/30'
-                              : 'rounded-bl-md border border-white/10 bg-[#24262d]/96 text-zinc-100 shadow-black/20 backdrop-blur'
-                          }`}
-                        >
-                          {shouldShowGroupSender && (
-                            <div className="mb-1 text-xs font-semibold text-violet-200">
-                              {senderDisplayName}
-                            </div>
-                          )}
-                          {documentAttachment ? (
-                            <DocumentAttachmentPreview attachment={documentAttachment} isOwnMessage={isOwnMessage} onDownload={handleDownloadAttachment} />
-                          ) : fileAttachment ? (
-                            fileAttachment.attachmentDisplayMode === 'IMAGE' ? (
-                              <ImageAttachmentPreview attachment={fileAttachment} onDownload={handleDownloadAttachment} />
-                            ) : (
-                              <div className="min-w-[280px] max-w-[360px]">
-                                <div className={`flex items-center gap-3 rounded-2xl border p-3 ${isOwnMessage ? 'border-white/20 bg-white/10' : 'border-white/10 bg-black/15'}`}>
-                                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-black/20 text-white">
-                                    <FileText size={20} />
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <div className="truncate text-sm font-semibold">{fileAttachment.fileName}</div>
-                                    <div className={`mt-1 text-xs ${isOwnMessage ? 'text-violet-100/75' : 'text-zinc-500'}`}>
-                                      {formatFileSize(fileAttachment.sizeBytes)} • encrypted file
+                        <div className={`flex max-w-[74%] items-end gap-3 ${isOwnMessage ? 'flex-row-reverse' : ''} ${canSelectForForward ? 'cursor-pointer' : ''}`}>
+                          {!isOwnMessage && <UserAvatar label={senderDisplayName} imageUrl={getAccountAvatarUrl(senderProfile)} size="sm" />}
+
+                          <div className="relative">
+                            <div
+                              onContextMenu={(event) => {
+                                if (!isForwardSelectionActive) {
+                                  openMessageContextMenu(event, message.messageId, isOwnMessage);
+                                }
+                                else {
+                                  event.preventDefault();
+                                }
+                              }}
+                              className={`rounded-[1.35rem] px-4 py-2.5 shadow-lg ${
+                                isOwnMessage
+                                  ? 'rounded-br-md bg-gradient-to-br from-violet-500 via-fuchsia-600 to-pink-600 text-white shadow-violet-950/30'
+                                  : 'rounded-bl-md border border-white/10 bg-[#24262d]/96 text-zinc-100 shadow-black/20 backdrop-blur'
+                              }`}
+                            >
+                              {shouldShowGroupSender && (
+                                <div className="mb-1 text-xs font-semibold text-violet-200">
+                                  {senderDisplayName}
+                                </div>
+                              )}
+                              {richMessageContent?.replyTo && (
+                                <ReplyReferenceBlock replyTo={richMessageContent.replyTo} isOwnMessage={isOwnMessage} onOpenOriginalMessage={scrollToMessage} />
+                              )}
+                              {visibleMessageText.trim() && !fileAttachment && !documentAttachment && !isDecryptionPlaceholder(visibleMessageText) && visibleMessageText !== 'Расшифровка…' && (
+                                <div className="whitespace-pre-wrap text-sm leading-6">
+                                  {visibleMessageText}
+                                </div>
+                              )}
+                              {documentAttachment ? (
+                                <DocumentAttachmentPreview attachment={documentAttachment} isOwnMessage={isOwnMessage} onDownload={handleDownloadAttachment} />
+                              ) : fileAttachment ? (
+                                fileAttachment.attachmentDisplayMode === 'IMAGE' ? (
+                                  <ImageAttachmentPreview attachment={fileAttachment} onDownload={handleDownloadAttachment} />
+                                ) : (
+                                  <div className="min-w-[280px] max-w-[360px]">
+                                    <div className={`flex items-center gap-3 rounded-2xl border p-3 ${isOwnMessage ? 'border-white/20 bg-white/10' : 'border-white/10 bg-black/15'}`}>
+                                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-black/20 text-white">
+                                        <FileText size={20} />
+                                      </div>
+                                      <div className="min-w-0 flex-1">
+                                        <div className="truncate text-sm font-semibold">{fileAttachment.fileName}</div>
+                                        <div className={`mt-1 text-xs ${isOwnMessage ? 'text-violet-100/75' : 'text-zinc-500'}`}>
+                                          {formatFileSize(fileAttachment.sizeBytes)} • защищённый файл
+                                        </div>
+                                      </div>
+                                      <button
+                                        onClick={() => void handleDownloadAttachment(fileAttachment)}
+                                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition ${isOwnMessage ? 'bg-white/15 hover:bg-white/25' : 'bg-white/[0.06] hover:bg-white/[0.1]'}`}
+                                        title="Скачать и расшифровать"
+                                      >
+                                        <Download size={17} />
+                                      </button>
                                     </div>
                                   </div>
+                                )
+                              ) : (!visibleMessageText.trim() || isDecryptionPlaceholder(visibleMessageText) || visibleMessageText === 'Расшифровка…') && !richMessageContent?.forwardedMessages.length ? (
+                                <div className="whitespace-pre-wrap text-sm leading-6">
+                                  {visibleMessageText || 'Сообщение'}
+                                </div>
+                              ) : null}
+
+                              {richMessageContent?.forwardedMessages.length ? (
+                                <div className={`${visibleMessageText.trim() ? 'mt-3' : ''} space-y-2 border-l border-violet-300/25 pl-4`}>
+                                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-100/65">
+                                    {richMessageContent.forwardedMessages.length} пересланных сообщений
+                                  </div>
+                                  {richMessageContent.forwardedMessages.map((forwardedMessage) => (
+                                    <ForwardedMessageCard
+                                      key={`${forwardedMessage.chatId}-${forwardedMessage.messageId}`}
+                                      forwardedMessage={forwardedMessage}
+                                      profilesById={profilesById}
+                                      onOpenProfile={setMiniProfile}
+                                      onDownload={handleDownloadAttachment}
+                                    />
+                                  ))}
+                                </div>
+                              ) : null}
+
+                              <div className={`mt-2 flex items-center gap-2 text-[11px] ${isOwnMessage ? 'justify-end text-violet-100/80' : 'justify-end text-zinc-500'}`}>
+                                <span>{formatMessageTime(message.createdAt)}</span>
+                                {isOwnMessage && selectedChat.type !== 'GROUP' && (
+                                  <span className="inline-flex items-center gap-1">
+                                    {messageStatus === 'READ' ? <CheckCheck size={13} /> : messageStatus === 'DELIVERED' ? <CheckCheck size={13} /> : <Check size={13} />}
+                                    <span>
+                                      {messageStatus === 'READ' ? 'Прочитано' : messageStatus === 'DELIVERED' ? 'Доставлено' : 'Отправлено'}
+                                    </span>
+                                  </span>
+                                )}
+                                {selectedChat.type === 'GROUP' && (
                                   <button
-                                    onClick={() => void handleDownloadAttachment(fileAttachment)}
-                                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition ${isOwnMessage ? 'bg-white/15 hover:bg-white/25' : 'bg-white/[0.06] hover:bg-white/[0.1]'}`}
-                                    title="Скачать и расшифровать"
+                                    type="button"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      setReadDetailsMessageId((currentValue) => currentValue === message.messageId ? null : message.messageId);
+                                    }}
+                                    className="inline-flex items-center gap-1 rounded-full px-1 transition hover:bg-white/10"
+                                    title="Кто прочитал сообщение"
                                   >
-                                    <Download size={17} />
+                                    {readReceiptDetails.readCount > 0 ? <CheckCheck size={13} /> : <Check size={13} />}
+                                    <span>
+                                      {readReceiptDetails.readCount > 0
+                                        ? `Прочитано ${readReceiptDetails.readCount}/${readReceiptDetails.totalCount}`
+                                        : readReceiptDetails.deliveredCount > 0
+                                          ? `Доставлено ${readReceiptDetails.deliveredCount}/${readReceiptDetails.totalCount}`
+                                          : 'Отправлено'}
+                                    </span>
                                   </button>
-                                </div>
-                              </div>
-                            )
-                          ) : (
-                            isStickerMessageText(decryptedMessage) ? (
-                              <div className="select-none px-2 py-1 text-6xl leading-none">
-                                {decryptedMessage.trim()}
-                              </div>
-                            ) : (
-                              <div className="whitespace-pre-wrap text-sm leading-6">
-                                {decryptedMessage}
-                              </div>
-                            )
-                          )}
-                          <div className={`mt-2 flex items-center gap-2 text-[11px] ${isOwnMessage ? 'justify-end text-violet-100/80' : 'justify-end text-zinc-500'}`}>
-                            <span>{formatMessageTime(message.createdAt)}</span>
-                            {isOwnMessage && selectedChat.type !== 'GROUP' && (
-                              <span className="inline-flex items-center gap-1">
-                                {messageStatus === 'READ' ? <CheckCheck size={13} /> : messageStatus === 'DELIVERED' ? <CheckCheck size={13} /> : <Check size={13} />}
-                                <span>
-                                  {messageStatus === 'READ' ? 'Прочитано' : messageStatus === 'DELIVERED' ? 'Доставлено' : 'Отправлено'}
-                                </span>
-                              </span>
-                            )}
-                            {selectedChat.type === 'GROUP' && (
-                              <button
-                                type="button"
-                                onClick={() => setReadDetailsMessageId((currentValue) => currentValue === message.messageId ? null : message.messageId)}
-                                className="inline-flex items-center gap-1 rounded-full px-1 transition hover:bg-white/10"
-                                title="Кто прочитал сообщение"
-                              >
-                                {readReceiptDetails.readCount > 0 ? <CheckCheck size={13} /> : <Check size={13} />}
-                                <span>
-                                  {readReceiptDetails.readCount > 0
-                                    ? `Прочитано ${readReceiptDetails.readCount}/${readReceiptDetails.totalCount}`
-                                    : readReceiptDetails.deliveredCount > 0
-                                      ? `Доставлено ${readReceiptDetails.deliveredCount}/${readReceiptDetails.totalCount}`
-                                      : 'Отправлено'}
-                                </span>
-                              </button>
-                            )}
-                          </div>
-                          </div>
-                          {shouldShowGroupReadDetails && (
-                            <div className="absolute right-0 top-full z-20 mt-2 w-72 rounded-3xl border border-white/10 bg-[#202127] p-4 text-left shadow-2xl shadow-black/50">
-                              <div className="text-sm font-semibold text-zinc-100">Статус прочтения</div>
-                              <div className="mt-3 grid gap-3 text-xs">
-                                <div>
-                                  <div className="mb-2 text-zinc-500">Прочитали</div>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {readReceiptDetails.readParticipants.length > 0 ? readReceiptDetails.readParticipants.map((participant) => {
-                                      const participantName = getParticipantDisplayName(participant);
-                                      return typeof participant === 'string' ? (
-                                        <span key={participantName} className="rounded-full bg-emerald-400/10 px-2 py-1 text-emerald-200">{participantName}</span>
-                                      ) : (
-                                        <button
-                                          type="button"
-                                          key={participant.accountId}
-                                          onClick={() => setMiniProfile(participant)}
-                                          className="rounded-full bg-emerald-400/10 px-2 py-1 text-emerald-200 transition hover:bg-emerald-400/18"
-                                        >
-                                          {participantName}
-                                        </button>
-                                      );
-                                    }) : <span className="text-zinc-500">Пока никто</span>}
-                                  </div>
-                                </div>
-                                <div>
-                                  <div className="mb-2 text-zinc-500">Ещё не прочитали</div>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {readReceiptDetails.unreadParticipants.length > 0 ? readReceiptDetails.unreadParticipants.map((participant) => {
-                                      const participantName = getParticipantDisplayName(participant);
-                                      return typeof participant === 'string' ? (
-                                        <span key={participantName} className="rounded-full bg-white/[0.06] px-2 py-1 text-zinc-300">{participantName}</span>
-                                      ) : (
-                                        <button
-                                          type="button"
-                                          key={participant.accountId}
-                                          onClick={() => setMiniProfile(participant)}
-                                          className="rounded-full bg-white/[0.06] px-2 py-1 text-zinc-300 transition hover:bg-white/[0.1]"
-                                        >
-                                          {participantName}
-                                        </button>
-                                      );
-                                    }) : <span className="text-zinc-500">Все прочитали</span>}
-                                  </div>
-                                </div>
+                                )}
                               </div>
                             </div>
-                          )}
+                            {localReaction && (
+                              <div className={`mt-1 flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
+                                <button
+                                  type="button"
+                                  onClick={() => setLocalMessageReaction(message.messageId, localReaction)}
+                                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-sm shadow-sm transition ${isOwnMessage ? 'border-violet-200/25 bg-violet-950/35 text-white hover:bg-violet-900/45' : 'border-white/10 bg-white/[0.06] text-zinc-100 hover:bg-white/[0.1]'}`}
+                                  title="Убрать реакцию"
+                                >
+                                  <span>{localReaction}</span>
+                                  <span className="text-[11px] opacity-70">1</span>
+                                </button>
+                              </div>
+                            )}
+                            {shouldShowGroupReadDetails && (
+                              <div className="absolute right-0 top-full z-20 mt-2 w-72 rounded-3xl border border-white/10 bg-[#202127] p-4 text-left shadow-2xl shadow-black/50">
+                                <div className="text-sm font-semibold text-zinc-100">Статус прочтения</div>
+                                <div className="mt-3 grid gap-3 text-xs">
+                                  <div>
+                                    <div className="mb-2 text-zinc-500">Прочитали</div>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {readReceiptDetails.readParticipants.length > 0 ? readReceiptDetails.readParticipants.map((participant) => {
+                                        const participantName = getParticipantDisplayName(participant);
+                                        return typeof participant === 'string' ? (
+                                          <span key={participantName} className="rounded-full bg-emerald-400/10 px-2 py-1 text-emerald-200">{participantName}</span>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            key={participant.accountId}
+                                            onClick={() => setMiniProfile(participant)}
+                                            className="rounded-full bg-emerald-400/10 px-2 py-1 text-emerald-200 transition hover:bg-emerald-400/18"
+                                          >
+                                            {participantName}
+                                          </button>
+                                        );
+                                      }) : <span className="text-zinc-500">Пока никто</span>}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <div className="mb-2 text-zinc-500">Ещё не прочитали</div>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {readReceiptDetails.unreadParticipants.length > 0 ? readReceiptDetails.unreadParticipants.map((participant) => {
+                                        const participantName = getParticipantDisplayName(participant);
+                                        return typeof participant === 'string' ? (
+                                          <span key={participantName} className="rounded-full bg-white/[0.06] px-2 py-1 text-zinc-300">{participantName}</span>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            key={participant.accountId}
+                                            onClick={() => setMiniProfile(participant)}
+                                            className="rounded-full bg-white/[0.06] px-2 py-1 text-zinc-300 transition hover:bg-white/[0.1]"
+                                          >
+                                            {participantName}
+                                          </button>
+                                        );
+                                      }) : <span className="text-zinc-500">Все прочитали</span>}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
+
+                        {canSelectForForward && !isOwnMessage && (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              toggleForwardSelectedMessage(message);
+                            }}
+                            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition ${isForwardSelected ? 'border-violet-300 bg-violet-500 text-white shadow-lg shadow-violet-950/25' : 'border-white/20 bg-white/[0.04] text-transparent hover:border-violet-300/40'}`}
+                            title={isForwardSelected ? 'Убрать из пересылки' : 'Выбрать для пересылки'}
+                          >
+                            <Check size={15} />
+                          </button>
+                        )}
                       </div>
                     </div>
-                  </div>
                   );
                 })}
 
@@ -3769,22 +4435,165 @@ export function MessengerPage() {
               </div>
             </div>
 
-            <ChatComposer
-              messageText={messageText}
-              placeholder={isSelectedChatWritable ? 'Напишите сообщение…' : 'Вы исключены из группы'}
-              isSending={isSending}
-              isUploadingFile={isUploadingFile}
-              isWritable={Boolean(selectedChat && isSelectedChatWritable)}
-              onMessageTextChange={handleMessageTextChange}
-              onMessageBlur={() => sendCurrentTypingState(false)}
-              onTextareaKeyDown={handleTextareaKeyDown}
-              onAttachFile={handleAttachFile}
-              onAttachDocument={handleAttachDocument}
-              onOpenDocumentsPanel={openDocumentsPanel}
-              onAppendEmoji={appendEmojiToMessage}
-              onSendSticker={sendSticker}
-              onSendCurrentMessage={() => handleSendCurrentMessage()}
-            />
+            {isForwardChatPickerOpen && (
+              <div className="fixed inset-0 z-[75] flex items-center justify-center bg-black/55 p-5 backdrop-blur-sm" onClick={() => setIsForwardChatPickerOpen(false)}>
+                <div className="flex max-h-[78vh] w-full max-w-md flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-[#1d1f26]/98 shadow-2xl shadow-black/60" onClick={(event) => event.stopPropagation()}>
+                  <div className="border-b border-white/10 p-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="text-lg font-semibold text-white">Куда переслать?</div>
+                        <div className="mt-1 text-sm text-zinc-500">Выберите чат. Перед отправкой можно будет добавить текст.</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsForwardChatPickerOpen(false)}
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-zinc-400 transition hover:bg-white/[0.07] hover:text-white"
+                        title="Закрыть"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+                    <div className="mt-4 flex items-center gap-3 rounded-3xl border border-white/10 bg-black/20 px-4 py-3 text-zinc-500 shadow-inner shadow-black/20">
+                      <Search size={17} />
+                      <input
+                        value={forwardChatPickerQuery}
+                        onChange={(event) => setForwardChatPickerQuery(event.target.value)}
+                        className="w-full bg-transparent text-sm text-zinc-300 outline-none placeholder:text-zinc-600"
+                        placeholder="Найти чат"
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                    {forwardTargetChats.length === 0 ? (
+                      <div className="rounded-3xl border border-dashed border-white/10 p-8 text-center text-sm text-zinc-500">Чаты не найдены</div>
+                    ) : forwardTargetChats.map((chat) => {
+                      const presentation = getChatPresentation(chat, profile, profilesById);
+                      const chatMessages = getVisibleChatMessages(messagesByChatId[chat.chatId] ?? [], localChatState.clearedAtByChatId[chat.chatId]);
+                      const lastTimelineMessage = getLastTimelineMessage(chatMessages);
+                      const preview = buildChatPreviewFromMessage(lastTimelineMessage, decryptedMessagesById, profilesById);
+
+                      return (
+                        <button
+                          type="button"
+                          key={chat.chatId}
+                          onClick={() => selectForwardTargetChat(chat)}
+                          className="flex w-full items-center gap-3 rounded-[1.5rem] px-3 py-3 text-left transition hover:bg-white/[0.06]"
+                        >
+                          {chat.type === 'SELF' ? (
+                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-lg shadow-black/20">
+                              <Star size={18} />
+                            </div>
+                          ) : (
+                            <UserAvatar label={presentation.avatarLabel} imageUrl={getAccountAvatarUrl(presentation.companionProfile)} />
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm font-semibold text-zinc-100">{presentation.title}</div>
+                            <div className={`mt-1 truncate text-xs ${getPreviewTextColorClass(preview.accent)}`}>{preview.text}</div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {messageContextMenu && (() => {
+              const contextMessage = visibleSelectedMessages.find((message) => message.messageId === messageContextMenu.messageId) ?? null;
+              const currentReaction = contextMessage ? localReactionsByMessageId[contextMessage.messageId] : null;
+
+              return (
+                <div className="fixed inset-0 z-[80]" onClick={closeMessageContextMenu} onContextMenu={(event) => event.preventDefault()}>
+                  <div
+                    className="absolute w-64 overflow-hidden rounded-3xl border border-white/10 bg-[#202128]/96 p-2 text-sm text-zinc-100 shadow-2xl shadow-black/55 backdrop-blur-xl"
+                    style={{ left: messageContextMenu.x, top: messageContextMenu.y }}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <div className={`pointer-events-none absolute ${messageContextMenu.placement === 'below' ? '-top-1.5' : '-bottom-1.5'} left-8 h-3 w-3 rotate-45 border border-white/10 bg-[#202128]`} />
+                    <button
+                      type="button"
+                      onClick={() => startReplyFromContextMenu(contextMessage)}
+                      className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition hover:bg-white/[0.08]"
+                    >
+                      <MessageSquare size={17} className="text-violet-200" />
+                      <span>Ответить</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => startForwardFromContextMenu(contextMessage)}
+                      className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition hover:bg-white/[0.08]"
+                    >
+                      <Send size={17} className="text-sky-200" />
+                      <span>Переслать</span>
+                    </button>
+                    <div className="my-2 h-px bg-white/10" />
+                    <div className="px-2 pb-2 text-xs font-medium text-zinc-500">Реакция</div>
+                    <div className="grid grid-cols-6 gap-1 px-1 pb-1">
+                      {QUICK_REACTION_ITEMS.map((emoji) => (
+                        <button
+                          type="button"
+                          key={emoji}
+                          onClick={() => contextMessage && setLocalMessageReaction(contextMessage.messageId, emoji)}
+                          className={`flex h-9 items-center justify-center rounded-2xl text-lg transition ${currentReaction === emoji ? 'bg-violet-500/30 ring-1 ring-violet-300/30' : 'hover:bg-white/[0.08]'}`}
+                          title={currentReaction === emoji ? 'Убрать реакцию' : 'Поставить реакцию'}
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {forwardSelection ? (
+              <div className="border-t border-white/8 bg-[#15161c]/92 px-5 py-4 backdrop-blur-2xl">
+                <div className="mx-auto flex max-w-4xl items-center justify-between gap-4">
+                  <button
+                    type="button"
+                    onClick={cancelForwardSelection}
+                    className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-zinc-300 transition hover:bg-white/[0.06] hover:text-white"
+                  >
+                    Отмена
+                  </button>
+                  <div className="min-w-0 flex-1 text-center">
+                    <div className="text-sm font-semibold text-zinc-100">Выбрано: {forwardSelection.selectedMessageIds.length}</div>
+                    <div className="mt-0.5 text-xs text-zinc-500">Нажмите на сообщения, которые нужно переслать</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={openForwardChatPicker}
+                    disabled={forwardSelection.selectedMessageIds.length === 0}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-br from-violet-500 via-fuchsia-500 to-pink-500 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-950/35 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    Переслать
+                    <Send size={16} />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <ChatComposer
+                messageText={messageText}
+                placeholder={isSelectedChatWritable ? 'Напишите сообщение…' : 'Вы исключены из группы'}
+                isSending={isSending}
+                isUploadingFile={isUploadingFile}
+                isWritable={Boolean(selectedChat && isSelectedChatWritable)}
+                replyPreview={replyDraft ? ({ senderName: replyDraft.senderName, preview: replyDraft.preview } satisfies ComposerReplyPreview) : null}
+                forwardPreview={forwardDraftItems.length > 0 ? ({ count: forwardDraftItems.length } satisfies ComposerForwardPreview) : null}
+                canSendWithoutText={forwardDraftItems.length > 0}
+                onCancelReply={() => setReplyDraft(null)}
+                onCancelForward={() => setForwardDraftItems([])}
+                onMessageTextChange={handleMessageTextChange}
+                onMessageBlur={() => sendCurrentTypingState(false)}
+                onTextareaKeyDown={handleTextareaKeyDown}
+                onAttachFile={handleAttachFile}
+                onAttachDocument={handleAttachDocument}
+                onOpenDocumentsPanel={openDocumentsPanel}
+                onAppendEmoji={appendEmojiToMessage}
+                onSendCurrentMessage={() => handleSendCurrentMessage()}
+              />
+            )}
           </>
         )}
       </main>

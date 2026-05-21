@@ -1,7 +1,16 @@
 import { KeyboardEvent, useMemo, useState } from 'react';
-import { FileText, Image as ImageIcon, LoaderCircle, Paperclip, Send, ShieldCheck, Smile, Sparkles } from 'lucide-react';
+import { FileText, Image as ImageIcon, LoaderCircle, MessageSquare, Paperclip, Send, ShieldCheck, Smile, Sparkles, X } from 'lucide-react';
 
 export type ChatAttachmentDisplayMode = 'FILE' | 'IMAGE';
+
+export type ComposerReplyPreview = {
+  senderName: string;
+  preview: string;
+};
+
+export type ComposerForwardPreview = {
+  count: number;
+};
 
 type EmojiCategory = {
   id: string;
@@ -12,46 +21,28 @@ type EmojiCategory = {
 
 const EMOJI_CATEGORIES: EmojiCategory[] = [
   {
-    id: 'recent',
-    title: 'Частые',
-    icon: '🕘',
-    items: ['😀', '😄', '😁', '😊', '😉', '😍', '😘', '😎', '😂', '😅', '🥰', '😇', '🙂', '😌', '😋', '😜', '🤔', '😮', '😢', '😡'],
-  },
-  {
-    id: 'people',
+    id: 'emotions',
     title: 'Эмоции',
     icon: '🙂',
-    items: ['😀', '😃', '😄', '😁', '😆', '😊', '😉', '😍', '😘', '😗', '😙', '😚', '😋', '😛', '😜', '😝', '😎', '😏', '😒', '😔', '😢', '😭', '😤', '😡', '😱', '😴', '😇', '🤓', '🤝', '👍', '👎', '👏', '🙏', '👌', '✌️', '👀'],
+    items: ['😀', '😃', '😄', '😁', '😆', '😊', '😉', '😍', '😘', '😎', '😂', '😅', '😌', '😋', '😜', '🤔', '😮', '😢', '😡', '😴', '😇'],
+  },
+  {
+    id: 'gestures',
+    title: 'Жесты',
+    icon: '👍',
+    items: ['👍', '👎', '👏', '🙏', '👌', '✌️', '🤝', '💪', '👀'],
   },
   {
     id: 'work',
     title: 'Работа',
     icon: '💼',
-    items: ['✅', '❌', '⚠️', '📌', '📎', '📝', '📄', '📁', '📊', '📈', '📉', '💼', '💻', '🖥️', '⌨️', '🖱️', '🔒', '🔑', '🛡️', '⚙️', '🚀', '🎯', '🏆', '💡'],
+    items: ['✅', '❌', '⚠️', '📌', '📎', '📝', '📄', '📁', '📊', '📈', '📉', '💼', '💻', '🔒', '🔑', '🛡️', '⚙️', '🚀', '🎯', '🏆', '💡'],
   },
   {
-    id: 'objects',
-    title: 'Объекты',
-    icon: '⭐',
-    items: ['❤️', '💜', '💙', '💚', '💛', '⭐', '✨', '🔥', '💥', '☕', '🍕', '🍔', '🍎', '🎁', '🎉', '🎵', '🎬', '📷', '🌙', '☀️', '☁️', '❄️', '⚡', '🌍'],
-  },
-];
-
-const STICKER_PACKS = [
-  {
-    id: 'vector-cats',
-    title: 'Коты',
-    items: ['🐱', '😺', '😸', '😻', '🙀', '😿', '😾', '🐾'],
-  },
-  {
-    id: 'work-energy',
-    title: 'Рабочий вайб',
-    items: ['🚀', '🔥', '✨', '💎', '🏆', '🎯', '💡', '⚡'],
-  },
-  {
-    id: 'soft-reactions',
-    title: 'Реакции',
-    items: ['👍', '🤝', '❤️', '👏', '🙏', '👌', '✅', '⭐'],
+    id: 'symbols',
+    title: 'Символы',
+    icon: '❤️',
+    items: ['❤️', '💜', '💙', '💚', '💛', '⭐', '✨', '🔥', '💥', '☕', '🎁', '🎉', '🎵', '📷', '🌙', '☀️', '❄️', '⚡'],
   },
 ];
 
@@ -68,7 +59,11 @@ type ChatComposerProps = {
   onAttachDocument: (file: File | null | undefined) => Promise<void>;
   onOpenDocumentsPanel: () => Promise<void>;
   onAppendEmoji: (emoji: string) => void;
-  onSendSticker: (sticker: string) => void;
+  replyPreview?: ComposerReplyPreview | null;
+  forwardPreview?: ComposerForwardPreview | null;
+  canSendWithoutText?: boolean;
+  onCancelReply?: () => void;
+  onCancelForward?: () => void;
   onSendCurrentMessage: () => Promise<void>;
 };
 
@@ -88,7 +83,7 @@ function ComposerActionButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="group flex h-[52px] w-[52px] items-center justify-center rounded-2xl border border-white/10 bg-white/[0.055] text-zinc-300 shadow-inner shadow-white/[0.03] transition hover:border-violet-300/30 hover:bg-white/[0.08] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+      className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.045] text-zinc-300 transition hover:border-violet-300/35 hover:bg-white/[0.08] hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
       title={title}
     >
       {children}
@@ -109,36 +104,31 @@ export function ChatComposer({
   onAttachDocument,
   onOpenDocumentsPanel,
   onAppendEmoji,
-  onSendSticker,
+  replyPreview,
+  forwardPreview,
+  canSendWithoutText = false,
+  onCancelReply,
+  onCancelForward,
   onSendCurrentMessage,
 }: ChatComposerProps) {
   const [isAttachmentMenuOpen, setIsAttachmentMenuOpen] = useState(false);
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
-  const [emojiSearchQuery, setEmojiSearchQuery] = useState('');
   const [activeEmojiCategoryId, setActiveEmojiCategoryId] = useState(EMOJI_CATEGORIES[0].id);
-  const [activeStickerPackId, setActiveStickerPackId] = useState(STICKER_PACKS[0].id);
-  const activeStickerPack = STICKER_PACKS.find((stickerPack) => stickerPack.id === activeStickerPackId) ?? STICKER_PACKS[0];
-  const activeEmojiCategory = EMOJI_CATEGORIES.find((emojiCategory) => emojiCategory.id === activeEmojiCategoryId) ?? EMOJI_CATEGORIES[0];
-  const filteredEmojiItems = useMemo(() => {
-    const normalizedQuery = emojiSearchQuery.trim().toLowerCase();
-
-    if (!normalizedQuery) {
-      return activeEmojiCategory.items;
-    }
-
-    const searchableItems = EMOJI_CATEGORIES.flatMap((emojiCategory) => emojiCategory.items);
-    const uniqueItems = Array.from(new Set(searchableItems));
-
-    return uniqueItems.filter((emojiItem) => emojiItem.includes(normalizedQuery));
-  }, [activeEmojiCategory.items, emojiSearchQuery]);
+  const activeEmojiCategory = useMemo(() => (
+    EMOJI_CATEGORIES.find((emojiCategory) => emojiCategory.id === activeEmojiCategoryId) ?? EMOJI_CATEGORIES[0]
+  ), [activeEmojiCategoryId]);
 
   async function handleOpenDocumentsPanel() {
     setIsAttachmentMenuOpen(false);
     await onOpenDocumentsPanel();
   }
 
+  function handleEmojiClick(emoji: string) {
+    onAppendEmoji(emoji);
+  }
+
   return (
-    <div className="border-t border-white/10 bg-[#15161c]/88 p-5 backdrop-blur-2xl">
+    <div className="border-t border-white/8 bg-[#15161c]/92 px-5 py-4 backdrop-blur-2xl">
       <div className="mx-auto max-w-4xl">
         <input
           type="file"
@@ -177,9 +167,51 @@ export function ChatComposer({
           id="vector-composer-document-input"
         />
 
-        <div className="relative flex items-end gap-3 rounded-[2rem] border border-white/10 bg-white/[0.055] px-4 py-3 shadow-2xl shadow-black/25 ring-1 ring-white/[0.025]">
-          <div className="pointer-events-none absolute inset-x-5 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent" />
+        {(replyPreview || forwardPreview) && (
+          <div className="mb-3 space-y-2">
+            {replyPreview && (
+              <div className="flex items-center gap-3 rounded-3xl border border-violet-300/18 bg-violet-500/10 px-4 py-3 shadow-lg shadow-violet-950/10">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-violet-400/15 text-violet-200">
+                  <MessageSquare size={18} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-200/80">Ответ</div>
+                  <div className="mt-0.5 truncate text-sm font-medium text-zinc-100">{replyPreview.senderName}</div>
+                  <div className="mt-0.5 truncate text-xs text-zinc-400">{replyPreview.preview}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={onCancelReply}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl text-zinc-400 transition hover:bg-white/[0.08] hover:text-white"
+                  title="Убрать ответ"
+                >
+                  <X size={17} />
+                </button>
+              </div>
+            )}
+            {forwardPreview && (
+              <div className="flex items-center gap-3 rounded-3xl border border-sky-300/16 bg-sky-500/10 px-4 py-3 shadow-lg shadow-sky-950/10">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-sky-400/15 text-sky-200">
+                  <Send size={17} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-200/80">Пересылка</div>
+                  <div className="mt-0.5 truncate text-sm text-zinc-100">{forwardPreview.count} {forwardPreview.count === 1 ? 'сообщение' : 'сообщений'} будет добавлено к отправке</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={onCancelForward}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl text-zinc-400 transition hover:bg-white/[0.08] hover:text-white"
+                  title="Убрать пересылку"
+                >
+                  <X size={17} />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
+        <div className="relative flex items-end gap-3 rounded-[1.85rem] border border-white/10 bg-white/[0.052] px-4 py-3 shadow-2xl shadow-black/24">
           <div className="relative">
             <ComposerActionButton
               title="Прикрепить"
@@ -190,7 +222,7 @@ export function ChatComposer({
             </ComposerActionButton>
 
             {isAttachmentMenuOpen && (
-              <div className="absolute bottom-[62px] left-0 z-20 w-72 overflow-hidden rounded-3xl border border-white/10 bg-[#202128]/95 p-2 shadow-2xl shadow-black/50 backdrop-blur-xl">
+              <div className="absolute bottom-[58px] left-0 z-20 w-72 overflow-hidden rounded-3xl border border-white/10 bg-[#202128]/95 p-2 shadow-2xl shadow-black/50 backdrop-blur-xl">
                 <label htmlFor="vector-composer-image-input" className="flex w-full cursor-pointer items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm text-zinc-200 transition hover:bg-white/[0.07]">
                   <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-violet-500/15 text-violet-200"><ImageIcon size={18} /></span>
                   <span>
@@ -229,7 +261,7 @@ export function ChatComposer({
 
           <div className="relative">
             <ComposerActionButton
-              title="Эмодзи и стикеры"
+              title="Эмодзи"
               disabled={!isWritable}
               onClick={() => setIsEmojiPickerOpen((previousValue) => !previousValue)}
             >
@@ -237,86 +269,36 @@ export function ChatComposer({
             </ComposerActionButton>
 
             {isEmojiPickerOpen && (
-              <div className="absolute bottom-[62px] left-0 z-30 w-[420px] overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#1f2027]/95 shadow-2xl shadow-black/60 backdrop-blur-xl">
-                <div className="grid h-[460px] grid-cols-[1fr_116px]">
-                  <div className="flex min-w-0 flex-col border-r border-white/10">
-                    <div className="p-3">
-                      <input
-                        value={emojiSearchQuery}
-                        onChange={(event) => setEmojiSearchQuery(event.target.value)}
-                        className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-violet-300/30"
-                        placeholder="Поиск эмодзи"
-                      />
-                    </div>
-                    <div className="flex gap-1 border-y border-white/10 px-3 py-2">
-                      {EMOJI_CATEGORIES.map((emojiCategory) => (
-                        <button
-                          type="button"
-                          key={emojiCategory.id}
-                          onClick={() => {
-                            setActiveEmojiCategoryId(emojiCategory.id);
-                            setEmojiSearchQuery('');
-                          }}
-                          className={`flex h-10 flex-1 items-center justify-center rounded-xl text-lg transition ${activeEmojiCategoryId === emojiCategory.id && !emojiSearchQuery.trim() ? 'bg-violet-500/25 ring-1 ring-violet-300/25' : 'hover:bg-white/[0.07]'}`}
-                          title={emojiCategory.title}
-                        >
-                          {emojiCategory.icon}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex items-center justify-between px-4 py-3">
-                      <div className="text-sm font-semibold text-zinc-200">{emojiSearchQuery.trim() ? 'Результаты поиска' : activeEmojiCategory.title}</div>
-                      <div className="text-xs text-zinc-500">{filteredEmojiItems.length}</div>
-                    </div>
-                    <div className="grid flex-1 auto-rows-[42px] grid-cols-7 gap-1 overflow-y-auto px-3 pb-3">
-                      {filteredEmojiItems.map((emojiItem, emojiIndex) => (
-                        <button
-                          type="button"
-                          key={`${emojiItem}-${emojiIndex}`}
-                          onClick={() => onAppendEmoji(emojiItem)}
-                          className="flex items-center justify-center rounded-2xl text-2xl transition hover:bg-white/[0.08]"
-                          title="Добавить эмодзи"
-                        >
-                          {emojiItem}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flex min-w-0 flex-col bg-black/12">
-                    <div className="border-b border-white/10 px-3 py-3">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-500">Стикеры</div>
-                      <div className="mt-1 text-xs text-zinc-400">Быстрая отправка</div>
-                    </div>
-                    <div className="flex gap-1 border-b border-white/10 p-2">
-                      {STICKER_PACKS.map((stickerPack) => (
-                        <button
-                          type="button"
-                          key={stickerPack.id}
-                          onClick={() => setActiveStickerPackId(stickerPack.id)}
-                          className={`h-9 flex-1 rounded-xl text-lg transition ${activeStickerPackId === stickerPack.id ? 'bg-violet-500/25 ring-1 ring-violet-300/25' : 'hover:bg-white/[0.07]'}`}
-                          title={stickerPack.title}
-                        >
-                          {stickerPack.items[0]}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 overflow-y-auto p-3">
-                      {activeStickerPack.items.map((sticker) => (
-                        <button
-                          type="button"
-                          key={sticker}
-                          onClick={() => {
-                            setIsEmojiPickerOpen(false);
-                            onSendSticker(sticker);
-                          }}
-                          className="flex h-16 items-center justify-center rounded-2xl bg-white/[0.045] text-4xl transition hover:scale-[1.03] hover:bg-violet-500/15"
-                          title="Отправить стикер"
-                        >
-                          {sticker}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+              <div className="absolute bottom-[58px] left-0 z-30 w-[330px] overflow-hidden rounded-3xl border border-white/10 bg-[#202128]/96 shadow-2xl shadow-black/60 backdrop-blur-xl">
+                <div className="flex gap-1 border-b border-white/10 p-2">
+                  {EMOJI_CATEGORIES.map((emojiCategory) => (
+                    <button
+                      type="button"
+                      key={emojiCategory.id}
+                      onClick={() => setActiveEmojiCategoryId(emojiCategory.id)}
+                      className={`flex h-10 flex-1 items-center justify-center rounded-xl text-lg transition ${activeEmojiCategoryId === emojiCategory.id ? 'bg-violet-500/25 ring-1 ring-violet-300/25' : 'hover:bg-white/[0.07]'}`}
+                      title={emojiCategory.title}
+                    >
+                      {emojiCategory.icon}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <div className="text-sm font-semibold text-zinc-200">{activeEmojiCategory.title}</div>
+                  <div className="text-xs text-zinc-500">{activeEmojiCategory.items.length}</div>
+                </div>
+                <div className="grid max-h-[260px] grid-cols-7 gap-1 overflow-y-auto px-3 pb-3">
+                  {activeEmojiCategory.items.map((emojiItem, emojiIndex) => (
+                    <button
+                      type="button"
+                      key={`${emojiItem}-${emojiIndex}`}
+                      onClick={() => handleEmojiClick(emojiItem)}
+                      className="flex h-10 items-center justify-center rounded-2xl text-[22px] transition hover:bg-white/[0.08]"
+                      title="Добавить эмодзи"
+                    >
+                      {emojiItem}
+                    </button>
+                  ))}
                 </div>
               </div>
             )}
@@ -341,8 +323,8 @@ export function ChatComposer({
           <button
             type="button"
             onClick={() => void onSendCurrentMessage()}
-            disabled={isSending || !messageText.trim() || !isWritable}
-            className="flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 via-fuchsia-500 to-pink-500 text-white shadow-lg shadow-violet-950/40 transition hover:scale-[1.02] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+            disabled={isSending || (!messageText.trim() && !canSendWithoutText) || !isWritable}
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 via-fuchsia-500 to-pink-500 text-white shadow-lg shadow-violet-950/40 transition hover:scale-[1.02] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
             title="Отправить"
           >
             {isSending && !isUploadingFile ? <LoaderCircle size={18} className="animate-spin" /> : <Send size={19} />}
