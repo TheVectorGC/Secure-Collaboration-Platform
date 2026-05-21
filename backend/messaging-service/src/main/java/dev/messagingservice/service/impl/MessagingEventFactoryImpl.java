@@ -23,9 +23,9 @@ public class MessagingEventFactoryImpl implements MessagingEventFactory {
 
     @Override
     public MessagingEventDto createMessageCreatedEvent(
-        MessageEntity messageEntity,
-        List<MessageDevicePayloadEntity> payloadEntities,
-        List<UUID> recipientAccountIds
+            MessageEntity messageEntity,
+            List<MessageDevicePayloadEntity> payloadEntities,
+            List<UUID> recipientAccountIds
     ) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("chatId", messageEntity.getChatId());
@@ -39,21 +39,21 @@ public class MessagingEventFactoryImpl implements MessagingEventFactory {
         payload.put("createdAt", messageEntity.getCreatedAt());
 
         return createEvent(
-            MessagingEventType.MESSAGE_CREATED,
-            messageEntity.getChatId(),
-            messageEntity.getId(),
-            messageEntity.getSenderAccountId(),
-            recipientAccountIds,
-            payload
+                MessagingEventType.MESSAGE_CREATED,
+                messageEntity.getChatId(),
+                messageEntity.getId(),
+                messageEntity.getSenderAccountId(),
+                recipientAccountIds,
+                payload
         );
     }
 
     @Override
     public MessagingEventDto createMessageDeliveredEvent(
-        UUID chatId,
-        UUID messageId,
-        UUID deliveredByAccountId,
-        List<UUID> recipientAccountIds
+            UUID chatId,
+            UUID messageId,
+            UUID deliveredByAccountId,
+            List<UUID> recipientAccountIds
     ) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("chatId", chatId);
@@ -62,35 +62,38 @@ public class MessagingEventFactoryImpl implements MessagingEventFactory {
         payload.put("deliveredAt", OffsetDateTime.now());
 
         return createEvent(
-            MessagingEventType.MESSAGE_DELIVERED,
-            chatId,
-            messageId,
-            deliveredByAccountId,
-            recipientAccountIds,
-            payload
+                MessagingEventType.MESSAGE_DELIVERED,
+                chatId,
+                messageId,
+                deliveredByAccountId,
+                recipientAccountIds,
+                payload
         );
     }
 
     @Override
     public MessagingEventDto createMessageReadEvent(
-        UUID chatId,
-        UUID lastReadMessageId,
-        UUID readByAccountId,
-        List<UUID> recipientAccountIds
+            UUID chatId,
+            UUID lastReadMessageId,
+            List<UUID> readMessageIds,
+            UUID readByAccountId,
+            OffsetDateTime readAt,
+            List<UUID> recipientAccountIds
     ) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("chatId", chatId);
         payload.put("lastReadMessageId", lastReadMessageId);
+        payload.put("readMessageIds", readMessageIds);
         payload.put("readByAccountId", readByAccountId);
-        payload.put("readAt", OffsetDateTime.now());
+        payload.put("readAt", readAt);
 
         return createEvent(
-            MessagingEventType.MESSAGE_READ,
-            chatId,
-            lastReadMessageId,
-            readByAccountId,
-            recipientAccountIds,
-            payload
+                MessagingEventType.MESSAGE_READ,
+                chatId,
+                lastReadMessageId,
+                readByAccountId,
+                recipientAccountIds,
+                payload
         );
     }
 
@@ -100,48 +103,47 @@ public class MessagingEventFactoryImpl implements MessagingEventFactory {
         payload.put("chat", chatResponseDto);
 
         return createEvent(
-            MessagingEventType.CHAT_UPDATED,
-            chatResponseDto.chatId(),
-            null,
-            null,
-            recipientAccountIds,
-            payload
+                MessagingEventType.CHAT_UPDATED,
+                chatResponseDto.chatId(),
+                null,
+                null,
+                recipientAccountIds,
+                payload
         );
     }
 
     private List<Map<String, Object>> createDevicePayloads(List<MessageDevicePayloadEntity> payloadEntities) {
         return payloadEntities.stream()
-            .map(payloadEntity -> {
-                Map<String, Object> payload = new LinkedHashMap<>();
-                payload.put("targetAccountId", payloadEntity.getTargetAccountId());
-                payload.put("targetDeviceId", payloadEntity.getTargetDeviceId());
-                payload.put("ciphertextType", payloadEntity.getCiphertextType());
-                payload.put("encryptedPayload", payloadEntity.getEncryptedPayload());
-                return payload;
-            })
-            .toList();
+                .map(payloadEntity -> {
+                    Map<String, Object> payload = new LinkedHashMap<>();
+                    payload.put("targetAccountId", payloadEntity.getTargetAccountId());
+                    payload.put("targetDeviceId", payloadEntity.getTargetDeviceId());
+                    payload.put("ciphertextType", payloadEntity.getCiphertextType());
+                    payload.put("encryptedPayload", payloadEntity.getEncryptedPayload());
+                    return payload;
+                })
+                .toList();
     }
 
     private MessagingEventDto createEvent(
-        MessagingEventType messagingEventType,
-        UUID chatId,
-        UUID messageId,
-        UUID senderAccountId,
-        List<UUID> recipientAccountIds,
-        Map<String, Object> payload
+            MessagingEventType messagingEventType,
+            UUID chatId,
+            UUID messageId,
+            UUID senderAccountId,
+            List<UUID> recipientAccountIds,
+            Map<String, Object> payload
     ) {
         JsonNode payloadNode = objectMapper.valueToTree(payload);
 
         return new MessagingEventDto(
-            UUID.randomUUID(),
-            messagingEventType,
-            chatId,
-            messageId,
-            senderAccountId,
-            recipientAccountIds,
-            OffsetDateTime.now(),
-            payloadNode
+                UUID.randomUUID(),
+                messagingEventType,
+                chatId,
+                messageId,
+                senderAccountId,
+                recipientAccountIds,
+                OffsetDateTime.now(),
+                payloadNode
         );
     }
 }
-

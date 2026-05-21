@@ -21,10 +21,12 @@ export function useMessageDecryptionController({
   const [decryptedMessagesById, setDecryptedMessagesById] = useState<Record<string, string>>({});
   const decryptingMessageIdsRef = useRef<Set<string>>(new Set());
   const permanentlyUnavailableMessageIdsRef = useRef<Set<string>>(new Set());
+  const failedDirectDecryptionMessageIdsRef = useRef<Set<string>>(new Set());
   const temporarilyMissingGroupKeyMessageIdsRef = useRef<Set<string>>(new Set());
 
   function resetDecryptionState() {
     permanentlyUnavailableMessageIdsRef.current.clear();
+    failedDirectDecryptionMessageIdsRef.current.clear();
     temporarilyMissingGroupKeyMessageIdsRef.current.clear();
     decryptingMessageIdsRef.current.clear();
     setDecryptedMessagesById({});
@@ -49,7 +51,12 @@ export function useMessageDecryptionController({
         return;
       }
 
-      if (decryptingMessageIdsRef.current.has(messageId) || permanentlyUnavailableMessageIdsRef.current.has(messageId) || temporarilyMissingGroupKeyMessageIdsRef.current.has(messageId)) {
+      if (
+        decryptingMessageIdsRef.current.has(messageId)
+        || permanentlyUnavailableMessageIdsRef.current.has(messageId)
+        || failedDirectDecryptionMessageIdsRef.current.has(messageId)
+        || temporarilyMissingGroupKeyMessageIdsRef.current.has(messageId)
+      ) {
         return;
       }
 
@@ -207,7 +214,7 @@ export function useMessageDecryptionController({
               const nextValue = { ...previousValue, [messageId]: '[Ключ группы обновлён]' };
 
               Object.keys(nextValue).forEach((cachedMessageId) => {
-                if (nextValue[cachedMessageId] === '[Ключ группы пока недоступен]' || nextValue[cachedMessageId] === '[Не удалось расшифровать сообщение]') {
+                if (nextValue[cachedMessageId] === '[Ключ группы пока недоступен]') {
                   delete nextValue[cachedMessageId];
                 }
               });
@@ -223,7 +230,8 @@ export function useMessageDecryptionController({
           }));
         })
         .catch((error) => {
-          console.error(error);
+          failedDirectDecryptionMessageIdsRef.current.add(messageId);
+          console.warn('Message decryption failed once and will not be retried automatically.', error);
           setDecryptedMessagesById((previousValue) => {
             const previousPlainText = previousValue[messageId];
 

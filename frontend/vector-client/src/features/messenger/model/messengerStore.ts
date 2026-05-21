@@ -34,7 +34,7 @@ type MessengerState = {
   setMessages: (chatId: string, messages: MessageResponseDto[]) => void;
   upsertMessage: (message: MessageResponseDto) => void;
   applyMessageDelivered: (chatId: string, messageId: string, accountId: string, deliveredAt: string) => void;
-  applyMessageRead: (chatId: string, lastReadMessageId: string, accountId: string, readAt: string) => void;
+  applyMessageRead: (chatId: string, lastReadMessageId: string, readMessageIds: string[], accountId: string, readAt: string) => void;
 };
 
 export const useMessengerStore = create<MessengerState>((set) => ({
@@ -143,12 +143,13 @@ export const useMessengerStore = create<MessengerState>((set) => ({
       };
     }),
 
-  applyMessageRead: (chatId, lastReadMessageId, accountId, readAt) =>
+  applyMessageRead: (chatId, lastReadMessageId, readMessageIds, accountId, readAt) =>
     set((state) => {
       const currentMessages = state.messagesByChatId[chatId] ?? [];
+      const explicitReadMessageIds = new Set(readMessageIds);
       const lastReadIndex = currentMessages.findIndex((message) => message.messageId === lastReadMessageId);
 
-      if (lastReadIndex === -1) {
+      if (explicitReadMessageIds.size === 0 && lastReadIndex === -1) {
         return state;
       }
 
@@ -156,7 +157,11 @@ export const useMessengerStore = create<MessengerState>((set) => ({
         messagesByChatId: {
           ...state.messagesByChatId,
           [chatId]: currentMessages.map((message, index) => {
-            if (index > lastReadIndex) {
+            const shouldApplyReadState = explicitReadMessageIds.size > 0
+              ? explicitReadMessageIds.has(message.messageId)
+              : index <= lastReadIndex;
+
+            if (!shouldApplyReadState || message.senderAccountId === accountId) {
               return message;
             }
 

@@ -56,7 +56,10 @@ function isMessageReadPayload(payload: unknown): payload is MessageReadPayload {
   return isObjectPayload(payload)
     && typeof payload.chatId === 'string'
     && typeof payload.lastReadMessageId === 'string'
-    && typeof payload.readByAccountId === 'string';
+    && Array.isArray(payload.readMessageIds)
+    && payload.readMessageIds.every((messageId) => typeof messageId === 'string')
+    && typeof payload.readByAccountId === 'string'
+    && typeof payload.readAt === 'string';
 }
 
 function isTypingPayload(payload: unknown): payload is TypingPayload {
@@ -242,7 +245,7 @@ export function useRealtimeConnection() {
 
       if (realtimeEvent.type === 'MESSAGE_READ' && isMessageReadPayload(realtimeEvent.payload)) {
         const payload = realtimeEvent.payload;
-        applyMessageRead(payload.chatId, payload.lastReadMessageId, payload.readByAccountId, payload.readAt);
+        applyMessageRead(payload.chatId, payload.lastReadMessageId, payload.readMessageIds, payload.readByAccountId, payload.readAt);
         return;
       }
 

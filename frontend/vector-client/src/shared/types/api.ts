@@ -338,6 +338,7 @@ export type MessageDeliveredPayload = {
 export type MessageReadPayload = {
   chatId: string;
   lastReadMessageId: string;
+  readMessageIds: string[];
   readByAccountId: string;
   readAt: string;
 };

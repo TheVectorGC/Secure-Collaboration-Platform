@@ -860,6 +860,7 @@ export function getChatPresentation(
   };
 }
 
+
 export function getOutgoingMessageStatus(message: MessageResponseDto, currentAccountId: string | undefined): 'SENT' | 'DELIVERED' | 'READ' {
   const relevantStates = message.deliveryStates.filter((deliveryState) => deliveryState.accountId !== currentAccountId);
 
@@ -867,13 +868,8 @@ export function getOutgoingMessageStatus(message: MessageResponseDto, currentAcc
     return 'READ';
   }
 
-  if (relevantStates.some((deliveryState) => deliveryState.status === 'DELIVERED')) {
-    return 'DELIVERED';
-  }
-
   return 'SENT';
 }
-
 
 export function getReadReceiptDetails(
   message: MessageResponseDto,
@@ -881,28 +877,33 @@ export function getReadReceiptDetails(
   profilesById: Record<string, ProfileResponseDto>,
   currentAccountId: string | undefined,
 ) {
-  const recipients = chat?.type === 'GROUP'
-    ? getActiveGroupParticipants(chat).filter((participant) => participant.accountId !== message.senderAccountId)
+  const activeRecipients = chat
+    ? (chat.type === 'GROUP'
+      ? getActiveGroupParticipants(chat)
+      : chat.participantAccountIds.map((participantAccountId) => ({
+        accountId: participantAccountId,
+        role: 'MEMBER' as const,
+        status: 'ACTIVE' as const,
+        historyVisibleFromMessageId: null,
+        historyVisibleFromCreatedAt: null,
+        joinedAt: chat.createdAt,
+        removedAt: null,
+        visibilityWindows: [],
+      })))
+    .filter((participant) => participant.accountId !== message.senderAccountId)
     : [];
   const readAccountIds = new Set(
     message.deliveryStates
       .filter((deliveryState) => deliveryState.status === 'READ')
       .map((deliveryState) => deliveryState.accountId),
   );
-  const deliveredAccountIds = new Set(
-    message.deliveryStates
-      .filter((deliveryState) => deliveryState.status === 'DELIVERED' || deliveryState.status === 'READ')
-      .map((deliveryState) => deliveryState.accountId),
-  );
 
-  const readParticipants = recipients.filter((participant) => readAccountIds.has(participant.accountId));
-  const unreadParticipants = recipients.filter((participant) => !readAccountIds.has(participant.accountId));
-  const deliveredParticipants = recipients.filter((participant) => deliveredAccountIds.has(participant.accountId));
+  const readParticipants = activeRecipients.filter((participant) => readAccountIds.has(participant.accountId));
+  const unreadParticipants = activeRecipients.filter((participant) => !readAccountIds.has(participant.accountId));
 
   return {
-    totalCount: recipients.length,
+    totalCount: activeRecipients.length,
     readCount: readParticipants.length,
-    deliveredCount: deliveredParticipants.length,
     readParticipants: readParticipants.map((participant) => profilesById[participant.accountId] ?? participant.accountId),
     unreadParticipants: unreadParticipants.map((participant) => profilesById[participant.accountId] ?? participant.accountId),
   };

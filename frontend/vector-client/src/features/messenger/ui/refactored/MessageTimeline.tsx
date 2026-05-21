@@ -10,7 +10,6 @@ import {
   UserAvatar,
   formatGroupSystemMessage,
   getAccountAvatarUrl,
-  getOutgoingMessageStatus,
   getParticipantDisplayName,
   getReadReceiptDetails,
   isDecryptionPlaceholder,
@@ -95,7 +94,6 @@ export function MessageTimeline({
           }
 
           const isOwnMessage = message.senderAccountId === currentAccountId;
-          const messageStatus = getOutgoingMessageStatus(message, currentAccountId);
           const richMessageContent = parseRichMessageContent(decryptedMessage);
           const visibleMessageText = richMessageContent?.text ?? decryptedMessage;
           const richAttachments = richMessageContent?.attachments ?? [];
@@ -106,6 +104,8 @@ export function MessageTimeline({
           const readReceiptDetails = getReadReceiptDetails(message, selectedChat, profilesById, currentAccountId);
           const shouldShowGroupSender = selectedChat.type === 'GROUP' && !isOwnMessage;
           const shouldShowGroupReadDetails = selectedChat.type === 'GROUP' && readDetailsMessageId === message.messageId;
+          const shouldShowMessageReadReceipt = readReceiptDetails.totalCount > 0;
+          const hasMessageBeenRead = readReceiptDetails.readCount > 0;
           const localReaction = localReactionsByMessageId[message.messageId];
           const isForwardSelectionActive = Boolean(forwardSelectionSelectedMessageIds);
           const isForwardSelected = Boolean(forwardSelectionSelectedMessageIds?.includes(message.messageId));
@@ -215,15 +215,13 @@ export function MessageTimeline({
 
                       <div className={`mt-2 flex items-center gap-2 text-[11px] ${isOwnMessage ? 'justify-end text-violet-100/80' : 'justify-end text-zinc-500'}`}>
                         <span>{formatMessageTime(message.createdAt)}</span>
-                        {isOwnMessage && selectedChat.type !== 'GROUP' && (
+                        {shouldShowMessageReadReceipt && selectedChat.type !== 'GROUP' && (
                           <span className="inline-flex items-center gap-1">
-                            {messageStatus === 'READ' ? <CheckCheck size={13} /> : messageStatus === 'DELIVERED' ? <CheckCheck size={13} /> : <Check size={13} />}
-                            <span>
-                              {messageStatus === 'READ' ? 'Прочитано' : messageStatus === 'DELIVERED' ? 'Доставлено' : 'Отправлено'}
-                            </span>
+                            {hasMessageBeenRead ? <CheckCheck size={13} /> : <Check size={13} />}
+                            <span>{hasMessageBeenRead ? 'Прочитано' : 'Отправлено'}</span>
                           </span>
                         )}
-                        {selectedChat.type === 'GROUP' && (
+                        {shouldShowMessageReadReceipt && selectedChat.type === 'GROUP' && (
                           <button
                             type="button"
                             onClick={(event) => {
@@ -233,13 +231,11 @@ export function MessageTimeline({
                             className="inline-flex items-center gap-1 rounded-full px-1 transition hover:bg-white/10"
                             title="Кто прочитал сообщение"
                           >
-                            {readReceiptDetails.readCount > 0 ? <CheckCheck size={13} /> : <Check size={13} />}
+                            {hasMessageBeenRead ? <CheckCheck size={13} /> : <Check size={13} />}
                             <span>
-                              {readReceiptDetails.readCount > 0
+                              {hasMessageBeenRead
                                 ? `Прочитано ${readReceiptDetails.readCount}/${readReceiptDetails.totalCount}`
-                                : readReceiptDetails.deliveredCount > 0
-                                  ? `Доставлено ${readReceiptDetails.deliveredCount}/${readReceiptDetails.totalCount}`
-                                  : 'Отправлено'}
+                                : 'Отправлено'}
                             </span>
                           </button>
                         )}
