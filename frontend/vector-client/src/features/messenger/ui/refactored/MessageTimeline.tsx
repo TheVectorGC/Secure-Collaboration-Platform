@@ -1,6 +1,6 @@
 import type { MutableRefObject, RefObject } from 'react';
 import { Check, CheckCheck, Download, FileText } from 'lucide-react';
-import { getDisplayName } from '../../../../shared/lib/profile';
+import { getAccountDisplayName } from '../../../../shared/lib/profile';
 import { formatFileSize, parseDocumentAttachmentMessageContent, parseFileAttachmentMessageContent } from '../../../media/lib/fileCrypto';
 import { DocumentAttachmentPreview, ImageAttachmentPreview } from '../MessageAttachments';
 import type { ChatResponseDto, DocumentAttachmentMessageContent, FileAttachmentMessageContent, MessageResponseDto, ProfileResponseDto } from '../../../../shared/types/api';
@@ -37,7 +37,7 @@ type MessageTimelineProps = {
   onOpenMessageContextMenu: (event: React.MouseEvent<HTMLElement>, messageId: string) => void;
   onScrollToMessage: (messageId: string) => void;
   onDownloadAttachment: (attachment: FileAttachmentMessageContent | DocumentAttachmentMessageContent) => Promise<void>;
-  onOpenProfile: (profile: ProfileResponseDto) => void;
+  onOpenProfile: (accountId: string) => void;
   onSetReadDetailsMessageId: (messageId: string | null) => void;
   onSetLocalMessageReaction: (messageId: string, emoji: string) => void;
 };
@@ -100,7 +100,7 @@ export function MessageTimeline({
           const fileAttachment = richAttachments.length === 0 ? parseFileAttachmentMessageContent(visibleMessageText) : null;
           const documentAttachment = richAttachments.length === 0 ? parseDocumentAttachmentMessageContent(visibleMessageText) : null;
           const senderProfile = profilesById[message.senderAccountId] ?? null;
-          const senderDisplayName = senderProfile ? getDisplayName(senderProfile) : `${message.senderAccountId.slice(0, 8)}…`;
+          const senderDisplayName = getAccountDisplayName(message.senderAccountId, profilesById);
           const readReceiptDetails = getReadReceiptDetails(message, selectedChat, profilesById, currentAccountId);
           const shouldShowGroupSender = selectedChat.type === 'GROUP' && !isOwnMessage;
           const shouldShowGroupReadDetails = selectedChat.type === 'GROUP' && readDetailsMessageId === message.messageId;
@@ -136,7 +136,19 @@ export function MessageTimeline({
                 )}
 
                 <div className={`flex max-w-[74%] items-end gap-3 ${isOwnMessage ? 'flex-row-reverse' : ''} ${canSelectForForward ? 'cursor-pointer' : ''}`}>
-                  {!isOwnMessage && <UserAvatar label={senderDisplayName} imageUrl={getAccountAvatarUrl(senderProfile)} size="sm" />}
+                  {!isOwnMessage && (
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onOpenProfile(message.senderAccountId);
+                      }}
+                      className="rounded-2xl transition hover:brightness-110"
+                      title="Открыть профиль"
+                    >
+                      <UserAvatar label={senderDisplayName} imageUrl={getAccountAvatarUrl(senderProfile)} size="sm" />
+                    </button>
+                  )}
 
                   <div className="relative">
                     <div
@@ -156,9 +168,17 @@ export function MessageTimeline({
                       }`}
                     >
                       {shouldShowGroupSender && (
-                        <div className="mb-1 text-xs font-semibold text-violet-200">
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onOpenProfile(message.senderAccountId);
+                          }}
+                          className="mb-1 rounded-lg text-left text-xs font-semibold text-violet-200 transition hover:text-violet-100"
+                          title="Открыть профиль"
+                        >
                           {senderDisplayName}
-                        </div>
+                        </button>
                       )}
                       {richMessageContent?.replyTo && (
                         <ReplyReferenceBlock replyTo={richMessageContent.replyTo} isOwnMessage={isOwnMessage} onOpenOriginalMessage={onScrollToMessage} />
@@ -352,7 +372,7 @@ function FileAttachmentBlock({ attachment, isOwnMessage, onDownload }: { attachm
 type GroupReadDetailsPopoverProps = {
   isOwnMessage: boolean;
   readReceiptDetails: ReturnType<typeof getReadReceiptDetails>;
-  onOpenProfile: (profile: ProfileResponseDto) => void;
+  onOpenProfile: (accountId: string) => void;
 };
 
 function GroupReadDetailsPopover({ isOwnMessage, readReceiptDetails, onOpenProfile }: GroupReadDetailsPopoverProps) {
@@ -365,13 +385,11 @@ function GroupReadDetailsPopover({ isOwnMessage, readReceiptDetails, onOpenProfi
           <div className="flex flex-wrap gap-1.5">
             {readReceiptDetails.readParticipants.length > 0 ? readReceiptDetails.readParticipants.map((participant) => {
               const participantName = getParticipantDisplayName(participant);
-              return typeof participant === 'string' ? (
-                <span key={participantName} className="rounded-full bg-emerald-400/10 px-2 py-1 text-emerald-200">{participantName}</span>
-              ) : (
+              return (
                 <button
                   type="button"
                   key={participant.accountId}
-                  onClick={() => onOpenProfile(participant)}
+                  onClick={() => onOpenProfile(participant.accountId)}
                   className="rounded-full bg-emerald-400/10 px-2 py-1 text-emerald-200 transition hover:bg-emerald-400/18"
                 >
                   {participantName}
@@ -385,13 +403,11 @@ function GroupReadDetailsPopover({ isOwnMessage, readReceiptDetails, onOpenProfi
           <div className="flex flex-wrap gap-1.5">
             {readReceiptDetails.unreadParticipants.length > 0 ? readReceiptDetails.unreadParticipants.map((participant) => {
               const participantName = getParticipantDisplayName(participant);
-              return typeof participant === 'string' ? (
-                <span key={participantName} className="rounded-full bg-white/[0.06] px-2 py-1 text-zinc-300">{participantName}</span>
-              ) : (
+              return (
                 <button
                   type="button"
                   key={participant.accountId}
-                  onClick={() => onOpenProfile(participant)}
+                  onClick={() => onOpenProfile(participant.accountId)}
                   className="rounded-full bg-white/[0.06] px-2 py-1 text-zinc-300 transition hover:bg-white/[0.1]"
                 >
                   {participantName}

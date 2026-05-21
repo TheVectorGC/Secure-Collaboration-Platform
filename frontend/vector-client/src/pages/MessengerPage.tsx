@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { logout as logoutRequest } from '../features/auth/api/authApi';
 import { useAuthStore } from '../features/auth/model/authStore';
@@ -160,8 +160,15 @@ export function MessengerPage() {
       chat.participants?.forEach((participant) => accountIds.add(participant.accountId));
     });
 
+    Object.values(messagesByChatId).forEach((messages) => {
+      messages.forEach((message) => {
+        accountIds.add(message.senderAccountId);
+        message.deliveryStates.forEach((deliveryState) => accountIds.add(deliveryState.accountId));
+      });
+    });
+
     return Array.from(accountIds);
-  }, [chats, profile?.accountId]);
+  }, [chats, messagesByChatId, profile?.accountId]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -199,6 +206,34 @@ export function MessengerPage() {
       window.clearInterval(intervalId);
     };
   }, [knownProfileAccountIds, profile?.accountId, setProfile, upsertProfiles]);
+
+
+  const openMiniProfileByAccountId = useCallback(async (accountId: string | null | undefined) => {
+    if (!accountId) {
+      return;
+    }
+
+    const cachedProfile = accountId === profile?.accountId ? profile : profilesById[accountId] ?? null;
+
+    if (cachedProfile) {
+      setMiniProfile(cachedProfile);
+      return;
+    }
+
+    try {
+      const loadedProfiles = await getProfilesByAccountIds([accountId]);
+      const loadedProfile = loadedProfiles.find((candidateProfile) => candidateProfile.accountId === accountId) ?? null;
+
+      if (loadedProfile) {
+        upsertProfile(loadedProfile);
+        setMiniProfile(loadedProfile);
+      }
+    }
+    catch (error) {
+      console.warn('Failed to open profile.', error);
+      setErrorMessage('Не удалось загрузить профиль пользователя.');
+    }
+  }, [profile, profilesById, upsertProfile]);
 
   useEffect(() => {
     setLocalAvatarDataUrl(profile?.avatarDataUrl ?? localStorage.getItem(getLocalAvatarStorageKey(profile?.accountId)));
@@ -599,7 +634,7 @@ export function MessengerPage() {
         onAddParticipant={handleAddGroupParticipant}
         onRemoveParticipant={handleRemoveGroupParticipant}
         onUpdateGroupAvatar={handleUpdateGroupAvatar}
-        onOpenProfile={setMiniProfile}
+        onOpenProfile={(accountId) => void openMiniProfileByAccountId(accountId)}
       />
 
       <DocumentsPanel
@@ -663,7 +698,7 @@ export function MessengerPage() {
               selectedChatSubtitle={selectedChatSubtitle}
               isChatActionsMenuOpen={isChatActionsMenuOpen}
               onOpenGroupManagement={() => setIsGroupManagementOpen(true)}
-              onOpenDirectProfile={() => selectedChatPresentation.companionProfile && setMiniProfile(selectedChatPresentation.companionProfile)}
+              onOpenDirectProfile={() => void openMiniProfileByAccountId(selectedDirectCompanionAccountId)}
               onOpenDocumentsPanel={openDocumentsPanel}
               onToggleChatActionsMenu={() => setIsChatActionsMenuOpen((previousValue) => !previousValue)}
               onClearSelectedChatHistory={handleClearSelectedChatHistory}
@@ -695,7 +730,7 @@ export function MessengerPage() {
               onOpenMessageContextMenu={openMessageContextMenu}
               onScrollToMessage={scrollToMessage}
               onDownloadAttachment={handleDownloadAttachment}
-              onOpenProfile={setMiniProfile}
+              onOpenProfile={(accountId) => void openMiniProfileByAccountId(accountId)}
               onSetReadDetailsMessageId={setReadDetailsMessageId}
               onSetLocalMessageReaction={setLocalMessageReaction}
             />

@@ -31,7 +31,7 @@ export function ChatHeader({
     if (selectedChat.type === 'GROUP') {
       onOpenGroupManagement();
     }
-    else if (selectedChat.type === 'DIRECT' && selectedChatPresentation.companionProfile) {
+    else if (selectedChat.type === 'DIRECT') {
       onOpenDirectProfile();
     }
   }

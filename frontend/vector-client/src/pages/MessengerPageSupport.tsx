@@ -31,7 +31,7 @@ import { type ChatAttachmentDisplayMode } from '../features/messenger/ui/ChatCom
 import { downloadKeyBackup, getKeyBackupStatus, uploadKeyBackup, type KeyBackupStatusResponseDto } from '../features/crypto/api/keyBackupApi';
 import { formatLastSeen, formatMessageTime } from '../shared/lib/dateFormat';
 import { getAvatarGradient, getInitials } from '../shared/lib/avatar';
-import { getDirectCompanionAccountId, getDisplayName } from '../shared/lib/profile';
+import { getAccountDisplayName, getAccountUsernameLabel, getDirectCompanionAccountId, getDisplayName } from '../shared/lib/profile';
 import type { AccountPresenceState } from '../features/realtime/model/realtimeStore';
 import type { ActiveDeviceResponseDto, AddGroupParticipantRequestDto, ChatResponseDto, DocumentAttachmentMessageContent, DocumentResponseDto, FileAttachmentMessageContent, MessageResponseDto, ProfileResponseDto } from '../shared/types/api';
 
@@ -840,23 +840,13 @@ export function getChatPresentation(
 
   const companionAccountId = getDirectCompanionAccountId(chat, currentProfile?.accountId);
   const companionProfile = companionAccountId ? profilesById[companionAccountId] ?? null : null;
+  const companionDisplayName = getAccountDisplayName(companionAccountId, profilesById);
 
-  if (companionProfile) {
-    return {
-      title: getDisplayName(companionProfile),
-      subtitle: `@${companionProfile.username}`,
-      avatarLabel: getDisplayName(companionProfile),
-      companionProfile,
-    };
-  }
-
-  const fallbackTitle = chat.name?.trim() || 'Собеседник';
-  const shortId = companionAccountId ? `${companionAccountId.slice(0, 8)}…` : 'неизвестный контакт';
   return {
-    title: fallbackTitle,
-    subtitle: shortId,
-    avatarLabel: fallbackTitle,
-    companionProfile: null,
+    title: companionDisplayName,
+    subtitle: getAccountUsernameLabel(companionAccountId, profilesById),
+    avatarLabel: companionDisplayName,
+    companionProfile,
   };
 }
 
@@ -904,17 +894,24 @@ export function getReadReceiptDetails(
   return {
     totalCount: activeRecipients.length,
     readCount: readParticipants.length,
-    readParticipants: readParticipants.map((participant) => profilesById[participant.accountId] ?? participant.accountId),
-    unreadParticipants: unreadParticipants.map((participant) => profilesById[participant.accountId] ?? participant.accountId),
+    readParticipants: readParticipants.map((participant) => ({
+      accountId: participant.accountId,
+      profile: profilesById[participant.accountId] ?? null,
+    })),
+    unreadParticipants: unreadParticipants.map((participant) => ({
+      accountId: participant.accountId,
+      profile: profilesById[participant.accountId] ?? null,
+    })),
   };
 }
 
-export function getParticipantDisplayName(profileOrAccountId: ProfileResponseDto | string): string {
-  if (typeof profileOrAccountId === 'string') {
-    return `${profileOrAccountId.slice(0, 8)}…`;
-  }
+export type ParticipantProfilePresentation = {
+  accountId: string;
+  profile: ProfileResponseDto | null;
+};
 
-  return getDisplayName(profileOrAccountId);
+export function getParticipantDisplayName(participant: ParticipantProfilePresentation): string {
+  return participant.profile ? getDisplayName(participant.profile) : 'Профиль загружается';
 }
 
 export type GroupSystemEventType = 'GROUP_CREATED' | 'MEMBER_ADDED' | 'MEMBER_REMOVED';
@@ -968,7 +965,7 @@ export function getProfileDisplayNameById(accountId: string | null, profilesById
   const profile = profilesById[accountId];
 
   if (!profile) {
-    return `${accountId.slice(0, 8)}…`;
+    return 'Профиль загружается';
   }
 
   return getDisplayName(profile);
@@ -1032,7 +1029,7 @@ export function ForwardedMessageCard({
 }: {
   forwardedMessage: ForwardedMessageSnapshot;
   profilesById: Record<string, ProfileResponseDto>;
-  onOpenProfile: (profile: ProfileResponseDto) => void;
+  onOpenProfile: (accountId: string) => void;
   onDownload: (attachment: FileAttachmentMessageContent | DocumentAttachmentMessageContent) => Promise<void>;
   depth?: number;
 }) {
@@ -1051,9 +1048,8 @@ export function ForwardedMessageCard({
       <div className="flex items-center gap-2">
         <button
           type="button"
-          onClick={() => senderProfile && onOpenProfile(senderProfile)}
-          disabled={!senderProfile}
-          className="flex min-w-0 items-center gap-2 rounded-xl transition enabled:hover:bg-white/[0.06]"
+          onClick={() => onOpenProfile(forwardedMessage.senderAccountId)}
+          className="flex min-w-0 items-center gap-2 rounded-xl transition hover:bg-white/[0.06]"
         >
           <UserAvatar label={senderName} imageUrl={getAccountAvatarUrl(senderProfile)} size="sm" />
           <span className="min-w-0 truncate text-xs font-semibold text-violet-100">{senderName}</span>
@@ -1424,7 +1420,7 @@ export function GroupManagementModal({
   onAddParticipant: (profile: ProfileResponseDto, historyAccessMode: GroupHistoryAccessMode) => Promise<void>;
   onRemoveParticipant: (participantAccountId: string) => Promise<void>;
   onUpdateGroupAvatar: (chatId: string, file: File | null) => Promise<void>;
-  onOpenProfile: (profile: ProfileResponseDto) => void;
+  onOpenProfile: (accountId: string) => void;
 }) {
   const upsertProfiles = useDirectoryStore((state) => state.upsertProfiles);
   const [query, setQuery] = useState('');
@@ -1609,8 +1605,8 @@ export function GroupManagementModal({
 
           <div className="mt-5 max-h-[48vh] space-y-3 overflow-y-auto pr-1">
             {activeParticipants.map((participant) => {
-              const participantProfile = profilesById[participant.accountId];
-              const participantName = participantProfile ? getDisplayName(participantProfile) : `${participant.accountId.slice(0, 8)}…`;
+              const participantProfile = profilesById[participant.accountId] ?? null;
+              const participantName = getAccountDisplayName(participant.accountId, profilesById);
               const participantPresence = presenceByAccountId[participant.accountId];
               const participantActivityLabel = getAccountActivityLabel(participantPresence, lastActivityByAccountId[participant.accountId]);
               const isCurrentUser = participant.accountId === currentAccountId;
@@ -1620,9 +1616,8 @@ export function GroupManagementModal({
                 <div key={participant.accountId} className="flex items-center gap-3 rounded-3xl border border-white/8 bg-white/[0.03] px-4 py-3 transition hover:bg-white/[0.05]">
                   <button
                     type="button"
-                    onClick={() => participantProfile && onOpenProfile(participantProfile)}
-                    disabled={!participantProfile}
-                    className="flex min-w-0 flex-1 items-center gap-3 text-left disabled:cursor-default"
+                    onClick={() => onOpenProfile(participant.accountId)}
+                    className="flex min-w-0 flex-1 items-center gap-3 text-left transition hover:brightness-110"
                   >
                     <div className="relative shrink-0">
                       <UserAvatar label={participantName} imageUrl={getAccountAvatarUrl(participantProfile)} />
@@ -1631,7 +1626,7 @@ export function GroupManagementModal({
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-semibold text-zinc-100">{participantName}{isCurrentUser ? ' • это вы' : ''}</div>
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-                        <span>{participantProfile ? `@${participantProfile.username}` : participant.accountId}</span>
+                        <span>{getAccountUsernameLabel(participant.accountId, profilesById)}</span>
                         <span>{participantActivityLabel}</span>
                         <span className="rounded-full border border-violet-300/15 bg-violet-400/10 px-2 py-0.5 text-violet-200">{participant.role === 'OWNER' ? 'Владелец' : 'Участник'}</span>
                         {participant.historyVisibleFromCreatedAt && <span>история с {formatMessageTime(participant.historyVisibleFromCreatedAt)}</span>}

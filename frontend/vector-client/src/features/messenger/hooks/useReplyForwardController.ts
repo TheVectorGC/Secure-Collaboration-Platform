@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { getDisplayName } from '../../../shared/lib/profile';
+import { getAccountDisplayName } from '../../../shared/lib/profile';
 import type { ChatResponseDto, MessageResponseDto, ProfileResponseDto } from '../../../shared/types/api';
 import {
   ForwardedMessageSnapshot,
@@ -34,8 +34,7 @@ export function useReplyForwardController({
 
   function buildReplyDraftFromMessage(message: MessageResponseDto): ReplyDraft {
     const decryptedMessage = decryptedMessagesById[message.messageId] ?? '';
-    const senderProfile = profilesById[message.senderAccountId] ?? null;
-    const senderName = senderProfile ? getDisplayName(senderProfile) : `${message.senderAccountId.slice(0, 8)}…`;
+    const senderName = getAccountDisplayName(message.senderAccountId, profilesById);
 
     return {
       messageId: message.messageId,
@@ -48,13 +47,13 @@ export function useReplyForwardController({
   }
 
   function buildForwardSnapshotFromMessage(message: MessageResponseDto): ForwardedMessageSnapshot {
-    const senderProfile = profilesById[message.senderAccountId] ?? null;
+    const senderName = getAccountDisplayName(message.senderAccountId, profilesById);
 
     return {
       messageId: message.messageId,
       chatId: message.chatId,
       senderAccountId: message.senderAccountId,
-      senderName: senderProfile ? getDisplayName(senderProfile) : `${message.senderAccountId.slice(0, 8)}…`,
+      senderName,
       createdAt: message.createdAt,
       plainText: decryptedMessagesById[message.messageId] ?? '',
     };

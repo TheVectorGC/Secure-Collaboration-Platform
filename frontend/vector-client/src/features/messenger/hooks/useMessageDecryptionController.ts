@@ -158,7 +158,8 @@ export function useMessageDecryptionController({
               console.warn(errorMessageText);
             }
             else {
-              console.error(error);
+              failedDirectDecryptionMessageIdsRef.current.add(messageId);
+              console.warn('Message decryption failed once and will not be retried automatically.', error);
             }
 
             setDecryptedMessagesById((previousValue) => {
