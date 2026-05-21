@@ -12,6 +12,8 @@ import org.springframework.stereotype.Repository;
 public interface DocumentObserverRepository extends JpaRepository<DocumentObserverEntity, UUID> {
     Optional<DocumentObserverEntity> findByDocumentIdAndObserverAccountId(UUID documentId, UUID observerAccountId);
 
+    boolean existsByDocumentIdAndObserverAccountId(UUID documentId, UUID observerAccountId);
+
     List<DocumentObserverEntity> findByDocumentId(UUID documentId);
 
     List<DocumentObserverEntity> findByDocumentIdIn(Collection<UUID> documentIds);

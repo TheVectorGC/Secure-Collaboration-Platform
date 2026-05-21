@@ -9,3 +9,5 @@ databaseChangeLog:
       file: db/changelog/changes/004-document-workflow-upgrade.yaml
   - include:
       file: db/changelog/changes/005-document-observers-and-hidden-state.yaml
+  - include:
+      file: db/changelog/changes/006-document-workspace-realtime.yaml

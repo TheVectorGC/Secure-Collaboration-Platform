@@ -26,7 +26,7 @@ public class DocumentEntity {
     @Id
     private UUID id;
 
-    @Column(name = "chat_id", nullable = false)
+    @Column(name = "chat_id")
     private UUID chatId;
 
     @Column(name = "media_file_id", nullable = false, unique = true)
@@ -55,6 +55,15 @@ public class DocumentEntity {
 
     @Column(name = "encrypted_sha256_base64", nullable = false, length = 64)
     private String encryptedSha256Base64;
+
+    @Column(name = "file_encryption_algorithm", nullable = false, length = 32)
+    private String fileEncryptionAlgorithm;
+
+    @Column(name = "file_encryption_key_base64", nullable = false, length = 512)
+    private String fileEncryptionKeyBase64;
+
+    @Column(name = "file_initialization_vector_base64", nullable = false, length = 512)
+    private String fileInitializationVectorBase64;
 
     @Column(nullable = false, length = 32)
     @Enumerated(EnumType.STRING)

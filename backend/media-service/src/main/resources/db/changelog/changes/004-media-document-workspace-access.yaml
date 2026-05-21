@@ -1,0 +1,49 @@
+databaseChangeLog:
+  - changeSet:
+      id: 004-media-document-workspace-access
+      author: media-service
+      changes:
+        - dropNotNullConstraint:
+            tableName: media_files
+            columnName: chat_id
+            columnDataType: UUID
+        - createTable:
+            tableName: media_file_access
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: media_file_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: account_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+        - addUniqueConstraint:
+            tableName: media_file_access
+            columnNames: media_file_id, account_id
+            constraintName: uk_media_file_access_media_account
+        - createIndex:
+            tableName: media_file_access
+            indexName: idx_media_file_access_media_id
+            columns:
+              - column:
+                  name: media_file_id
+        - createIndex:
+            tableName: media_file_access
+            indexName: idx_media_file_access_account_id
+            columns:
+              - column:
+                  name: account_id

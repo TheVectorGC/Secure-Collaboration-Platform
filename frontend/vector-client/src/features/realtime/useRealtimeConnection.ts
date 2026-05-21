@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { serviceUrls } from '../../shared/config/serviceUrls';
 import type {
   ChatUpdatedPayload,
+  DocumentChangedPayload,
   MessageCreatedPayload,
   MessageDeliveredPayload,
   MessageReadPayload,
@@ -60,6 +61,27 @@ function isMessageReadPayload(payload: unknown): payload is MessageReadPayload {
     && payload.readMessageIds.every((messageId) => typeof messageId === 'string')
     && typeof payload.readByAccountId === 'string'
     && typeof payload.readAt === 'string';
+}
+
+
+function isDocumentChangedPayload(payload: unknown): payload is DocumentChangedPayload {
+  return isObjectPayload(payload)
+    && typeof payload.documentId === 'string'
+    && (
+      typeof payload.document === 'undefined'
+      || payload.document === null
+      || (isObjectPayload(payload.document) && typeof payload.document.documentId === 'string')
+    );
+}
+
+function isDocumentEventType(eventType: string): boolean {
+  return eventType === 'DOCUMENT_CREATED'
+    || eventType === 'DOCUMENT_UPDATED'
+    || eventType === 'DOCUMENT_SIGNED'
+    || eventType === 'DOCUMENT_REJECTED'
+    || eventType === 'DOCUMENT_CANCELLED'
+    || eventType === 'DOCUMENT_HIDDEN'
+    || eventType === 'DOCUMENT_OBSERVERS_ADDED';
 }
 
 function isTypingPayload(payload: unknown): payload is TypingPayload {
@@ -226,6 +248,10 @@ export function useRealtimeConnection() {
         return;
       }
 
+      if (isDocumentEventType(realtimeEvent.type) && isDocumentChangedPayload(realtimeEvent.payload)) {
+        window.dispatchEvent(new CustomEvent('vector:documentChanged', { detail: { documentId: realtimeEvent.payload.documentId } }));
+        return;
+      }
 
       if (realtimeEvent.type === 'PRESENCE_UPDATED' && isAccountPresencePayload(realtimeEvent.payload)) {
         setPresence(realtimeEvent.payload);

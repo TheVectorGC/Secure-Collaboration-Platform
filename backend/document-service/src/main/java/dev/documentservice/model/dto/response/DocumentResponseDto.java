@@ -28,6 +28,5 @@ public record DocumentResponseDto(
     OffsetDateTime updatedAt,
     List<DocumentSignerResponseDto> signers,
     List<DocumentObserverResponseDto> observers,
-    List<DocumentSignatureResponseDto> signatures
-) {
-}
+    List<DocumentSignatureResponseDto> signatures,
+    DocumentFileEncryptionResponseDto fileEncryption) {}

@@ -1,5 +1,6 @@
 import { documentHttpClient } from '../../../shared/api/httpClient';
 import type {
+  AddDocumentObserversRequestDto,
   CreateDocumentRequestDto,
   DocumentResponseDto,
   DocumentSigningKeyResponseDto,
@@ -15,11 +16,6 @@ export async function createDocument(request: CreateDocumentRequestDto): Promise
 
 export async function getDocuments(): Promise<DocumentResponseDto[]> {
   const response = await documentHttpClient.get<DocumentResponseDto[]>('/api/v1/documents');
-  return response.data;
-}
-
-export async function getChatDocuments(chatId: string): Promise<DocumentResponseDto[]> {
-  const response = await documentHttpClient.get<DocumentResponseDto[]>(`/api/v1/chats/${chatId}/documents`);
   return response.data;
 }
 
@@ -48,6 +44,11 @@ export async function rejectDocument(documentId: string, request: RejectDocument
 
 export async function hideDocument(documentId: string): Promise<void> {
   await documentHttpClient.patch(`/api/v1/documents/${documentId}/hide`);
+}
+
+export async function addDocumentObservers(documentId: string, request: AddDocumentObserversRequestDto): Promise<DocumentResponseDto> {
+  const response = await documentHttpClient.post<DocumentResponseDto>(`/api/v1/documents/${documentId}/observers`, request);
+  return response.data;
 }
 
 export async function cancelDocument(documentId: string, request: RejectDocumentRequestDto): Promise<DocumentResponseDto> {

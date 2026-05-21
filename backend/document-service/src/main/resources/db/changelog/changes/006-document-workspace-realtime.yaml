@@ -1,0 +1,39 @@
+databaseChangeLog:
+  - changeSet:
+      id: 006-document-workspace-realtime
+      author: document-service
+      changes:
+        - dropNotNullConstraint:
+            tableName: documents
+            columnName: chat_id
+            columnDataType: UUID
+        - addColumn:
+            tableName: documents
+            columns:
+              - column:
+                  name: file_encryption_algorithm
+                  type: VARCHAR(32)
+              - column:
+                  name: file_encryption_key_base64
+                  type: VARCHAR(512)
+              - column:
+                  name: file_initialization_vector_base64
+                  type: VARCHAR(512)
+        - sql:
+            sql: UPDATE documents SET file_encryption_algorithm = 'AES-256-GCM' WHERE file_encryption_algorithm IS NULL
+        - sql:
+            sql: UPDATE documents SET file_encryption_key_base64 = '' WHERE file_encryption_key_base64 IS NULL
+        - sql:
+            sql: UPDATE documents SET file_initialization_vector_base64 = '' WHERE file_initialization_vector_base64 IS NULL
+        - addNotNullConstraint:
+            tableName: documents
+            columnName: file_encryption_algorithm
+            columnDataType: VARCHAR(32)
+        - addNotNullConstraint:
+            tableName: documents
+            columnName: file_encryption_key_base64
+            columnDataType: VARCHAR(512)
+        - addNotNullConstraint:
+            tableName: documents
+            columnName: file_initialization_vector_base64
+            columnDataType: VARCHAR(512)

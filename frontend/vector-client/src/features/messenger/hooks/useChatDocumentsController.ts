@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
-import { cancelDocument, createDocument, getChatDocuments, getDocuments, hideDocument, registerDocumentSigningKey, rejectDocument, signDocument } from '../../documents/api/documentsApi';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { addDocumentObservers, cancelDocument, createDocument, getDocument, getDocuments, hideDocument, registerDocumentSigningKey, rejectDocument, signDocument } from '../../documents/api/documentsApi';
 import { downloadEncryptedMediaFile, uploadEncryptedMediaFile } from '../../media/api/mediaApi';
-import { buildDocumentAttachmentContent, decryptDownloadedFile, encryptFileForUpload, parseDocumentAttachmentMessageContent } from '../../media/lib/fileCrypto';
-import type { ChatResponseDto, DocumentAttachmentMessageContent, DocumentResponseDto, FileAttachmentMessageContent } from '../../../shared/types/api';
+import { decryptDownloadedFile, encryptFileForUpload, parseDocumentAttachmentMessageContent } from '../../media/lib/fileCrypto';
+import type { DocumentAttachmentMessageContent, DocumentResponseDto, FileAttachmentMessageContent } from '../../../shared/types/api';
 
 export type DocumentCreationDraft = {
   file: File;
@@ -13,122 +13,73 @@ export type DocumentCreationDraft = {
 };
 
 type UseChatDocumentsControllerParams = {
-  selectedChatId: string | null;
-  selectedChat: ChatResponseDto | null;
   currentAccountId: string | undefined;
   deviceId: string | null;
-  isSelectedChatWritable: boolean;
   decryptedMessagesById: Record<string, string>;
   setIsSending: (isSending: boolean) => void;
   setIsUploadingFile: (isUploading: boolean) => void;
-  setIsAttachmentMenuOpen: (isOpen: boolean) => void;
   setErrorMessage: (message: string | null) => void;
-  sendCurrentTypingState: (isTyping: boolean) => void;
-  sendEncryptedChatContent: (plainText: string, messageType?: 'TEXT' | 'FILE') => Promise<unknown>;
 };
+
+const COMPLETED_DOCUMENT_STATUSES = new Set<DocumentResponseDto['status']>(['REJECTED', 'CANCELLED', 'FULLY_SIGNED']);
+
+function calculatePendingDocumentCount(documents: DocumentResponseDto[], currentAccountId: string | undefined) {
+  if (!currentAccountId) {
+    return 0;
+  }
+
+  return documents.filter((documentItem) => {
+    if (COMPLETED_DOCUMENT_STATUSES.has(documentItem.status)) {
+      return false;
+    }
+
+    return (documentItem.signers ?? []).some((signer) => signer.signerAccountId === currentAccountId && signer.status === 'PENDING');
+  }).length;
+}
+
+function upsertDocument(documents: DocumentResponseDto[], documentItem: DocumentResponseDto) {
+  return [documentItem, ...documents.filter((item) => item.documentId !== documentItem.documentId)]
+    .sort((firstDocument, secondDocument) => new Date(secondDocument.createdAt).getTime() - new Date(firstDocument.createdAt).getTime());
+}
+
+function hasUsableDocumentFileEncryption(documentItem: DocumentResponseDto): boolean {
+  return Boolean(
+    documentItem.fileEncryption
+    && documentItem.fileEncryption.keyBase64
+    && documentItem.fileEncryption.initializationVectorBase64,
+  );
+}
 
 export function useChatDocumentsController(params: UseChatDocumentsControllerParams) {
   const {
-    selectedChatId,
-    selectedChat,
     currentAccountId,
     deviceId,
-    isSelectedChatWritable,
     decryptedMessagesById,
     setIsSending,
     setIsUploadingFile,
-    setIsAttachmentMenuOpen,
     setErrorMessage,
-    sendCurrentTypingState,
-    sendEncryptedChatContent,
   } = params;
   const [isDocumentsPanelOpen, setIsDocumentsPanelOpen] = useState(false);
   const [chatDocuments, setChatDocuments] = useState<DocumentResponseDto[]>([]);
   const [isLoadingDocuments, setIsLoadingDocuments] = useState(false);
   const [pendingDocumentFile, setPendingDocumentFile] = useState<File | null>(null);
-  const [documentsPanelScope, setDocumentsPanelScope] = useState<'CHAT' | 'WORKSPACE'>('WORKSPACE');
   const [documentNotificationCount, setDocumentNotificationCount] = useState(0);
-
 
   const visibleChatDocuments = useMemo(() => chatDocuments, [chatDocuments]);
 
-  function calculatePendingDocumentCount(documents: DocumentResponseDto[]) {
+  const loadWorkspaceDocuments = useCallback(async () => {
     if (!currentAccountId) {
-      return 0;
-    }
-
-    return documents.filter((documentItem) => {
-      if (documentItem.status === 'REJECTED' || documentItem.status === 'CANCELLED' || documentItem.status === 'FULLY_SIGNED') {
-        return false;
-      }
-
-      return (documentItem.signers ?? []).some((signer) => signer.signerAccountId === currentAccountId && signer.status === 'PENDING');
-    }).length;
-  }
-
-  async function refreshWorkspaceDocumentsSilently() {
-    if (!currentAccountId) {
+      setChatDocuments([]);
       setDocumentNotificationCount(0);
       return;
     }
 
-    try {
-      const loadedDocuments = await getDocuments();
-      setDocumentNotificationCount(calculatePendingDocumentCount(loadedDocuments));
-
-      if (isDocumentsPanelOpen && documentsPanelScope === 'WORKSPACE') {
-        setChatDocuments(loadedDocuments);
-      }
-    }
-    catch (error) {
-      console.warn(error);
-    }
-  }
-
-  useEffect(() => {
-    void refreshWorkspaceDocumentsSilently();
-    const intervalId = window.setInterval(() => void refreshWorkspaceDocumentsSilently(), 7000);
-
-    return () => window.clearInterval(intervalId);
-  }, [currentAccountId, isDocumentsPanelOpen, documentsPanelScope]);
-
-  async function loadChatDocuments() {
-    setDocumentsPanelScope('CHAT');
-    if (!selectedChatId) {
-      setChatDocuments([]);
-      return;
-    }
-
-    setIsLoadingDocuments(true);
-    setErrorMessage(null);
-
-    try {
-      const loadedDocuments = await getChatDocuments(selectedChatId);
-      setChatDocuments(loadedDocuments);
-    }
-    catch (error) {
-      console.error(error);
-      setErrorMessage('Не удалось загрузить документы чата.');
-    }
-    finally {
-      setIsLoadingDocuments(false);
-    }
-  }
-
-  async function openDocumentsPanel() {
-    setDocumentsPanelScope('CHAT');
-    setIsDocumentsPanelOpen(true);
-    await loadChatDocuments();
-  }
-
-  async function loadWorkspaceDocuments() {
-    setDocumentsPanelScope('WORKSPACE');
     setIsLoadingDocuments(true);
     setErrorMessage(null);
 
     try {
       const loadedDocuments = await getDocuments();
-      setDocumentNotificationCount(calculatePendingDocumentCount(loadedDocuments));
+      setDocumentNotificationCount(calculatePendingDocumentCount(loadedDocuments, currentAccountId));
       setChatDocuments(loadedDocuments);
     }
     catch (error) {
@@ -138,25 +89,58 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
     finally {
       setIsLoadingDocuments(false);
     }
-  }
+  }, [currentAccountId, setErrorMessage]);
+
+  const refreshDocumentById = useCallback(async (documentId: string) => {
+    if (!currentAccountId) {
+      return;
+    }
+
+    try {
+      const loadedDocument = await getDocument(documentId);
+      setChatDocuments((previousDocuments) => {
+        const nextDocuments = upsertDocument(previousDocuments, loadedDocument);
+        setDocumentNotificationCount(calculatePendingDocumentCount(nextDocuments, currentAccountId));
+        return nextDocuments;
+      });
+    }
+    catch (error) {
+      console.warn(error);
+      void loadWorkspaceDocuments();
+    }
+  }, [currentAccountId, loadWorkspaceDocuments]);
+
+  useEffect(() => {
+    void loadWorkspaceDocuments();
+  }, [loadWorkspaceDocuments]);
+
+  useEffect(() => {
+    function handleDocumentChanged(event: Event) {
+      const customEvent = event as CustomEvent<{ documentId?: string }>;
+      const documentId = customEvent.detail?.documentId;
+
+      if (documentId) {
+        void refreshDocumentById(documentId);
+        return;
+      }
+
+      void loadWorkspaceDocuments();
+    }
+
+    window.addEventListener('vector:documentChanged', handleDocumentChanged);
+    return () => window.removeEventListener('vector:documentChanged', handleDocumentChanged);
+  }, [loadWorkspaceDocuments, refreshDocumentById]);
 
   async function openDocumentsWorkspace() {
-    setDocumentsPanelScope('WORKSPACE');
     setIsDocumentsPanelOpen(true);
     await loadWorkspaceDocuments();
   }
 
-  async function handleAttachDocument(file: File | null | undefined) {
+  function handleStartDocumentCreation(file: File | null | undefined) {
     if (!file) {
       return;
     }
 
-    if (!selectedChatId || !selectedChat || !deviceId || !isSelectedChatWritable) {
-      setErrorMessage(isSelectedChatWritable ? 'Сначала выбери чат для отправки документа.' : 'Вы исключены из группы и не можете отправлять документы.');
-      return;
-    }
-
-    setIsAttachmentMenuOpen(false);
     setErrorMessage(null);
     setPendingDocumentFile(file);
   }
@@ -166,8 +150,8 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
   }
 
   async function confirmDocumentCreation(draft: DocumentCreationDraft) {
-    if (!selectedChatId || !selectedChat || !deviceId || !isSelectedChatWritable) {
-      setErrorMessage(isSelectedChatWritable ? 'Сначала выбери чат для отправки документа.' : 'Вы исключены из группы и не можете отправлять документы.');
+    if (!currentAccountId || !deviceId) {
+      setErrorMessage('Локальное устройство не готово к созданию документа.');
       return;
     }
 
@@ -181,14 +165,16 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
     setErrorMessage(null);
 
     try {
+      const accessAccountIds = Array.from(new Set([currentAccountId, ...draft.requiredSignerAccountIds, ...draft.observerAccountIds]));
       const encryptionResult = await encryptFileForUpload(draft.file);
       const uploadedFile = await uploadEncryptedMediaFile(
-        selectedChatId,
+        null,
         encryptionResult.encryptedBlob,
         encryptionResult.encryptedSha256Base64,
+        accessAccountIds,
       );
       const documentItem = await createDocument({
-        chatId: selectedChatId,
+        chatId: null,
         mediaFileId: uploadedFile.id,
         title: draft.title.trim(),
         description: draft.description.trim() || null,
@@ -199,26 +185,24 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
         encryptedSha256Base64: encryptionResult.encryptedSha256Base64,
         requiredSignerAccountIds: draft.requiredSignerAccountIds,
         observerAccountIds: draft.observerAccountIds,
+        fileEncryption: {
+          algorithm: 'AES-256-GCM',
+          keyBase64: encryptionResult.keyBase64,
+          initializationVectorBase64: encryptionResult.initializationVectorBase64,
+        },
       });
-      const attachmentContent = buildDocumentAttachmentContent(
-        draft.file,
-        documentItem.documentId,
-        uploadedFile.id,
-        uploadedFile.encryptedSizeBytes,
-        encryptionResult,
-      );
 
-      await sendEncryptedChatContent(JSON.stringify(attachmentContent), 'FILE');
-      setChatDocuments((previousDocuments) => [documentItem, ...previousDocuments.filter((item) => item.documentId !== documentItem.documentId)]);
+      setChatDocuments((previousDocuments) => {
+        const nextDocuments = upsertDocument(previousDocuments, documentItem);
+        setDocumentNotificationCount(calculatePendingDocumentCount(nextDocuments, currentAccountId));
+        return nextDocuments;
+      });
       setPendingDocumentFile(null);
-      setDocumentsPanelScope('WORKSPACE');
       setIsDocumentsPanelOpen(true);
-      void refreshWorkspaceDocumentsSilently();
-      sendCurrentTypingState(false);
     }
     catch (error) {
       console.error(error);
-      setErrorMessage('Не удалось создать и отправить документ.');
+      setErrorMessage('Не удалось создать документ.');
     }
     finally {
       setIsSending(false);
@@ -258,12 +242,27 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
   }
 
   async function handleDownloadDocument(documentItem: DocumentResponseDto) {
-    const matchingMessage = Object.entries(decryptedMessagesById)
+    const documentFileEncryption = documentItem.fileEncryption;
+    const attachmentFromDocument: DocumentAttachmentMessageContent | null = hasUsableDocumentFileEncryption(documentItem) && documentFileEncryption ? {
+      kind: 'DOCUMENT_ATTACHMENT',
+      version: 1,
+      documentId: documentItem.documentId,
+      mediaFileId: documentItem.mediaFileId,
+      fileName: documentItem.fileName,
+      mimeType: documentItem.mimeType,
+      sizeBytes: documentItem.sizeBytes,
+      encryptedSizeBytes: 0,
+      plaintextSha256Base64: documentItem.plaintextSha256Base64,
+      encryptedSha256Base64: documentItem.encryptedSha256Base64,
+      fileEncryption: documentFileEncryption,
+    } : null;
+
+    const matchingMessage = attachmentFromDocument ?? Object.entries(decryptedMessagesById)
       .map(([, plainText]) => parseDocumentAttachmentMessageContent(plainText))
-      .find((attachment) => attachment?.documentId === documentItem.documentId);
+      .find((attachment) => attachment?.documentId === documentItem.documentId) ?? null;
 
     if (!matchingMessage) {
-      setErrorMessage('Ключ документа доступен в сообщении чата. Открой сообщение с этим документом и попробуй снова.');
+      setErrorMessage('Ключ документа недоступен. Проверьте доступ к документу или обратитесь к автору.');
       return;
     }
 
@@ -304,8 +303,8 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
         signatureBase64: signature.signatureBase64,
       });
 
-      setChatDocuments((previousDocuments) => previousDocuments.map((item) => item.documentId === updatedDocument.documentId ? updatedDocument : item));
-      void refreshWorkspaceDocumentsSilently();
+      setChatDocuments((previousDocuments) => upsertDocument(previousDocuments, updatedDocument));
+      setDocumentNotificationCount((previousCount) => calculatePendingDocumentCount(upsertDocument(chatDocuments, updatedDocument), currentAccountId));
     }
     catch (error) {
       console.error(error);
@@ -318,8 +317,8 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
 
     try {
       const updatedDocument = await rejectDocument(documentItem.documentId, { reason });
-      setChatDocuments((previousDocuments) => previousDocuments.map((item) => item.documentId === updatedDocument.documentId ? updatedDocument : item));
-      void refreshWorkspaceDocumentsSilently();
+      setChatDocuments((previousDocuments) => upsertDocument(previousDocuments, updatedDocument));
+      setDocumentNotificationCount((previousCount) => calculatePendingDocumentCount(upsertDocument(chatDocuments, updatedDocument), currentAccountId));
     }
     catch (error) {
       console.error(error);
@@ -332,8 +331,8 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
 
     try {
       const updatedDocument = await cancelDocument(documentItem.documentId, { reason });
-      setChatDocuments((previousDocuments) => previousDocuments.map((item) => item.documentId === updatedDocument.documentId ? updatedDocument : item));
-      void refreshWorkspaceDocumentsSilently();
+      setChatDocuments((previousDocuments) => upsertDocument(previousDocuments, updatedDocument));
+      setDocumentNotificationCount((previousCount) => calculatePendingDocumentCount(upsertDocument(chatDocuments, updatedDocument), currentAccountId));
     }
     catch (error) {
       console.error(error);
@@ -341,7 +340,18 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
     }
   }
 
+  async function handleAddDocumentObservers(documentItem: DocumentResponseDto, observerAccountIds: string[]) {
+    setErrorMessage(null);
 
+    try {
+      const updatedDocument = await addDocumentObservers(documentItem.documentId, { observerAccountIds });
+      setChatDocuments((previousDocuments) => upsertDocument(previousDocuments, updatedDocument));
+    }
+    catch (error) {
+      console.error(error);
+      setErrorMessage('Не удалось добавить наблюдателей.');
+    }
+  }
 
   async function handleHideDocument(documentItem: DocumentResponseDto) {
     setErrorMessage(null);
@@ -349,7 +359,7 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
     try {
       await hideDocument(documentItem.documentId);
       setChatDocuments((previousDocuments) => previousDocuments.filter((item) => item.documentId !== documentItem.documentId));
-      void refreshWorkspaceDocumentsSilently();
+      setDocumentNotificationCount((previousCount) => Math.max(0, previousCount - (documentItem.signers.some((signer) => signer.signerAccountId === currentAccountId && signer.status === 'PENDING') ? 1 : 0)));
     }
     catch (error) {
       console.error(error);
@@ -377,6 +387,10 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
       if (!matchingDocument) {
         setErrorMessage('Документ с таким содержимым не найден среди доступных вам документов.');
       }
+      else {
+        setChatDocuments(loadedDocuments);
+        setDocumentNotificationCount(calculatePendingDocumentCount(loadedDocuments, currentAccountId));
+      }
 
       return matchingDocument;
     }
@@ -392,14 +406,11 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
     setIsDocumentsPanelOpen,
     chatDocuments: visibleChatDocuments,
     isLoadingDocuments,
-    documentsPanelScope,
     documentNotificationCount,
     pendingDocumentFile,
-    loadChatDocuments,
-    openDocumentsPanel,
     openDocumentsWorkspace,
     loadWorkspaceDocuments,
-    handleAttachDocument,
+    handleStartDocumentCreation,
     cancelPendingDocumentCreation,
     confirmDocumentCreation,
     handleDownloadAttachment,
@@ -407,6 +418,7 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
     handleSignDocument,
     handleRejectDocument,
     handleCancelDocument,
+    handleAddDocumentObservers,
     handleHideDocument,
     verifyLocalDocumentFile,
   };

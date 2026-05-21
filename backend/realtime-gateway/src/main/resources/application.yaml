@@ -1,10 +1,8 @@
 server:
   port: ${SERVER_PORT:8088}
-
 spring:
   application:
     name: realtime-gateway
-
   cloud:
     vault:
       enabled: true
@@ -12,7 +10,6 @@ spring:
       token: ${VAULT_TOKEN:root}
       kv:
         enabled: false
-
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     consumer:
@@ -20,30 +17,25 @@ spring:
       auto-offset-reset: latest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-
 application:
   security:
     jwt:
       issuer: ${JWT_ISSUER:identity-service}
       key-name: ${JWT_KEY_NAME:identity-service-jwt-ed25519}
-
   kafka:
     topics:
       messaging-events: ${MESSAGING_EVENTS_TOPIC:messaging.events}
-
+      document-events: ${DOCUMENT_EVENTS_TOPIC:document.events}
   websocket:
     endpoint: ${WEBSOCKET_ENDPOINT:/ws}
     allowed-origins: ${WEBSOCKET_ALLOWED_ORIGINS:*}
-
 logging:
   level:
     dev.realtimegateway: INFO
     org.springframework.kafka: INFO
-
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
-
 management:
   endpoints:
     web:

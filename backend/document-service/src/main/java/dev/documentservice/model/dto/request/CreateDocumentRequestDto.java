@@ -1,5 +1,6 @@
 package dev.documentservice.model.dto.request;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -9,7 +10,6 @@ import java.util.List;
 import java.util.UUID;
 
 public record CreateDocumentRequestDto(
-    @NotNull(message = "Chat ID is required.")
     UUID chatId,
     @NotNull(message = "Media file ID is required.")
     UUID mediaFileId,
@@ -34,6 +34,7 @@ public record CreateDocumentRequestDto(
     String encryptedSha256Base64,
     @NotEmpty(message = "At least one required signer is required.")
     List<@NotNull(message = "Required signer account ID is required.") UUID> requiredSignerAccountIds,
-    List<@NotNull(message = "Observer account ID is required.") UUID> observerAccountIds
-) {
-}
+    List<@NotNull(message = "Observer account ID is required.") UUID> observerAccountIds,
+    @Valid
+    @NotNull(message = "File encryption metadata is required.")
+    DocumentFileEncryptionRequestDto fileEncryption) {}

@@ -515,13 +515,11 @@ export function MessengerPage() {
     setIsDocumentsPanelOpen,
     chatDocuments,
     isLoadingDocuments,
-    documentsPanelScope,
-    loadChatDocuments,
     openDocumentsWorkspace,
     loadWorkspaceDocuments,
     documentNotificationCount,
     pendingDocumentFile,
-    handleAttachDocument,
+    handleStartDocumentCreation,
     cancelPendingDocumentCreation,
     confirmDocumentCreation,
     handleDownloadAttachment,
@@ -529,21 +527,16 @@ export function MessengerPage() {
     handleSignDocument,
     handleRejectDocument,
     handleCancelDocument,
+    handleAddDocumentObservers,
     handleHideDocument,
     verifyLocalDocumentFile,
   } = useChatDocumentsController({
-    selectedChatId,
-    selectedChat,
     currentAccountId: profile?.accountId,
     deviceId,
-    isSelectedChatWritable,
     decryptedMessagesById,
     setIsSending,
     setIsUploadingFile,
-    setIsAttachmentMenuOpen,
     setErrorMessage,
-    sendCurrentTypingState,
-    sendEncryptedChatContent,
   });
 
   async function handleLogout() {
@@ -587,6 +580,28 @@ export function MessengerPage() {
     setDecryptedMessagesById,
     buildEncryptedDevicePayloadsForAccounts,
   });
+
+  const contactAccountIds = useMemo(() => {
+    if (!profile?.accountId) {
+      return [];
+    }
+
+    const accountIds = new Set<string>();
+
+    chats.forEach((chat) => {
+      if (chat.type !== 'DIRECT') {
+        return;
+      }
+
+      const companionAccountId = getDirectCompanionAccountId(chat, profile.accountId);
+
+      if (companionAccountId) {
+        accountIds.add(companionAccountId);
+      }
+    });
+
+    return Array.from(accountIds);
+  }, [chats, profile?.accountId]);
 
   const selectedChatPresentation = selectedChat ? getChatPresentation(selectedChat, profile, profilesById) : null;
   const selectedTypingText = isSelectedChatWritable && selectedTypingStates.length > 0
@@ -665,9 +680,9 @@ export function MessengerPage() {
 
       <DocumentCreationModal
         file={pendingDocumentFile}
-        selectedChat={selectedChat}
         currentAccountId={profile?.accountId}
         profilesById={profilesById}
+        contactAccountIds={contactAccountIds}
         onClose={cancelPendingDocumentCreation}
         onConfirm={confirmDocumentCreation}
       />
@@ -679,13 +694,16 @@ export function MessengerPage() {
         activeAccountId={profile?.accountId}
         profilesById={profilesById}
         onClose={() => setIsDocumentsPanelOpen(false)}
-        onRefresh={documentsPanelScope === 'WORKSPACE' ? loadWorkspaceDocuments : loadChatDocuments}
+        onRefresh={loadWorkspaceDocuments}
         onDownload={handleDownloadDocument}
         onSign={handleSignDocument}
         onReject={handleRejectDocument}
         onCancel={handleCancelDocument}
         onHide={handleHideDocument}
         onVerifyFile={verifyLocalDocumentFile}
+        onCreateDocument={handleStartDocumentCreation}
+        onAddObservers={handleAddDocumentObservers}
+        contactAccountIds={contactAccountIds}
       />
 
       <MessengerOverlays

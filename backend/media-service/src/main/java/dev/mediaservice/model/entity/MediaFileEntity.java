@@ -29,7 +29,7 @@ public class MediaFileEntity {
     @Column(name = "uploader_account_id", nullable = false)
     private UUID uploaderAccountId;
 
-    @Column(name = "chat_id", nullable = false)
+    @Column(name = "chat_id")
     private UUID chatId;
 
     @Column(name = "storage_object_key", nullable = false, unique = true, length = 512)

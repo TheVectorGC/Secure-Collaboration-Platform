@@ -1,5 +1,7 @@
 package dev.documentservice.service.impl;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.documentservice.client.MediaAccessClient;
 import dev.documentservice.client.MessagingAccessClient;
 import dev.documentservice.exception.DocumentAccessDeniedException;
 import dev.documentservice.exception.DocumentAlreadySignedException;
@@ -7,9 +9,11 @@ import dev.documentservice.exception.DocumentNotFoundException;
 import dev.documentservice.exception.DocumentRejectedException;
 import dev.documentservice.exception.DocumentValidationException;
 import dev.documentservice.exception.SigningKeyNotFoundException;
+import dev.documentservice.model.dto.request.AddDocumentObserversRequestDto;
 import dev.documentservice.model.dto.request.CreateDocumentRequestDto;
 import dev.documentservice.model.dto.request.RejectDocumentRequestDto;
 import dev.documentservice.model.dto.request.SignDocumentRequestDto;
+import dev.documentservice.model.dto.response.DocumentFileEncryptionResponseDto;
 import dev.documentservice.model.dto.response.DocumentObserverResponseDto;
 import dev.documentservice.model.dto.response.DocumentResponseDto;
 import dev.documentservice.model.dto.response.DocumentSignatureResponseDto;
@@ -23,17 +27,21 @@ import dev.documentservice.model.entity.DocumentHiddenEntity;
 import dev.documentservice.model.entity.DocumentObserverEntity;
 import dev.documentservice.model.entity.DocumentSignatureEntity;
 import dev.documentservice.model.entity.DocumentSignerEntity;
+import dev.documentservice.model.enumeration.DocumentEventType;
 import dev.documentservice.model.enumeration.DocumentObserverRole;
 import dev.documentservice.model.enumeration.DocumentSignerStatus;
 import dev.documentservice.model.enumeration.DocumentSigningKeyStatus;
 import dev.documentservice.model.enumeration.DocumentStatus;
 import dev.documentservice.model.enumeration.SignatureAlgorithm;
+import dev.documentservice.model.event.DocumentEventDto;
+import dev.documentservice.publisher.DocumentEventPublisher;
 import dev.documentservice.repository.DeviceDocumentSigningKeyRepository;
 import dev.documentservice.repository.DocumentHiddenRepository;
 import dev.documentservice.repository.DocumentObserverRepository;
 import dev.documentservice.repository.DocumentRepository;
 import dev.documentservice.repository.DocumentSignatureRepository;
 import dev.documentservice.repository.DocumentSignerRepository;
+import dev.documentservice.service.DocumentService;
 import java.security.KeyFactory;
 import java.security.PublicKey;
 import java.security.Signature;
@@ -44,6 +52,7 @@ import java.util.Base64;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -58,7 +67,7 @@ import org.springframework.util.StringUtils;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class DocumentServiceImpl implements dev.documentservice.service.DocumentService {
+public class DocumentServiceImpl implements DocumentService {
     private final DocumentRepository documentRepository;
     private final DocumentSignatureRepository documentSignatureRepository;
     private final DocumentSignerRepository documentSignerRepository;
@@ -66,53 +75,65 @@ public class DocumentServiceImpl implements dev.documentservice.service.Document
     private final DocumentHiddenRepository documentHiddenRepository;
     private final DeviceDocumentSigningKeyRepository deviceDocumentSigningKeyRepository;
     private final MessagingAccessClient messagingAccessClient;
+    private final MediaAccessClient mediaAccessClient;
+    private final DocumentEventPublisher documentEventPublisher;
+    private final ObjectMapper objectMapper;
 
     @Override
     @Transactional
     public DocumentResponseDto createDocument(UUID currentAccountId, CreateDocumentRequestDto requestDto) {
-        validateActiveDocumentChatAccess(requestDto.chatId(), currentAccountId);
+        if (requestDto.chatId() != null) {
+            validateActiveDocumentChatAccess(requestDto.chatId(), currentAccountId);
+        }
+
         List<UUID> requiredSignerAccountIds = normalizeRequiredSignerAccountIds(requestDto.requiredSignerAccountIds());
         List<UUID> observerAccountIds = normalizeObserverAccountIds(requestDto.observerAccountIds(), requiredSignerAccountIds, currentAccountId);
         OffsetDateTime now = OffsetDateTime.now();
         DocumentEntity documentEntity = DocumentEntity.builder()
-                .id(UUID.randomUUID())
-                .chatId(requestDto.chatId())
-                .mediaFileId(requestDto.mediaFileId())
-                .ownerAccountId(currentAccountId)
-                .title(requestDto.title().trim())
-                .description(normalizeOptionalText(requestDto.description()))
-                .fileName(requestDto.fileName())
-                .mimeType(requestDto.mimeType())
-                .sizeBytes(requestDto.sizeBytes())
-                .plaintextSha256Base64(requestDto.plaintextSha256Base64())
-                .encryptedSha256Base64(requestDto.encryptedSha256Base64())
-                .status(DocumentStatus.PENDING_SIGNATURES)
-                .createdAt(now)
-                .updatedAt(now)
-                .build();
+            .id(UUID.randomUUID())
+            .chatId(requestDto.chatId())
+            .mediaFileId(requestDto.mediaFileId())
+            .ownerAccountId(currentAccountId)
+            .title(requestDto.title().trim())
+            .description(normalizeOptionalText(requestDto.description()))
+            .fileName(requestDto.fileName())
+            .mimeType(requestDto.mimeType())
+            .sizeBytes(requestDto.sizeBytes())
+            .plaintextSha256Base64(requestDto.plaintextSha256Base64())
+            .encryptedSha256Base64(requestDto.encryptedSha256Base64())
+            .fileEncryptionAlgorithm(requestDto.fileEncryption().algorithm())
+            .fileEncryptionKeyBase64(requestDto.fileEncryption().keyBase64())
+            .fileInitializationVectorBase64(requestDto.fileEncryption().initializationVectorBase64())
+            .status(DocumentStatus.PENDING_SIGNATURES)
+            .createdAt(now)
+            .updatedAt(now)
+            .build();
         DocumentEntity savedDocumentEntity = documentRepository.save(documentEntity);
         List<DocumentSignerEntity> signerEntities = requiredSignerAccountIds.stream()
-                .map(signerAccountId -> DocumentSignerEntity.builder()
-                        .id(UUID.randomUUID())
-                        .documentId(savedDocumentEntity.getId())
-                        .signerAccountId(signerAccountId)
-                        .status(DocumentSignerStatus.PENDING)
-                        .createdAt(now)
-                        .build())
-                .toList();
+            .map(signerAccountId -> DocumentSignerEntity.builder()
+                .id(UUID.randomUUID())
+                .documentId(savedDocumentEntity.getId())
+                .signerAccountId(signerAccountId)
+                .status(DocumentSignerStatus.PENDING)
+                .createdAt(now)
+                .build())
+            .toList();
         List<DocumentObserverEntity> observerEntities = observerAccountIds.stream()
-                .map(observerAccountId -> DocumentObserverEntity.builder()
-                        .id(UUID.randomUUID())
-                        .documentId(savedDocumentEntity.getId())
-                        .observerAccountId(observerAccountId)
-                        .role(DocumentObserverRole.OBSERVER)
-                        .createdAt(now)
-                        .build())
-                .toList();
+            .map(observerAccountId -> DocumentObserverEntity.builder()
+                .id(UUID.randomUUID())
+                .documentId(savedDocumentEntity.getId())
+                .observerAccountId(observerAccountId)
+                .role(DocumentObserverRole.OBSERVER)
+                .createdAt(now)
+                .build())
+            .toList();
         documentSignerRepository.saveAll(signerEntities);
         documentObserverRepository.saveAll(observerEntities);
-        log.info("Document created. Document ID: {}, chat ID: {}.", savedDocumentEntity.getId(), savedDocumentEntity.getChatId());
-        return toResponseDto(savedDocumentEntity, signerEntities, observerEntities, List.of());
+        HashSet<UUID> accessAccountIds = collectAccessAccountIds(savedDocumentEntity, signerEntities, observerEntities);
+        mediaAccessClient.grantMediaAccess(savedDocumentEntity.getMediaFileId(), accessAccountIds);
+        DocumentResponseDto responseDto = toResponseDto(savedDocumentEntity, signerEntities, observerEntities, List.of());
+        publishDocumentEvent(DocumentEventType.DOCUMENT_CREATED, savedDocumentEntity, responseDto, accessAccountIds);
+        return responseDto;
     }
 
     @Override
@@ -121,10 +142,10 @@ public class DocumentServiceImpl implements dev.documentservice.service.Document
         DocumentEntity documentEntity = getDocumentEntity(documentId);
         validateDocumentWorkflowAccess(documentEntity, currentAccountId);
         return toResponseDto(
-                documentEntity,
-                documentSignerRepository.findByDocumentId(documentId),
-                documentObserverRepository.findByDocumentId(documentId),
-                documentSignatureRepository.findByDocumentId(documentId)
+            documentEntity,
+            documentSignerRepository.findByDocumentId(documentId),
+            documentObserverRepository.findByDocumentId(documentId),
+            documentSignatureRepository.findByDocumentId(documentId)
         );
     }
 
@@ -133,24 +154,23 @@ public class DocumentServiceImpl implements dev.documentservice.service.Document
     public List<DocumentResponseDto> getCurrentAccountDocuments(UUID currentAccountId) {
         List<DocumentEntity> ownedDocuments = documentRepository.findByOwnerAccountIdOrderByCreatedAtDesc(currentAccountId);
         List<UUID> signerDocumentIds = documentSignerRepository.findBySignerAccountIdOrderByCreatedAtDesc(currentAccountId)
-                .stream()
-                .map(DocumentSignerEntity::getDocumentId)
-                .distinct()
-                .toList();
+            .stream()
+            .map(DocumentSignerEntity::getDocumentId)
+            .distinct()
+            .toList();
         List<UUID> observerDocumentIds = documentObserverRepository.findByObserverAccountIdOrderByCreatedAtDesc(currentAccountId)
-                .stream()
-                .map(DocumentObserverEntity::getDocumentId)
-                .distinct()
-                .toList();
+            .stream()
+            .map(DocumentObserverEntity::getDocumentId)
+            .distinct()
+            .toList();
         List<DocumentEntity> signerDocuments = signerDocumentIds.isEmpty()
-                ? List.of()
-                : documentRepository.findByIdInOrderByCreatedAtDesc(signerDocumentIds);
+            ? List.of()
+            : documentRepository.findByIdInOrderByCreatedAtDesc(signerDocumentIds);
         List<DocumentEntity> observerDocuments = observerDocumentIds.isEmpty()
-                ? List.of()
-                : documentRepository.findByIdInOrderByCreatedAtDesc(observerDocumentIds);
+            ? List.of()
+            : documentRepository.findByIdInOrderByCreatedAtDesc(observerDocumentIds);
         List<DocumentEntity> documents = mergeDocuments(mergeDocuments(ownedDocuments, signerDocuments), observerDocuments);
-        documents = filterHiddenDocuments(currentAccountId, documents);
-        return toResponseDtos(documents);
+        return toResponseDtos(filterHiddenDocuments(currentAccountId, documents));
     }
 
     @Override
@@ -158,11 +178,10 @@ public class DocumentServiceImpl implements dev.documentservice.service.Document
     public List<DocumentResponseDto> getChatDocuments(UUID currentAccountId, UUID chatId) {
         InternalChatResponseDto chatResponseDto = messagingAccessClient.validateCurrentAccountCanAccessChat(chatId);
         List<DocumentEntity> documents = documentRepository.findByChatIdOrderByCreatedAtDesc(chatId)
-                .stream()
-                .filter(documentEntity -> isDocumentVisibleToAccount(documentEntity, chatResponseDto, currentAccountId))
-                .toList();
-        documents = filterHiddenDocuments(currentAccountId, documents);
-        return toResponseDtos(documents);
+            .stream()
+            .filter(documentEntity -> isDocumentVisibleToAccount(documentEntity, chatResponseDto, currentAccountId))
+            .toList();
+        return toResponseDtos(filterHiddenDocuments(currentAccountId, documents));
     }
 
     @Override
@@ -177,27 +196,25 @@ public class DocumentServiceImpl implements dev.documentservice.service.Document
         if (documentSignatureRepository.existsByDocumentIdAndSignerAccountId(documentId, currentAccountId)) {
             throw new DocumentAlreadySignedException("Current account already signed this document.");
         }
-        DeviceDocumentSigningKeyEntity signingKeyEntity = deviceDocumentSigningKeyRepository
-                .findByAccountIdAndDeviceIdAndFingerprintAndStatus(
-                        currentAccountId,
-                        requestDto.signerDeviceId(),
-                        requestDto.signingKeyFingerprint(),
-                        DocumentSigningKeyStatus.ACTIVE
-                )
-                .orElseThrow(() -> new SigningKeyNotFoundException("Active document signing key was not found for current device."));
+        DeviceDocumentSigningKeyEntity signingKeyEntity = deviceDocumentSigningKeyRepository.findByAccountIdAndDeviceIdAndFingerprintAndStatus(
+            currentAccountId,
+            requestDto.signerDeviceId(),
+            requestDto.signingKeyFingerprint(),
+            DocumentSigningKeyStatus.ACTIVE
+        ).orElseThrow(() -> new SigningKeyNotFoundException("Active document signing key was not found for current device."));
         verifySignature(signingKeyEntity, requestDto.documentHashBase64(), requestDto.signatureBase64());
         OffsetDateTime now = OffsetDateTime.now();
         DocumentSignatureEntity signatureEntity = DocumentSignatureEntity.builder()
-                .id(UUID.randomUUID())
-                .documentId(documentId)
-                .signerAccountId(currentAccountId)
-                .signerDeviceId(requestDto.signerDeviceId())
-                .signingKeyFingerprint(requestDto.signingKeyFingerprint())
-                .algorithm(SignatureAlgorithm.ED25519)
-                .documentHashBase64(requestDto.documentHashBase64())
-                .signatureBase64(requestDto.signatureBase64())
-                .signedAt(now)
-                .build();
+            .id(UUID.randomUUID())
+            .documentId(documentId)
+            .signerAccountId(currentAccountId)
+            .signerDeviceId(requestDto.signerDeviceId())
+            .signingKeyFingerprint(requestDto.signingKeyFingerprint())
+            .algorithm(SignatureAlgorithm.ED25519)
+            .documentHashBase64(requestDto.documentHashBase64())
+            .signatureBase64(requestDto.signatureBase64())
+            .signedAt(now)
+            .build();
         DocumentSignatureEntity savedSignatureEntity = documentSignatureRepository.save(signatureEntity);
         signerEntity.setStatus(DocumentSignerStatus.SIGNED);
         signerEntity.setSignedAt(now);
@@ -211,7 +228,10 @@ public class DocumentServiceImpl implements dev.documentservice.service.Document
         if (signatureEntities.stream().noneMatch(existingSignature -> existingSignature.getId().equals(savedSignatureEntity.getId()))) {
             signatureEntities.add(savedSignatureEntity);
         }
-        return toResponseDto(savedDocumentEntity, signerEntities, documentObserverRepository.findByDocumentId(documentId), signatureEntities);
+        List<DocumentObserverEntity> observerEntities = documentObserverRepository.findByDocumentId(documentId);
+        DocumentResponseDto responseDto = toResponseDto(savedDocumentEntity, signerEntities, observerEntities, signatureEntities);
+        publishDocumentEvent(DocumentEventType.DOCUMENT_SIGNED, savedDocumentEntity, responseDto, collectAccessAccountIds(savedDocumentEntity, signerEntities, observerEntities));
+        return responseDto;
     }
 
     @Override
@@ -232,12 +252,11 @@ public class DocumentServiceImpl implements dev.documentservice.service.Document
         documentEntity.setRejectionReason(rejectionReason);
         documentEntity.setUpdatedAt(now);
         DocumentEntity savedDocumentEntity = documentRepository.save(documentEntity);
-        return toResponseDto(
-                savedDocumentEntity,
-                documentSignerRepository.findByDocumentId(documentId),
-                documentObserverRepository.findByDocumentId(documentId),
-                documentSignatureRepository.findByDocumentId(documentId)
-        );
+        List<DocumentSignerEntity> signerEntities = documentSignerRepository.findByDocumentId(documentId);
+        List<DocumentObserverEntity> observerEntities = documentObserverRepository.findByDocumentId(documentId);
+        DocumentResponseDto responseDto = toResponseDto(savedDocumentEntity, signerEntities, observerEntities, documentSignatureRepository.findByDocumentId(documentId));
+        publishDocumentEvent(DocumentEventType.DOCUMENT_REJECTED, savedDocumentEntity, responseDto, collectAccessAccountIds(savedDocumentEntity, signerEntities, observerEntities));
+        return responseDto;
     }
 
     @Override
@@ -257,12 +276,49 @@ public class DocumentServiceImpl implements dev.documentservice.service.Document
         documentEntity.setCancellationReason(normalizeOptionalText(requestDto.reason()));
         documentEntity.setUpdatedAt(now);
         DocumentEntity savedDocumentEntity = documentRepository.save(documentEntity);
-        return toResponseDto(
-                savedDocumentEntity,
-                documentSignerRepository.findByDocumentId(documentId),
-                documentObserverRepository.findByDocumentId(documentId),
-                documentSignatureRepository.findByDocumentId(documentId)
-        );
+        List<DocumentSignerEntity> signerEntities = documentSignerRepository.findByDocumentId(documentId);
+        List<DocumentObserverEntity> observerEntities = documentObserverRepository.findByDocumentId(documentId);
+        DocumentResponseDto responseDto = toResponseDto(savedDocumentEntity, signerEntities, observerEntities, documentSignatureRepository.findByDocumentId(documentId));
+        publishDocumentEvent(DocumentEventType.DOCUMENT_CANCELLED, savedDocumentEntity, responseDto, collectAccessAccountIds(savedDocumentEntity, signerEntities, observerEntities));
+        return responseDto;
+    }
+
+    @Override
+    @Transactional
+    public DocumentResponseDto addObservers(UUID currentAccountId, UUID documentId, AddDocumentObserversRequestDto requestDto) {
+        DocumentEntity documentEntity = getDocumentEntity(documentId);
+        if (!documentEntity.getOwnerAccountId().equals(currentAccountId)) {
+            throw new DocumentAccessDeniedException("Only document owner can add observers.");
+        }
+        if (documentEntity.getStatus() == DocumentStatus.CANCELLED) {
+            throw new DocumentRejectedException("Cancelled document cannot be changed.");
+        }
+        List<DocumentSignerEntity> signerEntities = documentSignerRepository.findByDocumentId(documentId);
+        HashSet<UUID> excludedAccountIds = signerEntities.stream()
+            .map(DocumentSignerEntity::getSignerAccountId)
+            .collect(Collectors.toCollection(HashSet::new));
+        excludedAccountIds.add(documentEntity.getOwnerAccountId());
+        documentObserverRepository.findByDocumentId(documentId).forEach(observerEntity -> excludedAccountIds.add(observerEntity.getObserverAccountId()));
+        OffsetDateTime now = OffsetDateTime.now();
+        List<DocumentObserverEntity> newObserverEntities = requestDto.observerAccountIds().stream()
+            .filter(accountId -> accountId != null && !excludedAccountIds.contains(accountId))
+            .distinct()
+            .map(accountId -> DocumentObserverEntity.builder()
+                .id(UUID.randomUUID())
+                .documentId(documentId)
+                .observerAccountId(accountId)
+                .role(DocumentObserverRole.OBSERVER)
+                .createdAt(now)
+                .build())
+            .toList();
+        if (!newObserverEntities.isEmpty()) {
+            documentObserverRepository.saveAll(newObserverEntities);
+            mediaAccessClient.grantMediaAccess(documentEntity.getMediaFileId(), newObserverEntities.stream().map(DocumentObserverEntity::getObserverAccountId).toList());
+        }
+        List<DocumentObserverEntity> observerEntities = documentObserverRepository.findByDocumentId(documentId);
+        DocumentResponseDto responseDto = toResponseDto(documentEntity, signerEntities, observerEntities, documentSignatureRepository.findByDocumentId(documentId));
+        publishDocumentEvent(DocumentEventType.DOCUMENT_OBSERVERS_ADDED, documentEntity, responseDto, collectAccessAccountIds(documentEntity, signerEntities, observerEntities));
+        return responseDto;
     }
 
     @Override
@@ -274,17 +330,17 @@ public class DocumentServiceImpl implements dev.documentservice.service.Document
             return;
         }
         DocumentHiddenEntity hiddenEntity = DocumentHiddenEntity.builder()
-                .id(UUID.randomUUID())
-                .documentId(documentId)
-                .accountId(currentAccountId)
-                .hiddenAt(OffsetDateTime.now())
-                .build();
+            .id(UUID.randomUUID())
+            .documentId(documentId)
+            .accountId(currentAccountId)
+            .hiddenAt(OffsetDateTime.now())
+            .build();
         documentHiddenRepository.save(hiddenEntity);
+        publishDocumentEvent(DocumentEventType.DOCUMENT_HIDDEN, documentEntity, null, List.of(currentAccountId));
     }
 
     private DocumentEntity getDocumentEntity(UUID documentId) {
-        return documentRepository.findById(documentId)
-                .orElseThrow(() -> new DocumentNotFoundException(documentId));
+        return documentRepository.findById(documentId).orElseThrow(() -> new DocumentNotFoundException(documentId));
     }
 
     private List<UUID> normalizeRequiredSignerAccountIds(Collection<UUID> signerAccountIds) {
@@ -292,9 +348,9 @@ public class DocumentServiceImpl implements dev.documentservice.service.Document
             throw new DocumentValidationException("At least one required signer is required.");
         }
         List<UUID> normalizedSignerAccountIds = signerAccountIds.stream()
-                .filter(accountId -> accountId != null)
-                .distinct()
-                .toList();
+            .filter(accountId -> accountId != null)
+            .distinct()
+            .toList();
         if (normalizedSignerAccountIds.isEmpty()) {
             throw new DocumentValidationException("At least one required signer is required.");
         }
@@ -308,16 +364,15 @@ public class DocumentServiceImpl implements dev.documentservice.service.Document
             return List.of();
         }
         return observerAccountIds.stream()
-                .filter(accountId -> accountId != null && !excludedAccountIds.contains(accountId))
-                .distinct()
-                .toList();
+            .filter(accountId -> accountId != null && !excludedAccountIds.contains(accountId))
+            .distinct()
+            .toList();
     }
 
     private InternalChatResponseDto validateActiveDocumentChatAccess(UUID chatId, UUID currentAccountId) {
         InternalChatResponseDto chatResponseDto = messagingAccessClient.validateCurrentAccountCanAccessChat(chatId);
         boolean activeParticipantExists = chatResponseDto.participants() != null
-                && chatResponseDto.participants().stream()
-                .anyMatch(participant -> currentAccountId.equals(participant.accountId()) && "ACTIVE".equals(participant.status()));
+            && chatResponseDto.participants().stream().anyMatch(participant -> currentAccountId.equals(participant.accountId()) && "ACTIVE".equals(participant.status()));
         if (!activeParticipantExists) {
             throw new DocumentAccessDeniedException("Only active chat participants can create documents in this chat.");
         }
@@ -333,6 +388,9 @@ public class DocumentServiceImpl implements dev.documentservice.service.Document
         }
         if (documentObserverRepository.findByDocumentIdAndObserverAccountId(documentEntity.getId(), currentAccountId).isPresent()) {
             return;
+        }
+        if (documentEntity.getChatId() == null) {
+            throw new DocumentAccessDeniedException("Current account cannot access this document.");
         }
         InternalChatResponseDto chatResponseDto = messagingAccessClient.validateCurrentAccountCanAccessChat(documentEntity.getChatId());
         if (!isDocumentVisibleToAccount(documentEntity, chatResponseDto, currentAccountId)) {
@@ -354,7 +412,7 @@ public class DocumentServiceImpl implements dev.documentservice.service.Document
 
     private DocumentSignerEntity getPendingSigner(UUID documentId, UUID currentAccountId) {
         DocumentSignerEntity signerEntity = documentSignerRepository.findByDocumentIdAndSignerAccountId(documentId, currentAccountId)
-                .orElseThrow(() -> new DocumentAccessDeniedException("Current account is not a required signer for this document."));
+            .orElseThrow(() -> new DocumentAccessDeniedException("Current account is not a required signer for this document."));
         if (signerEntity.getStatus() == DocumentSignerStatus.SIGNED) {
             throw new DocumentAlreadySignedException("Current account already signed this document.");
         }
@@ -375,10 +433,7 @@ public class DocumentServiceImpl implements dev.documentservice.service.Document
         Map<UUID, DocumentEntity> documentsById = new LinkedHashMap<>();
         firstDocuments.forEach(documentEntity -> documentsById.put(documentEntity.getId(), documentEntity));
         secondDocuments.forEach(documentEntity -> documentsById.put(documentEntity.getId(), documentEntity));
-        return documentsById.values()
-                .stream()
-                .sorted(Comparator.comparing(DocumentEntity::getCreatedAt).reversed())
-                .toList();
+        return documentsById.values().stream().sorted(Comparator.comparing(DocumentEntity::getCreatedAt).reversed()).toList();
     }
 
     private List<DocumentEntity> filterHiddenDocuments(UUID currentAccountId, List<DocumentEntity> documents) {
@@ -387,12 +442,10 @@ public class DocumentServiceImpl implements dev.documentservice.service.Document
             return documents;
         }
         HashSet<UUID> hiddenDocumentIds = documentHiddenRepository.findByAccountIdAndDocumentIdIn(currentAccountId, documentIds)
-                .stream()
-                .map(DocumentHiddenEntity::getDocumentId)
-                .collect(Collectors.toCollection(HashSet::new));
-        return documents.stream()
-                .filter(documentEntity -> !hiddenDocumentIds.contains(documentEntity.getId()))
-                .toList();
+            .stream()
+            .map(DocumentHiddenEntity::getDocumentId)
+            .collect(Collectors.toCollection(HashSet::new));
+        return documents.stream().filter(documentEntity -> !hiddenDocumentIds.contains(documentEntity.getId())).toList();
     }
 
     private List<DocumentResponseDto> toResponseDtos(List<DocumentEntity> documents) {
@@ -400,41 +453,33 @@ public class DocumentServiceImpl implements dev.documentservice.service.Document
         Map<UUID, List<DocumentSignatureEntity>> signaturesByDocumentId = loadSignaturesByDocumentId(documentIds);
         Map<UUID, List<DocumentSignerEntity>> signersByDocumentId = loadSignersByDocumentId(documentIds);
         Map<UUID, List<DocumentObserverEntity>> observersByDocumentId = loadObserversByDocumentId(documentIds);
-        return documents.stream()
-                .map(documentEntity -> toResponseDto(
-                        documentEntity,
-                        signersByDocumentId.getOrDefault(documentEntity.getId(), List.of()),
-                        observersByDocumentId.getOrDefault(documentEntity.getId(), List.of()),
-                        signaturesByDocumentId.getOrDefault(documentEntity.getId(), List.of())
-                ))
-                .toList();
+        return documents.stream().map(documentEntity -> toResponseDto(
+            documentEntity,
+            signersByDocumentId.getOrDefault(documentEntity.getId(), List.of()),
+            observersByDocumentId.getOrDefault(documentEntity.getId(), List.of()),
+            signaturesByDocumentId.getOrDefault(documentEntity.getId(), List.of())
+        )).toList();
     }
 
     private Map<UUID, List<DocumentSignatureEntity>> loadSignaturesByDocumentId(List<UUID> documentIds) {
         if (documentIds.isEmpty()) {
             return Map.of();
         }
-        return documentSignatureRepository.findByDocumentIdIn(documentIds)
-                .stream()
-                .collect(Collectors.groupingBy(DocumentSignatureEntity::getDocumentId));
+        return documentSignatureRepository.findByDocumentIdIn(documentIds).stream().collect(Collectors.groupingBy(DocumentSignatureEntity::getDocumentId));
     }
 
     private Map<UUID, List<DocumentSignerEntity>> loadSignersByDocumentId(List<UUID> documentIds) {
         if (documentIds.isEmpty()) {
             return Map.of();
         }
-        return documentSignerRepository.findByDocumentIdIn(documentIds)
-                .stream()
-                .collect(Collectors.groupingBy(DocumentSignerEntity::getDocumentId));
+        return documentSignerRepository.findByDocumentIdIn(documentIds).stream().collect(Collectors.groupingBy(DocumentSignerEntity::getDocumentId));
     }
 
     private Map<UUID, List<DocumentObserverEntity>> loadObserversByDocumentId(List<UUID> documentIds) {
         if (documentIds.isEmpty()) {
             return Map.of();
         }
-        return documentObserverRepository.findByDocumentIdIn(documentIds)
-                .stream()
-                .collect(Collectors.groupingBy(DocumentObserverEntity::getDocumentId));
+        return documentObserverRepository.findByDocumentIdIn(documentIds).stream().collect(Collectors.groupingBy(DocumentObserverEntity::getDocumentId));
     }
 
     private boolean isDocumentVisibleToAccount(DocumentEntity documentEntity, InternalChatResponseDto chatResponseDto, UUID currentAccountId) {
@@ -458,17 +503,12 @@ public class DocumentServiceImpl implements dev.documentservice.service.Document
         if (chatResponseDto.participants() == null) {
             return null;
         }
-        return chatResponseDto.participants()
-                .stream()
-                .filter(participant -> currentAccountId.equals(participant.accountId()))
-                .findFirst()
-                .orElse(null);
+        return chatResponseDto.participants().stream().filter(participant -> currentAccountId.equals(participant.accountId())).findFirst().orElse(null);
     }
 
     private boolean isVisibleAt(InternalChatParticipantResponseDto participant, OffsetDateTime createdAt) {
         if (participant.visibilityWindows() != null && !participant.visibilityWindows().isEmpty()) {
-            return participant.visibilityWindows().stream()
-                    .anyMatch(visibilityWindow -> isInsideWindow(createdAt, visibilityWindow));
+            return participant.visibilityWindows().stream().anyMatch(visibilityWindow -> isInsideWindow(createdAt, visibilityWindow));
         }
         if (participant.historyVisibleFromCreatedAt() != null && createdAt.isBefore(participant.historyVisibleFromCreatedAt())) {
             return false;
@@ -487,6 +527,36 @@ public class DocumentServiceImpl implements dev.documentservice.service.Document
             return false;
         }
         return true;
+    }
+
+    private HashSet<UUID> collectAccessAccountIds(DocumentEntity documentEntity, List<DocumentSignerEntity> signerEntities, List<DocumentObserverEntity> observerEntities) {
+        HashSet<UUID> accountIds = new HashSet<>();
+        accountIds.add(documentEntity.getOwnerAccountId());
+        signerEntities.forEach(signerEntity -> accountIds.add(signerEntity.getSignerAccountId()));
+        observerEntities.forEach(observerEntity -> accountIds.add(observerEntity.getObserverAccountId()));
+        return accountIds;
+    }
+
+    private void publishDocumentEvent(DocumentEventType eventType, DocumentEntity documentEntity, DocumentResponseDto responseDto, Collection<UUID> recipientAccountIds) {
+        try {
+            HashMap<String, Object> payload = new HashMap<>();
+            payload.put("documentId", documentEntity.getId());
+            payload.put("document", responseDto);
+            DocumentEventDto documentEventDto = new DocumentEventDto(
+                UUID.randomUUID(),
+                eventType,
+                documentEntity.getChatId(),
+                null,
+                documentEntity.getOwnerAccountId(),
+                recipientAccountIds == null ? List.of() : recipientAccountIds.stream().filter(accountId -> accountId != null).distinct().toList(),
+                OffsetDateTime.now(),
+                objectMapper.valueToTree(payload)
+            );
+            documentEventPublisher.publish(documentEventDto);
+        }
+        catch (Exception exception) {
+            log.warn("Failed to publish document realtime event. Document ID: {}.", documentEntity.getId(), exception);
+        }
     }
 
     private String normalizeOptionalText(String value) {
@@ -513,79 +583,65 @@ public class DocumentServiceImpl implements dev.documentservice.service.Document
     }
 
     private DocumentResponseDto toResponseDto(DocumentEntity documentEntity, List<DocumentSignerEntity> signerEntities, List<DocumentObserverEntity> observerEntities, List<DocumentSignatureEntity> signatureEntities) {
-        List<DocumentSignerResponseDto> signerResponseDtos = signerEntities.stream()
-                .sorted(Comparator.comparing(DocumentSignerEntity::getCreatedAt))
-                .map(this::toSignerResponseDto)
-                .toList();
-        List<DocumentObserverResponseDto> observerResponseDtos = observerEntities.stream()
-                .sorted(Comparator.comparing(DocumentObserverEntity::getCreatedAt))
-                .map(this::toObserverResponseDto)
-                .toList();
-        List<DocumentSignatureResponseDto> signatureResponseDtos = signatureEntities.stream()
-                .sorted(Comparator.comparing(DocumentSignatureEntity::getSignedAt))
-                .map(this::toSignatureResponseDto)
-                .toList();
+        List<DocumentSignerResponseDto> signerResponseDtos = signerEntities.stream().sorted(Comparator.comparing(DocumentSignerEntity::getCreatedAt)).map(this::toSignerResponseDto).toList();
+        List<DocumentObserverResponseDto> observerResponseDtos = observerEntities.stream().sorted(Comparator.comparing(DocumentObserverEntity::getCreatedAt)).map(this::toObserverResponseDto).toList();
+        List<DocumentSignatureResponseDto> signatureResponseDtos = signatureEntities.stream().sorted(Comparator.comparing(DocumentSignatureEntity::getSignedAt)).map(this::toSignatureResponseDto).toList();
         return new DocumentResponseDto(
-                documentEntity.getId(),
-                documentEntity.getChatId(),
-                documentEntity.getMediaFileId(),
-                documentEntity.getOwnerAccountId(),
-                documentEntity.getTitle(),
-                documentEntity.getDescription(),
-                documentEntity.getFileName(),
-                documentEntity.getMimeType(),
-                documentEntity.getSizeBytes(),
-                documentEntity.getPlaintextSha256Base64(),
-                documentEntity.getEncryptedSha256Base64(),
-                documentEntity.getStatus(),
-                documentEntity.getRejectedByAccountId(),
-                documentEntity.getRejectedAt(),
-                documentEntity.getRejectionReason(),
-                documentEntity.getCancelledByAccountId(),
-                documentEntity.getCancelledAt(),
-                documentEntity.getCancellationReason(),
-                documentEntity.getCreatedAt(),
-                documentEntity.getUpdatedAt(),
-                signerResponseDtos,
-                observerResponseDtos,
-                signatureResponseDtos
+            documentEntity.getId(),
+            documentEntity.getChatId(),
+            documentEntity.getMediaFileId(),
+            documentEntity.getOwnerAccountId(),
+            documentEntity.getTitle(),
+            documentEntity.getDescription(),
+            documentEntity.getFileName(),
+            documentEntity.getMimeType(),
+            documentEntity.getSizeBytes(),
+            documentEntity.getPlaintextSha256Base64(),
+            documentEntity.getEncryptedSha256Base64(),
+            documentEntity.getStatus(),
+            documentEntity.getRejectedByAccountId(),
+            documentEntity.getRejectedAt(),
+            documentEntity.getRejectionReason(),
+            documentEntity.getCancelledByAccountId(),
+            documentEntity.getCancelledAt(),
+            documentEntity.getCancellationReason(),
+            documentEntity.getCreatedAt(),
+            documentEntity.getUpdatedAt(),
+            signerResponseDtos,
+            observerResponseDtos,
+            signatureResponseDtos,
+            new DocumentFileEncryptionResponseDto(documentEntity.getFileEncryptionAlgorithm(), documentEntity.getFileEncryptionKeyBase64(), documentEntity.getFileInitializationVectorBase64())
         );
     }
 
     private DocumentSignerResponseDto toSignerResponseDto(DocumentSignerEntity signerEntity) {
         return new DocumentSignerResponseDto(
-                signerEntity.getId(),
-                signerEntity.getDocumentId(),
-                signerEntity.getSignerAccountId(),
-                signerEntity.getStatus(),
-                signerEntity.getCreatedAt(),
-                signerEntity.getSignedAt(),
-                signerEntity.getRejectedAt(),
-                signerEntity.getRejectionReason()
+            signerEntity.getId(),
+            signerEntity.getDocumentId(),
+            signerEntity.getSignerAccountId(),
+            signerEntity.getStatus(),
+            signerEntity.getCreatedAt(),
+            signerEntity.getSignedAt(),
+            signerEntity.getRejectedAt(),
+            signerEntity.getRejectionReason()
         );
     }
 
     private DocumentObserverResponseDto toObserverResponseDto(DocumentObserverEntity observerEntity) {
-        return new DocumentObserverResponseDto(
-                observerEntity.getId(),
-                observerEntity.getDocumentId(),
-                observerEntity.getObserverAccountId(),
-                observerEntity.getRole(),
-                observerEntity.getCreatedAt()
-        );
+        return new DocumentObserverResponseDto(observerEntity.getId(), observerEntity.getDocumentId(), observerEntity.getObserverAccountId(), observerEntity.getRole(), observerEntity.getCreatedAt());
     }
 
     private DocumentSignatureResponseDto toSignatureResponseDto(DocumentSignatureEntity signatureEntity) {
         return new DocumentSignatureResponseDto(
-                signatureEntity.getId(),
-                signatureEntity.getDocumentId(),
-                signatureEntity.getSignerAccountId(),
-                signatureEntity.getSignerDeviceId(),
-                signatureEntity.getSigningKeyFingerprint(),
-                signatureEntity.getAlgorithm(),
-                signatureEntity.getDocumentHashBase64(),
-                signatureEntity.getSignatureBase64(),
-                signatureEntity.getSignedAt()
+            signatureEntity.getId(),
+            signatureEntity.getDocumentId(),
+            signatureEntity.getSignerAccountId(),
+            signatureEntity.getSignerDeviceId(),
+            signatureEntity.getSigningKeyFingerprint(),
+            signatureEntity.getAlgorithm(),
+            signatureEntity.getDocumentHashBase64(),
+            signatureEntity.getSignatureBase64(),
+            signatureEntity.getSignedAt()
         );
     }
 }

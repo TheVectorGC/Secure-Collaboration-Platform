@@ -203,8 +203,9 @@ export type MediaFileResponseDto = {
 };
 
 export type UploadEncryptedMediaRequestDto = {
-  chatId: string;
+  chatId: string | null;
   encryptedSha256Base64: string;
+  accessAccountIds?: string[];
 };
 
 export type FileEncryptionMetadata = {
@@ -242,7 +243,7 @@ export type DocumentAttachmentMessageContent = {
 };
 
 export type CreateDocumentRequestDto = {
-  chatId: string;
+  chatId?: string | null;
   mediaFileId: string;
   title: string;
   description: string | null;
@@ -253,6 +254,7 @@ export type CreateDocumentRequestDto = {
   encryptedSha256Base64: string;
   requiredSignerAccountIds: string[];
   observerAccountIds?: string[];
+  fileEncryption: FileEncryptionMetadata;
 };
 
 export type RejectDocumentRequestDto = {
@@ -298,7 +300,7 @@ export type DocumentSignatureResponseDto = {
 
 export type DocumentResponseDto = {
   documentId: string;
-  chatId: string;
+  chatId: string | null;
   mediaFileId: string;
   ownerAccountId: string;
   title: string;
@@ -320,6 +322,7 @@ export type DocumentResponseDto = {
   signers: DocumentSignerResponseDto[];
   observers: DocumentObserverResponseDto[];
   signatures: DocumentSignatureResponseDto[];
+  fileEncryption?: FileEncryptionMetadata | null;
 };
 
 export type RegisterDocumentSigningKeyRequestDto = {
@@ -344,7 +347,16 @@ export type SignDocumentRequestDto = {
   signatureBase64: string;
 };
 
-export type RealtimeEventType = 'MESSAGE_CREATED' | 'MESSAGE_DELIVERED' | 'MESSAGE_READ' | 'CHAT_UPDATED' | 'TYPING' | 'PRESENCE_UPDATED' | 'PRESENCE_SNAPSHOT';
+export type AddDocumentObserversRequestDto = {
+  observerAccountIds: string[];
+};
+
+export type DocumentChangedPayload = {
+  documentId: string;
+  document?: DocumentResponseDto | null;
+};
+
+export type RealtimeEventType = 'MESSAGE_CREATED' | 'MESSAGE_DELIVERED' | 'MESSAGE_READ' | 'CHAT_UPDATED' | 'TYPING' | 'PRESENCE_UPDATED' | 'PRESENCE_SNAPSHOT' | 'DOCUMENT_CREATED' | 'DOCUMENT_UPDATED' | 'DOCUMENT_SIGNED' | 'DOCUMENT_REJECTED' | 'DOCUMENT_CANCELLED' | 'DOCUMENT_HIDDEN' | 'DOCUMENT_OBSERVERS_ADDED';
 
 export type RealtimeEventDto = {
   eventId: string;

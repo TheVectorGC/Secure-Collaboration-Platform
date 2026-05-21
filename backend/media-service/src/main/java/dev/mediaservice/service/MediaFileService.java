@@ -1,5 +1,6 @@
 package dev.mediaservice.service;
 
+import dev.mediaservice.model.dto.request.GrantMediaAccessRequestDto;
 import dev.mediaservice.model.dto.request.UploadEncryptedMediaRequestDto;
 import dev.mediaservice.model.dto.response.MediaFileResponseDto;
 import dev.mediaservice.model.dto.response.StoredMediaResourceDto;
@@ -12,6 +13,8 @@ public interface MediaFileService {
     MediaFileResponseDto getMetadata(UUID mediaFileId);
 
     StoredMediaResourceDto getEncryptedFile(UUID mediaFileId);
+
+    void grantAccess(UUID mediaFileId, GrantMediaAccessRequestDto requestDto);
 
     void deleteOwnFile(UUID mediaFileId);
 }

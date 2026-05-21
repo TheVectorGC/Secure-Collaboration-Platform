@@ -1,5 +1,6 @@
 package dev.documentservice.controller;
 
+import dev.documentservice.model.dto.request.AddDocumentObserversRequestDto;
 import dev.documentservice.model.dto.request.CreateDocumentRequestDto;
 import dev.documentservice.model.dto.request.RejectDocumentRequestDto;
 import dev.documentservice.model.dto.request.SignDocumentRequestDto;
@@ -11,7 +12,6 @@ import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -31,10 +31,7 @@ public class DocumentController {
 
     @PostMapping
     public ResponseEntity<DocumentResponseDto> createDocument(@Valid @RequestBody CreateDocumentRequestDto requestDto) {
-        return new ResponseEntity<>(
-                documentService.createDocument(currentAccountService.getCurrentAccountId(), requestDto),
-                HttpStatus.CREATED
-        );
+        return ResponseEntity.ok(documentService.createDocument(currentAccountService.getCurrentAccountId(), requestDto));
     }
 
     @GetMapping
@@ -58,19 +55,25 @@ public class DocumentController {
     @PatchMapping("/{documentId}/reject")
     public ResponseEntity<DocumentResponseDto> rejectDocument(
         @PathVariable UUID documentId,
-        @Valid @RequestBody(required = false) RejectDocumentRequestDto requestDto
+        @Valid @RequestBody RejectDocumentRequestDto requestDto
     ) {
-        RejectDocumentRequestDto effectiveRequestDto = requestDto == null ? new RejectDocumentRequestDto(null) : requestDto;
-        return ResponseEntity.ok(documentService.rejectDocument(currentAccountService.getCurrentAccountId(), documentId, effectiveRequestDto));
+        return ResponseEntity.ok(documentService.rejectDocument(currentAccountService.getCurrentAccountId(), documentId, requestDto));
     }
 
     @PatchMapping("/{documentId}/cancel")
     public ResponseEntity<DocumentResponseDto> cancelDocument(
         @PathVariable UUID documentId,
-        @Valid @RequestBody(required = false) RejectDocumentRequestDto requestDto
+        @Valid @RequestBody RejectDocumentRequestDto requestDto
     ) {
-        RejectDocumentRequestDto effectiveRequestDto = requestDto == null ? new RejectDocumentRequestDto(null) : requestDto;
-        return ResponseEntity.ok(documentService.cancelDocument(currentAccountService.getCurrentAccountId(), documentId, effectiveRequestDto));
+        return ResponseEntity.ok(documentService.cancelDocument(currentAccountService.getCurrentAccountId(), documentId, requestDto));
+    }
+
+    @PostMapping("/{documentId}/observers")
+    public ResponseEntity<DocumentResponseDto> addObservers(
+        @PathVariable UUID documentId,
+        @Valid @RequestBody AddDocumentObserversRequestDto requestDto
+    ) {
+        return ResponseEntity.ok(documentService.addObservers(currentAccountService.getCurrentAccountId(), documentId, requestDto));
     }
 
     @PatchMapping("/{documentId}/hide")

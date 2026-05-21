@@ -1,5 +1,6 @@
 package dev.documentservice.service;
 
+import dev.documentservice.model.dto.request.AddDocumentObserversRequestDto;
 import dev.documentservice.model.dto.request.CreateDocumentRequestDto;
 import dev.documentservice.model.dto.request.RejectDocumentRequestDto;
 import dev.documentservice.model.dto.request.SignDocumentRequestDto;
@@ -21,6 +22,8 @@ public interface DocumentService {
     DocumentResponseDto rejectDocument(UUID currentAccountId, UUID documentId, RejectDocumentRequestDto requestDto);
 
     DocumentResponseDto cancelDocument(UUID currentAccountId, UUID documentId, RejectDocumentRequestDto requestDto);
+
+    DocumentResponseDto addObservers(UUID currentAccountId, UUID documentId, AddDocumentObserversRequestDto requestDto);
 
     void hideDocument(UUID currentAccountId, UUID documentId);
 }
