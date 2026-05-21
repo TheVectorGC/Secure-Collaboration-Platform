@@ -52,7 +52,7 @@ import { useMessengerStore } from '../features/messenger/model/messengerStore';
 import { useRealtimeConnection } from '../features/realtime/useRealtimeConnection';
 import { useRealtimeStore, type AccountPresenceState } from '../features/realtime/model/realtimeStore';
 import { DevAccountPanel } from '../features/admin/ui/DevAccountPanel';
-import { ChatComposer, type ChatAttachmentDisplayMode, type ComposerForwardPreview, type ComposerReplyPreview } from '../features/messenger/ui/ChatComposer';
+import { ChatComposer, type ChatAttachmentDisplayMode, type ComposerForwardPreview, type ComposerPendingAttachment, type ComposerReplyPreview } from '../features/messenger/ui/ChatComposer';
 import { DocumentAttachmentPreview, ImageAttachmentPreview } from '../features/messenger/ui/MessageAttachments';
 import { useCryptoBootstrap } from '../features/crypto/useCryptoBootstrap';
 import { useCryptoStore } from '../features/crypto/model/cryptoStore';
@@ -74,7 +74,7 @@ type MessageContextMenuState = {
   messageId: string;
   x: number;
   y: number;
-  placement: 'above' | 'below';
+  placement: 'above' | 'below' | 'left' | 'right';
 };
 
 type ReplyDraft = {
@@ -95,6 +95,12 @@ type ForwardedMessageSnapshot = {
   plainText: string;
 };
 
+type PendingAttachmentDraft = {
+  id: string;
+  file: File;
+  attachmentDisplayMode: ChatAttachmentDisplayMode;
+};
+
 type ForwardSelectionState = {
   originChatId: string;
   selectedMessageIds: string[];
@@ -106,6 +112,7 @@ type RichMessageContent = {
   text: string;
   replyTo: ReplyDraft | null;
   forwardedMessages: ForwardedMessageSnapshot[];
+  attachments: FileAttachmentMessageContent[];
 };
 
 type LocalChatState = {
@@ -231,6 +238,10 @@ function isSameCalendarDate(leftValue: string, rightValue: string): boolean {
     && leftDate.getDate() === rightDate.getDate();
 }
 
+function dragEventContainsFiles(event: DragEvent<HTMLElement>): boolean {
+  return Array.from(event.dataTransfer.types).includes('Files');
+}
+
 function isImageFile(file: File): boolean {
   if (file.type.startsWith('image/')) {
     return true;
@@ -289,12 +300,31 @@ function parseRichMessageContent(value: string | null | undefined): RichMessageC
       ? parsedValue.replyTo
       : null;
 
+    const attachments = Array.isArray(parsedValue.attachments)
+      ? parsedValue.attachments.filter((item): item is FileAttachmentMessageContent => (
+        item?.kind === 'FILE_ATTACHMENT'
+        && item.version === 1
+        && (item.attachmentDisplayMode === 'FILE' || item.attachmentDisplayMode === 'IMAGE')
+        && typeof item.mediaFileId === 'string'
+        && typeof item.fileName === 'string'
+        && typeof item.mimeType === 'string'
+        && typeof item.sizeBytes === 'number'
+        && typeof item.encryptedSizeBytes === 'number'
+        && typeof item.plaintextSha256Base64 === 'string'
+        && typeof item.encryptedSha256Base64 === 'string'
+        && item.fileEncryption?.algorithm === 'AES-256-GCM'
+        && typeof item.fileEncryption.keyBase64 === 'string'
+        && typeof item.fileEncryption.initializationVectorBase64 === 'string'
+      ))
+      : [];
+
     return {
       kind: 'VECTOR_RICH_MESSAGE',
       version: 1,
       text: typeof parsedValue.text === 'string' ? parsedValue.text : '',
       replyTo,
       forwardedMessages,
+      attachments,
     };
   }
   catch {
@@ -302,13 +332,19 @@ function parseRichMessageContent(value: string | null | undefined): RichMessageC
   }
 }
 
-function buildRichMessageContent(text: string, replyTo: ReplyDraft | null, forwardedMessages: ForwardedMessageSnapshot[]): string {
+function buildRichMessageContent(
+  text: string,
+  replyTo: ReplyDraft | null,
+  forwardedMessages: ForwardedMessageSnapshot[],
+  attachments: FileAttachmentMessageContent[] = [],
+): string {
   return JSON.stringify({
     kind: 'VECTOR_RICH_MESSAGE',
     version: 1,
     text,
     replyTo,
     forwardedMessages,
+    attachments,
   } satisfies RichMessageContent);
 }
 
@@ -324,6 +360,13 @@ function getMessageContentPreview(plainText: string | undefined, fallback = 'С�
 
     if (compactText) {
       return compactText.length > 90 ? `${compactText.slice(0, 90)}…` : compactText;
+    }
+
+    if (richMessageContent.attachments.length > 0) {
+      const imageCount = richMessageContent.attachments.filter((attachment) => attachment.attachmentDisplayMode === 'IMAGE').length;
+      return imageCount === richMessageContent.attachments.length
+        ? `${richMessageContent.attachments.length} фото`
+        : `${richMessageContent.attachments.length} вложений`;
     }
 
     if (richMessageContent.forwardedMessages.length > 0) {
@@ -354,6 +397,20 @@ function getMessageContentPreview(plainText: string | undefined, fallback = 'С�
 function isForwardableMessage(message: MessageResponseDto): boolean {
   return message.messageType !== 'SYSTEM' && message.messageType !== 'GROUP_KEY_DISTRIBUTION';
 }
+function getDownloadableAttachmentFromPlainText(plainText: string | null | undefined): FileAttachmentMessageContent | DocumentAttachmentMessageContent | null {
+  if (!plainText || isDecryptionPlaceholder(plainText) || plainText === 'Расшифровка…') {
+    return null;
+  }
+
+  const richMessageContent = parseRichMessageContent(plainText);
+
+  if (richMessageContent?.attachments.length) {
+    return richMessageContent.attachments[0];
+  }
+
+  return parseDocumentAttachmentMessageContent(plainText) ?? parseFileAttachmentMessageContent(plainText);
+}
+
 
 function buildChatPreviewFromMessage(
   message: MessageResponseDto | null,
@@ -983,18 +1040,22 @@ function ForwardedMessageCard({
   profilesById,
   onOpenProfile,
   onDownload,
+  depth = 0,
 }: {
   forwardedMessage: ForwardedMessageSnapshot;
   profilesById: Record<string, ProfileResponseDto>;
   onOpenProfile: (profile: ProfileResponseDto) => void;
   onDownload: (attachment: FileAttachmentMessageContent | DocumentAttachmentMessageContent) => Promise<void>;
+  depth?: number;
 }) {
   const senderProfile = profilesById[forwardedMessage.senderAccountId] ?? null;
   const senderName = senderProfile ? getDisplayName(senderProfile) : forwardedMessage.senderName;
   const richNestedContent = parseRichMessageContent(forwardedMessage.plainText);
   const visiblePlainText = richNestedContent?.text ?? forwardedMessage.plainText;
-  const fileAttachment = parseFileAttachmentMessageContent(visiblePlainText);
-  const documentAttachment = parseDocumentAttachmentMessageContent(visiblePlainText);
+  const richAttachments = richNestedContent?.attachments ?? [];
+  const fileAttachment = richAttachments.length === 0 ? parseFileAttachmentMessageContent(visiblePlainText) : null;
+  const documentAttachment = richAttachments.length === 0 ? parseDocumentAttachmentMessageContent(visiblePlainText) : null;
+  const nestedForwardedMessages = depth < 3 ? richNestedContent?.forwardedMessages ?? [] : [];
 
   return (
     <div className="relative rounded-2xl border border-white/10 bg-black/16 p-3">
@@ -1010,8 +1071,41 @@ function ForwardedMessageCard({
           <span className="min-w-0 truncate text-xs font-semibold text-violet-100">{senderName}</span>
         </button>
         <span className="shrink-0 text-[11px] text-zinc-500">{formatMessageTime(forwardedMessage.createdAt)}</span>
+        {depth > 0 && <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-zinc-500">переслано</span>}
       </div>
-      <div className="mt-2">
+      <div className="mt-2 space-y-2">
+        {visiblePlainText.trim() && !fileAttachment && !documentAttachment && (
+          <div className="whitespace-pre-wrap text-sm leading-6 text-zinc-200">{visiblePlainText}</div>
+        )}
+        {richAttachments.length > 0 && (
+          <div className={`grid gap-2 ${richAttachments.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {richAttachments.map((attachment) => (
+              <div key={attachment.mediaFileId}>
+                {attachment.attachmentDisplayMode === 'IMAGE' ? (
+                  <ImageAttachmentPreview attachment={attachment} onDownload={onDownload} />
+                ) : (
+                  <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/[0.06] text-zinc-100">
+                      <FileText size={18} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium text-zinc-100">{attachment.fileName}</div>
+                      <div className="mt-0.5 text-xs text-zinc-500">{formatFileSize(attachment.sizeBytes)}</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void onDownload(attachment)}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-zinc-200 transition hover:bg-white/[0.1]"
+                      title="Скачать"
+                    >
+                      <Download size={16} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
         {documentAttachment ? (
           <DocumentAttachmentPreview attachment={documentAttachment} isOwnMessage={false} onDownload={onDownload} />
         ) : fileAttachment ? (
@@ -1036,8 +1130,26 @@ function ForwardedMessageCard({
               </button>
             </div>
           )
-        ) : (
-          <div className="whitespace-pre-wrap text-sm leading-6 text-zinc-200">{visiblePlainText || 'Сообщение'}</div>
+        ) : null}
+        {nestedForwardedMessages.length > 0 && (
+          <div className="space-y-2 border-l border-violet-300/20 pl-3">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-violet-100/55">
+              Переслано повторно · {nestedForwardedMessages.length}
+            </div>
+            {nestedForwardedMessages.map((nestedMessage) => (
+              <ForwardedMessageCard
+                key={`${nestedMessage.chatId}-${nestedMessage.messageId}-${depth}`}
+                forwardedMessage={nestedMessage}
+                profilesById={profilesById}
+                onOpenProfile={onOpenProfile}
+                onDownload={onDownload}
+                depth={depth + 1}
+              />
+            ))}
+          </div>
+        )}
+        {!visiblePlainText.trim() && richAttachments.length === 0 && !fileAttachment && !documentAttachment && nestedForwardedMessages.length === 0 && (
+          <div className="whitespace-pre-wrap text-sm leading-6 text-zinc-200">Сообщение</div>
         )}
       </div>
     </div>
@@ -2271,7 +2383,8 @@ export function MessengerPage() {
   const [isChatActionsMenuOpen, setIsChatActionsMenuOpen] = useState(false);
   const [isDeleteChatConfirmOpen, setIsDeleteChatConfirmOpen] = useState(false);
   const [isDraggingFileOverChat, setIsDraggingFileOverChat] = useState(false);
-  const [droppedImageFile, setDroppedImageFile] = useState<File | null>(null);
+  const [droppedImageFiles, setDroppedImageFiles] = useState<File[]>([]);
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachmentDraft[]>([]);
 
   const decryptingMessageIdsRef = useRef<Set<string>>(new Set());
   const permanentlyUnavailableMessageIdsRef = useRef<Set<string>>(new Set());
@@ -2286,6 +2399,52 @@ export function MessengerPage() {
   const readMarkersRef = useRef<Set<string>>(new Set());
   const lastTypingSentAtRef = useRef(0);
   const typingStopTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!messageContextMenu) {
+      return;
+    }
+
+    function closeContextMenuOnPointerDown(event: globalThis.MouseEvent) {
+      const targetElement = event.target as HTMLElement | null;
+
+      if (targetElement?.closest('[data-message-context-menu="true"]')) {
+        return;
+      }
+
+      setMessageContextMenu(null);
+    }
+
+    function closeContextMenuOnEscape(event: globalThis.KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setMessageContextMenu(null);
+      }
+    }
+
+    document.addEventListener('mousedown', closeContextMenuOnPointerDown);
+    document.addEventListener('keydown', closeContextMenuOnEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', closeContextMenuOnPointerDown);
+      document.removeEventListener('keydown', closeContextMenuOnEscape);
+    };
+  }, [messageContextMenu]);
+
+  useEffect(() => {
+    function resetDragOverlay() {
+      setIsDraggingFileOverChat(false);
+    }
+
+    window.addEventListener('drop', resetDragOverlay);
+    window.addEventListener('dragend', resetDragOverlay);
+    window.addEventListener('blur', resetDragOverlay);
+
+    return () => {
+      window.removeEventListener('drop', resetDragOverlay);
+      window.removeEventListener('dragend', resetDragOverlay);
+      window.removeEventListener('blur', resetDragOverlay);
+    };
+  }, []);
 
   function updateLocalChatState(updater: (previousValue: LocalChatState) => LocalChatState) {
     setLocalChatState((previousValue) => {
@@ -2986,34 +3145,66 @@ export function MessengerPage() {
     return savedMessage;
   }
 
+  async function uploadPendingAttachment(pendingAttachment: PendingAttachmentDraft): Promise<FileAttachmentMessageContent> {
+    const preparedFile = pendingAttachment.attachmentDisplayMode === 'IMAGE'
+      ? await compressImageForChat(pendingAttachment.file)
+      : pendingAttachment.file;
+    const encryptionResult = await encryptFileForUpload(preparedFile);
+    const uploadedFile = await uploadEncryptedMediaFile(
+      selectedChatId!,
+      encryptionResult.encryptedBlob,
+      encryptionResult.encryptedSha256Base64,
+    );
+
+    return buildFileAttachmentContent(
+      preparedFile,
+      uploadedFile.id,
+      uploadedFile.encryptedSizeBytes,
+      encryptionResult,
+      pendingAttachment.attachmentDisplayMode,
+    );
+  }
+
   async function handleSendCurrentMessage(overrideText?: string) {
     const trimmedMessageText = (overrideText ?? messageText).trim();
-    const hasRichMetadata = Boolean(replyDraft || forwardDraftItems.length > 0);
+    const hasPendingAttachments = pendingAttachments.length > 0;
+    const hasRichMetadata = Boolean(replyDraft || forwardDraftItems.length > 0 || hasPendingAttachments);
 
     if ((!trimmedMessageText && !hasRichMetadata) || !isSelectedChatWritable) {
       return;
     }
 
+    if (hasPendingAttachments && (!selectedChatId || !selectedChat || !deviceId)) {
+      setErrorMessage('Сначала выбери чат для отправки вложений.');
+      return;
+    }
+
     setIsSending(true);
+    setIsUploadingFile(hasPendingAttachments);
     setErrorMessage(null);
 
     try {
+      const uploadedAttachments = hasPendingAttachments
+        ? await Promise.all(pendingAttachments.map(uploadPendingAttachment))
+        : [];
       const plainText = hasRichMetadata
-        ? buildRichMessageContent(trimmedMessageText, replyDraft, forwardDraftItems)
+        ? buildRichMessageContent(trimmedMessageText, replyDraft, forwardDraftItems, uploadedAttachments)
         : trimmedMessageText;
 
-      await sendEncryptedChatContent(plainText);
+      await sendEncryptedChatContent(plainText, uploadedAttachments.length > 0 ? 'FILE' : 'TEXT');
       setMessageText('');
       setReplyDraft(null);
       setForwardDraftItems([]);
+      setPendingAttachments([]);
       sendCurrentTypingState(false);
     }
     catch (error) {
       console.error(error);
-      setErrorMessage('Не удалось отправить сообщение.');
+      setErrorMessage(hasPendingAttachments ? 'Не удалось зашифровать и отправить вложения.' : 'Не удалось отправить сообщение.');
     }
     finally {
       setIsSending(false);
+      setIsUploadingFile(false);
     }
   }
 
@@ -3055,40 +3246,19 @@ export function MessengerPage() {
       return;
     }
 
-    setIsSending(true);
-    setIsUploadingFile(true);
-    setIsAttachmentMenuOpen(false);
-    setErrorMessage(null);
-
-    try {
-      const preparedFile = attachmentDisplayMode === 'IMAGE' ? await compressImageForChat(file) : file;
-      const encryptionResult = await encryptFileForUpload(preparedFile);
-      const uploadedFile = await uploadEncryptedMediaFile(
-        selectedChatId,
-        encryptionResult.encryptedBlob,
-        encryptionResult.encryptedSha256Base64,
-      );
-      const attachmentContent = buildFileAttachmentContent(
-        preparedFile,
-        uploadedFile.id,
-        uploadedFile.encryptedSizeBytes,
-        encryptionResult,
+    setPendingAttachments((previousValue) => [
+      ...previousValue,
+      {
+        id: crypto.randomUUID(),
+        file,
         attachmentDisplayMode,
-      );
-
-      await sendEncryptedChatContent(JSON.stringify(attachmentContent), 'FILE');
-      sendCurrentTypingState(false);
-    }
-    catch (error) {
-      console.error(error);
-      setErrorMessage('Не удалось зашифровать и отправить файл.');
-    }
-    finally {
-      setIsSending(false);
-      setIsUploadingFile(false);
-    }
+      },
+    ].slice(0, 8));
   }
 
+  function removePendingAttachment(attachmentId: string) {
+    setPendingAttachments((previousValue) => previousValue.filter((attachment) => attachment.id !== attachmentId));
+  }
 
   async function handleAttachDocument(file: File | null | undefined) {
     if (!file) {
@@ -3149,6 +3319,16 @@ export function MessengerPage() {
     try {
       const encryptedBytes = await downloadEncryptedMediaFile(attachment.mediaFileId);
       const decryptedBlob = await decryptDownloadedFile(encryptedBytes, attachment);
+
+      if (window.vectorFile) {
+        const decryptedBytes = new Uint8Array(await decryptedBlob.arrayBuffer());
+        await window.vectorFile.saveToDownloads({
+          fileName: attachment.fileName,
+          bytes: decryptedBytes,
+        });
+        return;
+      }
+
       const objectUrl = URL.createObjectURL(decryptedBlob);
       const downloadLink = document.createElement('a');
       downloadLink.href = objectUrl;
@@ -3420,28 +3600,51 @@ export function MessengerPage() {
     setMessageText((previousValue) => `${previousValue}${emoji}`);
   }
 
-  function openMessageContextMenu(event: React.MouseEvent<HTMLElement>, messageId: string, isOwnMessage: boolean) {
+  function openMessageContextMenu(event: React.MouseEvent<HTMLElement>, messageId: string) {
     event.preventDefault();
     event.stopPropagation();
     setReadDetailsMessageId(null);
 
     const menuWidth = 256;
-    const menuHeight = 226;
+    const menuHeight = 270;
     const viewportPadding = 12;
-    const messageRect = event.currentTarget.getBoundingClientRect();
-    const preferBelow = messageRect.top < menuHeight + viewportPadding;
-    const rawX = isOwnMessage
-      ? messageRect.right - menuWidth
-      : messageRect.left;
-    const rawY = preferBelow
-      ? messageRect.bottom + 8
-      : messageRect.top - menuHeight - 8;
+    const targetElement = (event.target as HTMLElement | null)?.closest('[data-message-bubble="true"]') as HTMLElement | null;
+    const messageRect = (targetElement ?? event.currentTarget).getBoundingClientRect();
+    const contextMessage = visibleSelectedMessages.find((message) => message.messageId === messageId) ?? null;
+    const isOwnMessageContext = contextMessage?.senderAccountId === profile?.accountId;
+
+    let rawX = isOwnMessageContext
+      ? messageRect.left - menuWidth - 12
+      : messageRect.right + 12;
+    let placement: MessageContextMenuState['placement'] = isOwnMessageContext ? 'left' : 'right';
+
+    if (rawX < viewportPadding) {
+      rawX = messageRect.right + 12;
+      placement = 'right';
+    }
+
+    if (rawX + menuWidth > window.innerWidth - viewportPadding) {
+      rawX = messageRect.left - menuWidth - 12;
+      placement = 'left';
+    }
+
+    if (rawX < viewportPadding || rawX + menuWidth > window.innerWidth - viewportPadding) {
+      const preferBelow = messageRect.top < menuHeight + viewportPadding;
+      rawX = Math.min(Math.max(event.clientX - 24, messageRect.left), messageRect.right - menuWidth + 24);
+      placement = preferBelow ? 'below' : 'above';
+    }
+
+    const rawY = placement === 'above'
+      ? messageRect.top - menuHeight - 8
+      : placement === 'below'
+        ? messageRect.bottom + 8
+        : messageRect.top + (messageRect.height / 2) - (menuHeight / 2);
 
     setMessageContextMenu({
       messageId,
       x: Math.max(viewportPadding, Math.min(rawX, window.innerWidth - menuWidth - viewportPadding)),
       y: Math.max(viewportPadding, Math.min(rawY, window.innerHeight - menuHeight - viewportPadding)),
-      placement: preferBelow ? 'below' : 'above',
+      placement,
     });
   }
 
@@ -3642,8 +3845,8 @@ export function MessengerPage() {
   async function handleDroppedFiles(files: FileList | File[]) {
     const droppedFiles = Array.from(files).slice(0, 8);
 
-    if (droppedFiles.length === 1 && isImageFile(droppedFiles[0])) {
-      setDroppedImageFile(droppedFiles[0]);
+    if (droppedFiles.length > 0 && droppedFiles.every(isImageFile)) {
+      setDroppedImageFiles(droppedFiles);
       return;
     }
 
@@ -3652,15 +3855,13 @@ export function MessengerPage() {
     }
   }
 
-  async function sendDroppedImage(attachmentDisplayMode: ChatAttachmentDisplayMode) {
-    const file = droppedImageFile;
-    setDroppedImageFile(null);
+  async function sendDroppedImages(attachmentDisplayMode: ChatAttachmentDisplayMode) {
+    const files = droppedImageFiles;
+    setDroppedImageFiles([]);
 
-    if (!file) {
-      return;
+    for (const file of files) {
+      await handleAttachFile(file, attachmentDisplayMode);
     }
-
-    await handleAttachFile(file, attachmentDisplayMode);
   }
 
   function handleChatDrop(event: DragEvent<HTMLDivElement>) {
@@ -3702,8 +3903,16 @@ export function MessengerPage() {
   return (
     <div
       className="relative flex h-screen overflow-hidden bg-[#0d0e12] text-zinc-100 before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_16%_12%,rgba(139,92,246,0.20),transparent_30rem),radial-gradient(circle_at_92%_8%,rgba(236,72,153,0.14),transparent_26rem),radial-gradient(circle_at_60%_110%,rgba(14,165,233,0.10),transparent_32rem)] before:content-[\'\']"
+      onDragEnter={(event) => {
+        if (!isSelectedChatWritable || !dragEventContainsFiles(event)) {
+          return;
+        }
+
+        event.preventDefault();
+        setIsDraggingFileOverChat(true);
+      }}
       onDragOver={(event) => {
-        if (!isSelectedChatWritable) {
+        if (!isSelectedChatWritable || !dragEventContainsFiles(event)) {
           return;
         }
 
@@ -3711,7 +3920,7 @@ export function MessengerPage() {
         setIsDraggingFileOverChat(true);
       }}
       onDragLeave={(event) => {
-        if (event.currentTarget === event.target) {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
           setIsDraggingFileOverChat(false);
         }
       }}
@@ -3806,7 +4015,7 @@ export function MessengerPage() {
         </div>
       )}
 
-      {droppedImageFile && (
+      {droppedImageFiles.length > 0 && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-[#1d1f26] p-5 shadow-2xl shadow-black/60">
             <div className="flex items-start gap-4">
@@ -3814,14 +4023,14 @@ export function MessengerPage() {
                 <ImageIcon size={22} />
               </div>
               <div className="min-w-0">
-                <div className="text-lg font-semibold text-white">Как отправить изображение?</div>
-                <div className="mt-1 truncate text-sm text-zinc-500">{droppedImageFile.name}</div>
+                <div className="text-lg font-semibold text-white">Как отправить изображения?</div>
+                <div className="mt-1 truncate text-sm text-zinc-500">{droppedImageFiles.length === 1 ? droppedImageFiles[0].name : `${droppedImageFiles.length} изображений`}</div>
               </div>
             </div>
             <div className="mt-5 grid gap-3">
               <button
                 type="button"
-                onClick={() => void sendDroppedImage('IMAGE')}
+                onClick={() => void sendDroppedImages('IMAGE')}
                 className="flex w-full items-center gap-3 rounded-2xl border border-violet-300/20 bg-violet-500/12 px-4 py-3 text-left text-sm text-violet-50 transition hover:bg-violet-500/18"
               >
                 <ImageIcon size={18} />
@@ -3832,7 +4041,7 @@ export function MessengerPage() {
               </button>
               <button
                 type="button"
-                onClick={() => void sendDroppedImage('FILE')}
+                onClick={() => void sendDroppedImages('FILE')}
                 className="flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-left text-sm text-zinc-100 transition hover:bg-white/[0.075]"
               >
                 <FileText size={18} />
@@ -3845,7 +4054,7 @@ export function MessengerPage() {
             <div className="mt-5 flex justify-end">
               <button
                 type="button"
-                onClick={() => setDroppedImageFile(null)}
+                onClick={() => setDroppedImageFiles([])}
                 className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-zinc-300 transition hover:bg-white/[0.06] hover:text-white"
               >
                 Отмена
@@ -3856,8 +4065,19 @@ export function MessengerPage() {
       )}
 
       {isDraggingFileOverChat && isSelectedChatWritable && (
-        <div className="pointer-events-none absolute inset-4 z-50 flex items-center justify-center rounded-[2rem] border-2 border-dashed border-violet-300/45 bg-violet-500/12 text-lg font-semibold text-violet-100 shadow-2xl shadow-violet-950/30 backdrop-blur-xl">
-          Отпустите файл, чтобы прикрепить его к чату
+        <div className="absolute inset-4 z-50 flex items-center justify-center rounded-[2rem] border-2 border-dashed border-violet-300/45 bg-violet-500/12 text-lg font-semibold text-violet-100 shadow-2xl shadow-violet-950/30 backdrop-blur-xl">
+          <button
+            type="button"
+            onClick={() => setIsDraggingFileOverChat(false)}
+            className="absolute right-5 top-5 flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-black/25 text-zinc-300 transition hover:bg-white/10 hover:text-white"
+            title="Закрыть"
+          >
+            <X size={18} />
+          </button>
+          <div className="pointer-events-none text-center">
+            <div>Отпустите файл, чтобы прикрепить его к чату</div>
+            <div className="mt-2 text-sm font-normal text-violet-100/65">Или нажмите крестик, чтобы закрыть подсказку</div>
+          </div>
         </div>
       )}
 
@@ -4169,8 +4389,9 @@ export function MessengerPage() {
                   const messageStatus = getOutgoingMessageStatus(message, profile?.accountId);
                   const richMessageContent = parseRichMessageContent(decryptedMessage);
                   const visibleMessageText = richMessageContent?.text ?? decryptedMessage;
-                  const fileAttachment = parseFileAttachmentMessageContent(visibleMessageText);
-                  const documentAttachment = parseDocumentAttachmentMessageContent(visibleMessageText);
+                  const richAttachments = richMessageContent?.attachments ?? [];
+                  const fileAttachment = richAttachments.length === 0 ? parseFileAttachmentMessageContent(visibleMessageText) : null;
+                  const documentAttachment = richAttachments.length === 0 ? parseDocumentAttachmentMessageContent(visibleMessageText) : null;
                   const senderProfile = profilesById[message.senderAccountId] ?? null;
                   const senderDisplayName = senderProfile ? getDisplayName(senderProfile) : `${message.senderAccountId.slice(0, 8)}…`;
                   const readReceiptDetails = getReadReceiptDetails(message, selectedChat, profilesById, profile?.accountId);
@@ -4197,7 +4418,7 @@ export function MessengerPage() {
                         className={`group flex items-center gap-3 rounded-[1.75rem] transition ${isOwnMessage ? 'justify-end' : 'justify-start'} ${highlightedMessageId === message.messageId ? 'bg-violet-400/12 ring-1 ring-violet-300/20' : ''}`}
                         onContextMenu={(event) => {
                           if (!isForwardSelectionActive) {
-                            openMessageContextMenu(event, message.messageId, isOwnMessage);
+                            openMessageContextMenu(event, message.messageId);
                           }
                           else {
                             event.preventDefault();
@@ -4228,9 +4449,10 @@ export function MessengerPage() {
 
                           <div className="relative">
                             <div
+                              data-message-bubble="true"
                               onContextMenu={(event) => {
                                 if (!isForwardSelectionActive) {
-                                  openMessageContextMenu(event, message.messageId, isOwnMessage);
+                                  openMessageContextMenu(event, message.messageId);
                                 }
                                 else {
                                   event.preventDefault();
@@ -4282,11 +4504,48 @@ export function MessengerPage() {
                                     </div>
                                   </div>
                                 )
-                              ) : (!visibleMessageText.trim() || isDecryptionPlaceholder(visibleMessageText) || visibleMessageText === 'Расшифровка…') && !richMessageContent?.forwardedMessages.length ? (
+                              ) : (!visibleMessageText.trim() || isDecryptionPlaceholder(visibleMessageText) || visibleMessageText === 'Расшифровка…') && !richMessageContent?.forwardedMessages.length && richAttachments.length === 0 ? (
                                 <div className="whitespace-pre-wrap text-sm leading-6">
                                   {visibleMessageText || 'Сообщение'}
                                 </div>
                               ) : null}
+
+                              {richAttachments.length > 0 && (
+                                <div className={`${visibleMessageText.trim() ? 'mt-3' : ''} grid gap-2 ${richAttachments.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                                  {richAttachments.map((attachment) => (
+                                    <div key={attachment.mediaFileId} className={richAttachments.length > 1 ? 'min-w-0' : ''}>
+                                      {attachment.attachmentDisplayMode === 'IMAGE' ? (
+                                        <ImageAttachmentPreview attachment={attachment} onDownload={handleDownloadAttachment} />
+                                      ) : (
+                                        <div className="min-w-[240px] max-w-[360px]">
+                                          <div className={`flex items-center gap-3 rounded-2xl border p-3 ${isOwnMessage ? 'border-white/20 bg-white/10' : 'border-white/10 bg-black/15'}`}>
+                                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-black/20 text-white">
+                                              <FileText size={20} />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                              <div className="truncate text-sm font-semibold">{attachment.fileName}</div>
+                                              <div className={`mt-1 text-xs ${isOwnMessage ? 'text-violet-100/75' : 'text-zinc-500'}`}>
+                                                {formatFileSize(attachment.sizeBytes)} • защищённый файл
+                                              </div>
+                                            </div>
+                                            <button
+                                              type="button"
+                                              onClick={(event) => {
+                                                event.stopPropagation();
+                                                void handleDownloadAttachment(attachment);
+                                              }}
+                                              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition ${isOwnMessage ? 'bg-white/15 hover:bg-white/25' : 'bg-white/[0.06] hover:bg-white/[0.1]'}`}
+                                              title="Скачать"
+                                            >
+                                              <Download size={17} />
+                                            </button>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
 
                               {richMessageContent?.forwardedMessages.length ? (
                                 <div className={`${visibleMessageText.trim() ? 'mt-3' : ''} space-y-2 border-l border-violet-300/25 pl-4`}>
@@ -4502,15 +4761,29 @@ export function MessengerPage() {
             {messageContextMenu && (() => {
               const contextMessage = visibleSelectedMessages.find((message) => message.messageId === messageContextMenu.messageId) ?? null;
               const currentReaction = contextMessage ? localReactionsByMessageId[contextMessage.messageId] : null;
+              const contextDownloadableAttachment = contextMessage
+                ? getDownloadableAttachmentFromPlainText(decryptedMessagesById[contextMessage.messageId])
+                : null;
 
               return (
-                <div className="fixed inset-0 z-[80]" onClick={closeMessageContextMenu} onContextMenu={(event) => event.preventDefault()}>
+                <div
+                  data-message-context-menu="true"
+                  className="fixed z-[80] w-64 overflow-hidden rounded-3xl border border-white/10 bg-[#202128]/96 p-2 text-sm text-zinc-100 shadow-2xl shadow-black/55 backdrop-blur-xl"
+                  style={{ left: messageContextMenu.x, top: messageContextMenu.y }}
+                  onClick={(event) => event.stopPropagation()}
+                  onContextMenu={(event) => event.preventDefault()}
+                >
                   <div
-                    className="absolute w-64 overflow-hidden rounded-3xl border border-white/10 bg-[#202128]/96 p-2 text-sm text-zinc-100 shadow-2xl shadow-black/55 backdrop-blur-xl"
-                    style={{ left: messageContextMenu.x, top: messageContextMenu.y }}
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    <div className={`pointer-events-none absolute ${messageContextMenu.placement === 'below' ? '-top-1.5' : '-bottom-1.5'} left-8 h-3 w-3 rotate-45 border border-white/10 bg-[#202128]`} />
+                    className={`pointer-events-none absolute h-3 w-3 rotate-45 border border-white/10 bg-[#202128] ${
+                      messageContextMenu.placement === 'left'
+                        ? 'right-[-0.45rem] top-1/2 -translate-y-1/2'
+                        : messageContextMenu.placement === 'right'
+                          ? 'left-[-0.45rem] top-1/2 -translate-y-1/2'
+                          : messageContextMenu.placement === 'below'
+                            ? '-top-1.5 left-8'
+                            : '-bottom-1.5 left-8'
+                    }`}
+                  />
                     <button
                       type="button"
                       onClick={() => startReplyFromContextMenu(contextMessage)}
@@ -4527,6 +4800,19 @@ export function MessengerPage() {
                       <Send size={17} className="text-sky-200" />
                       <span>Переслать</span>
                     </button>
+                    {contextDownloadableAttachment && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          closeMessageContextMenu();
+                          void handleDownloadAttachment(contextDownloadableAttachment);
+                        }}
+                        className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition hover:bg-white/[0.08]"
+                      >
+                        <Download size={17} className="text-emerald-200" />
+                        <span>Скачать</span>
+                      </button>
+                    )}
                     <div className="my-2 h-px bg-white/10" />
                     <div className="px-2 pb-2 text-xs font-medium text-zinc-500">Реакция</div>
                     <div className="grid grid-cols-6 gap-1 px-1 pb-1">
@@ -4541,7 +4827,6 @@ export function MessengerPage() {
                           {emoji}
                         </button>
                       ))}
-                    </div>
                   </div>
                 </div>
               );
@@ -4581,9 +4866,16 @@ export function MessengerPage() {
                 isWritable={Boolean(selectedChat && isSelectedChatWritable)}
                 replyPreview={replyDraft ? ({ senderName: replyDraft.senderName, preview: replyDraft.preview } satisfies ComposerReplyPreview) : null}
                 forwardPreview={forwardDraftItems.length > 0 ? ({ count: forwardDraftItems.length } satisfies ComposerForwardPreview) : null}
-                canSendWithoutText={forwardDraftItems.length > 0}
+                pendingAttachments={pendingAttachments.map((attachment) => ({
+                  id: attachment.id,
+                  fileName: attachment.file.name,
+                  sizeBytes: attachment.file.size,
+                  attachmentDisplayMode: attachment.attachmentDisplayMode,
+                } satisfies ComposerPendingAttachment))}
+                canSendWithoutText={forwardDraftItems.length > 0 || pendingAttachments.length > 0}
                 onCancelReply={() => setReplyDraft(null)}
                 onCancelForward={() => setForwardDraftItems([])}
+                onRemovePendingAttachment={removePendingAttachment}
                 onMessageTextChange={handleMessageTextChange}
                 onMessageBlur={() => sendCurrentTypingState(false)}
                 onTextareaKeyDown={handleTextareaKeyDown}

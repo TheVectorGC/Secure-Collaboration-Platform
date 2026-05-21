@@ -12,6 +12,13 @@ export type ComposerForwardPreview = {
   count: number;
 };
 
+export type ComposerPendingAttachment = {
+  id: string;
+  fileName: string;
+  sizeBytes: number;
+  attachmentDisplayMode: ChatAttachmentDisplayMode;
+};
+
 type EmojiCategory = {
   id: string;
   title: string;
@@ -61,9 +68,11 @@ type ChatComposerProps = {
   onAppendEmoji: (emoji: string) => void;
   replyPreview?: ComposerReplyPreview | null;
   forwardPreview?: ComposerForwardPreview | null;
+  pendingAttachments?: ComposerPendingAttachment[];
   canSendWithoutText?: boolean;
   onCancelReply?: () => void;
   onCancelForward?: () => void;
+  onRemovePendingAttachment?: (attachmentId: string) => void;
   onSendCurrentMessage: () => Promise<void>;
 };
 
@@ -106,9 +115,11 @@ export function ChatComposer({
   onAppendEmoji,
   replyPreview,
   forwardPreview,
+  pendingAttachments = [],
   canSendWithoutText = false,
   onCancelReply,
   onCancelForward,
+  onRemovePendingAttachment,
   onSendCurrentMessage,
 }: ChatComposerProps) {
   const [isAttachmentMenuOpen, setIsAttachmentMenuOpen] = useState(false);
@@ -133,11 +144,12 @@ export function ChatComposer({
         <input
           type="file"
           className="hidden"
+          multiple
           onChange={(event) => {
-            const file = event.target.files?.[0] ?? null;
+            const files = Array.from(event.target.files ?? []);
             event.target.value = '';
             setIsAttachmentMenuOpen(false);
-            void onAttachFile(file, 'FILE');
+            files.slice(0, 8).forEach((file) => void onAttachFile(file, 'FILE'));
           }}
           id="vector-composer-file-input"
         />
@@ -146,11 +158,12 @@ export function ChatComposer({
           type="file"
           accept="image/*"
           className="hidden"
+          multiple
           onChange={(event) => {
-            const file = event.target.files?.[0] ?? null;
+            const files = Array.from(event.target.files ?? []);
             event.target.value = '';
             setIsAttachmentMenuOpen(false);
-            void onAttachFile(file, 'IMAGE');
+            files.slice(0, 8).forEach((file) => void onAttachFile(file, 'IMAGE'));
           }}
           id="vector-composer-image-input"
         />
@@ -167,7 +180,7 @@ export function ChatComposer({
           id="vector-composer-document-input"
         />
 
-        {(replyPreview || forwardPreview) && (
+        {(replyPreview || forwardPreview || pendingAttachments.length > 0) && (
           <div className="mb-3 space-y-2">
             {replyPreview && (
               <div className="flex items-center gap-3 rounded-3xl border border-violet-300/18 bg-violet-500/10 px-4 py-3 shadow-lg shadow-violet-950/10">
@@ -206,6 +219,27 @@ export function ChatComposer({
                 >
                   <X size={17} />
                 </button>
+              </div>
+            )}
+            {pendingAttachments.length > 0 && (
+              <div className="grid gap-2 rounded-3xl border border-white/10 bg-black/16 p-3">
+                <div className="px-1 text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Вложения</div>
+                <div className="flex flex-wrap gap-2">
+                  {pendingAttachments.map((attachment) => (
+                    <div key={attachment.id} className="flex max-w-[230px] items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.055] px-3 py-2 text-sm text-zinc-200">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white/[0.07] text-zinc-100">
+                        {attachment.attachmentDisplayMode === 'IMAGE' ? <ImageIcon size={16} /> : <FileText size={16} />}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-xs font-medium">{attachment.fileName}</span>
+                        <span className="block text-[11px] text-zinc-500">{attachment.attachmentDisplayMode === 'IMAGE' ? 'изображение' : 'файл'} · {(attachment.sizeBytes / 1024 / 1024).toFixed(attachment.sizeBytes > 1024 * 1024 ? 1 : 2)} МБ</span>
+                      </span>
+                      <button type="button" onClick={() => onRemovePendingAttachment?.(attachment.id)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl text-zinc-500 transition hover:bg-white/[0.08] hover:text-white" title="Убрать">
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -323,7 +357,7 @@ export function ChatComposer({
           <button
             type="button"
             onClick={() => void onSendCurrentMessage()}
-            disabled={isSending || (!messageText.trim() && !canSendWithoutText) || !isWritable}
+            disabled={isSending || (!messageText.trim() && !canSendWithoutText && pendingAttachments.length === 0) || !isWritable}
             className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 via-fuchsia-500 to-pink-500 text-white shadow-lg shadow-violet-950/40 transition hover:scale-[1.02] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
             title="Отправить"
           >

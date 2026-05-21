@@ -18,3 +18,8 @@ contextBridge.exposeInMainWorld('vectorCrypto', {
   getRestoredDeviceIds: (request) => ipcRenderer.invoke('vectorCrypto:getRestoredDeviceIds', request),
   clearLocalVault: () => ipcRenderer.invoke('vectorCrypto:clearLocalVault'),
 });
+
+
+contextBridge.exposeInMainWorld('vectorFile', {
+  saveToDownloads: (request) => ipcRenderer.invoke('vectorFile:saveToDownloads', request),
+});

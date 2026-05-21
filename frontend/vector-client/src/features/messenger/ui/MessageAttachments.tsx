@@ -57,26 +57,71 @@ export function ImageAttachmentPreview({
     };
   }, [attachment]);
 
+  const [isViewerOpen, setIsViewerOpen] = useState(false);
+
   return (
-    <div
-      className="max-w-[420px] overflow-hidden rounded-3xl bg-black/15 shadow-lg shadow-black/15"
-      onContextMenu={(event) => {
-        event.preventDefault();
-        void onDownload(attachment);
-      }}
-      title="ПКМ — скачать изображение"
-    >
-      <div className="flex min-h-[180px] items-center justify-center bg-black/20">
-        {previewUrl ? (
-          <img src={previewUrl} alt={attachment.fileName} className="max-h-[430px] w-full object-contain" />
-        ) : (
-          <div className="flex flex-col items-center gap-3 px-6 py-10 text-center text-xs text-zinc-400">
-            {isLoadingPreview ? <LoaderCircle size={22} className="animate-spin" /> : <ImageIcon size={24} />}
-            <span>{previewError ?? 'Загружаем защищённое изображение…'}</span>
+    <>
+      <button
+        type="button"
+        className="block max-w-[420px] overflow-hidden rounded-3xl bg-black/15 text-left shadow-lg shadow-black/15"
+        onClick={(event) => {
+          event.stopPropagation();
+
+          if (previewUrl) {
+            setIsViewerOpen(true);
+          }
+        }}
+        title="Открыть изображение"
+      >
+        <div className="flex min-h-[180px] items-center justify-center bg-black/20">
+          {previewUrl ? (
+            <img src={previewUrl} alt={attachment.fileName} className="max-h-[430px] w-full object-contain" draggable={false} />
+          ) : (
+            <div className="flex flex-col items-center gap-3 px-6 py-10 text-center text-xs text-zinc-400">
+              {isLoadingPreview ? <LoaderCircle size={22} className="animate-spin" /> : <ImageIcon size={24} />}
+              <span>{previewError ?? 'Загружаем защищённое изображение…'}</span>
+            </div>
+          )}
+        </div>
+      </button>
+
+      {isViewerOpen && previewUrl && (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/82 p-6 backdrop-blur-xl"
+          onClick={() => setIsViewerOpen(false)}
+        >
+          <div className="absolute right-5 top-5 flex gap-2">
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                void onDownload(attachment);
+              }}
+              className="rounded-2xl border border-white/10 bg-white/[0.08] px-4 py-2 text-sm font-medium text-white transition hover:bg-white/[0.14]"
+            >
+              Скачать
+            </button>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                setIsViewerOpen(false);
+              }}
+              className="rounded-2xl border border-white/10 bg-white/[0.08] px-4 py-2 text-sm font-medium text-white transition hover:bg-white/[0.14]"
+            >
+              Закрыть
+            </button>
           </div>
-        )}
-      </div>
-    </div>
+          <img
+            src={previewUrl}
+            alt={attachment.fileName}
+            className="max-h-full max-w-full rounded-3xl object-contain shadow-2xl shadow-black/60"
+            onClick={(event) => event.stopPropagation()}
+            draggable={false}
+          />
+        </div>
+      )}
+    </>
   );
 }
 
