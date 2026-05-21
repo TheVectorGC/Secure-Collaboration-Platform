@@ -15,7 +15,7 @@ export function TextInput({ label, className, ...props }: TextInputProps) {
       )}
       <input
         className={clsx(
-          'w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-violet-400/70 focus:bg-white/[0.07] focus:ring-4 focus:ring-violet-500/10',
+          'w-full rounded-2xl border border-white/10 bg-white/[0.055] px-4 py-3.5 text-sm text-zinc-100 shadow-inner shadow-black/10 outline-none transition placeholder:text-zinc-600 hover:border-white/16 focus:border-violet-300/70 focus:bg-white/[0.075] focus:ring-4 focus:ring-violet-500/12',
           className,
         )}
         {...props}

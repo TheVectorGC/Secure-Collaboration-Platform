@@ -51,7 +51,7 @@ export function ChatSidebar({
   const currentUserDisplayName = currentProfile ? getDisplayName(currentProfile) : 'Vector user';
 
   return (
-    <aside className="relative z-10 flex w-[392px] shrink-0 flex-col border-r border-white/10 bg-[#15161b]/86 shadow-2xl shadow-black/30 backdrop-blur-2xl">
+    <aside className="vector-panel relative z-10 flex w-[398px] shrink-0 flex-col rounded-r-[2rem] border-y-0 border-l-0 shadow-2xl shadow-black/35">
       <div className="border-b border-white/10 p-5">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
@@ -68,12 +68,12 @@ export function ChatSidebar({
           </button>
         </div>
 
-        <div className="flex items-center gap-3 rounded-3xl border border-white/10 bg-black/18 px-4 py-3 text-zinc-500 shadow-inner shadow-black/20">
+        <div className="vector-glass-subtle flex items-center gap-3 rounded-3xl px-4 py-3 text-zinc-500 shadow-inner shadow-black/20 transition focus-within:border-violet-300/35">
           <Search size={17} />
           <input
             value={chatSearchQuery}
             onChange={(event) => onChatSearchQueryChange(event.target.value)}
-            className="w-full bg-transparent text-sm text-zinc-300 outline-none placeholder:text-zinc-600"
+            className="w-full bg-transparent text-sm text-zinc-200 outline-none placeholder:text-zinc-600"
             placeholder="Поиск по чатам"
           />
         </div>
@@ -107,8 +107,8 @@ export function ChatSidebar({
                 }}
                 className={`mb-2 flex w-full items-center gap-3 rounded-[1.6rem] px-3 py-3 text-left transition ${
                   selectedChatId === chat.chatId
-                    ? 'bg-gradient-to-r from-violet-500/25 via-fuchsia-500/10 to-transparent ring-1 ring-violet-300/20 shadow-lg shadow-violet-950/10'
-                    : 'hover:bg-white/[0.05] hover:shadow-lg hover:shadow-black/10'
+                    ? 'bg-gradient-to-r from-violet-500/26 via-fuchsia-500/13 to-sky-500/5 ring-1 ring-violet-300/24 shadow-xl shadow-violet-950/16'
+                    : 'hover:bg-white/[0.055] hover:shadow-lg hover:shadow-black/12'
                 }`}
               >
                 <div className="relative shrink-0">
@@ -149,8 +149,8 @@ export function ChatSidebar({
         )}
       </div>
 
-      <div className="border-t border-white/10 p-4">
-        <div className="flex items-center gap-2 rounded-[1.7rem] border border-white/10 bg-white/[0.035] p-2">
+      <div className="border-t border-white/10 bg-black/10 p-4">
+        <div className="vector-glass-subtle flex items-center gap-2 rounded-[1.7rem] p-2">
           <button
             onClick={onOpenSettings}
             className="flex min-w-0 flex-1 items-center gap-3 rounded-[1.35rem] p-2 text-left transition hover:bg-white/[0.05]"

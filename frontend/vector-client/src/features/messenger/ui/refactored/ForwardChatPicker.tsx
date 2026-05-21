@@ -34,8 +34,8 @@ export function ForwardChatPicker({
   }
 
   return (
-    <div className="fixed inset-0 z-[75] flex items-center justify-center bg-black/55 p-5 backdrop-blur-sm" onClick={onClose}>
-      <div className="flex max-h-[78vh] w-full max-w-md flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-[#1d1f26]/98 shadow-2xl shadow-black/60" onClick={(event) => event.stopPropagation()}>
+    <div className="fixed inset-0 z-[75] flex items-center justify-center bg-black/60 p-5 backdrop-blur-md" onClick={onClose}>
+      <div className="vector-surface-card flex max-h-[78vh] w-full max-w-md flex-col overflow-hidden p-0" onClick={(event) => event.stopPropagation()}>
         <div className="border-b border-white/10 p-5">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -51,7 +51,7 @@ export function ForwardChatPicker({
               <X size={18} />
             </button>
           </div>
-          <div className="mt-4 flex items-center gap-3 rounded-3xl border border-white/10 bg-black/20 px-4 py-3 text-zinc-500 shadow-inner shadow-black/20">
+          <div className="vector-glass-subtle mt-4 flex items-center gap-3 rounded-3xl px-4 py-3 text-zinc-500 shadow-inner shadow-black/20">
             <Search size={17} />
             <input
               value={query}
@@ -76,7 +76,7 @@ export function ForwardChatPicker({
                 type="button"
                 key={chat.chatId}
                 onClick={() => onSelectChat(chat)}
-                className="flex w-full items-center gap-3 rounded-[1.5rem] px-3 py-3 text-left transition hover:bg-white/[0.06]"
+                className="flex w-full items-center gap-3 rounded-[1.5rem] px-3 py-3 text-left transition hover:bg-white/[0.065] hover:shadow-lg hover:shadow-black/10"
               >
                 {chat.type === 'SELF' ? (
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-lg shadow-black/20">

@@ -4,6 +4,7 @@ import type {
   DocumentResponseDto,
   DocumentSigningKeyResponseDto,
   RegisterDocumentSigningKeyRequestDto,
+  RejectDocumentRequestDto,
   SignDocumentRequestDto,
 } from '../../../shared/types/api';
 
@@ -40,7 +41,12 @@ export async function signDocument(documentId: string, request: SignDocumentRequ
   return response.data;
 }
 
-export async function rejectDocument(documentId: string): Promise<DocumentResponseDto> {
-  const response = await documentHttpClient.patch<DocumentResponseDto>(`/api/v1/documents/${documentId}/reject`);
+export async function rejectDocument(documentId: string, request: RejectDocumentRequestDto): Promise<DocumentResponseDto> {
+  const response = await documentHttpClient.patch<DocumentResponseDto>(`/api/v1/documents/${documentId}/reject`, request);
+  return response.data;
+}
+
+export async function cancelDocument(documentId: string, request: RejectDocumentRequestDto): Promise<DocumentResponseDto> {
+  const response = await documentHttpClient.patch<DocumentResponseDto>(`/api/v1/documents/${documentId}/cancel`, request);
   return response.data;
 }

@@ -37,12 +37,12 @@ export function ChatHeader({
   }
 
   return (
-    <header className="flex h-[84px] items-center justify-between border-b border-white/10 bg-[#16171d]/82 px-7 shadow-lg shadow-black/10 backdrop-blur-2xl">
+    <header className="flex h-[86px] items-center justify-between border-b border-white/10 bg-[#11131b]/78 px-7 shadow-xl shadow-black/14 backdrop-blur-2xl">
       <div className="flex min-w-0 items-center gap-4">
         <button
           type="button"
           onClick={handleOpenChatInfo}
-          className="flex min-w-0 items-center gap-4 rounded-3xl px-1 py-1 text-left transition hover:bg-white/[0.04]"
+          className="group flex min-w-0 items-center gap-4 rounded-3xl px-2 py-2 text-left transition hover:bg-white/[0.045]"
           title={selectedChat.type === 'GROUP' ? 'Открыть участников группы' : 'Открыть профиль'}
         >
           {selectedChat.type === 'SELF'
@@ -68,7 +68,7 @@ export function ChatHeader({
         {selectedChat.type === 'GROUP' && (
           <button
             onClick={onOpenGroupManagement}
-            className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-zinc-300 transition hover:border-violet-300/25 hover:text-white"
+            className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.055] px-3.5 py-2 text-xs font-medium text-zinc-300 shadow-lg shadow-black/10 transition hover:border-violet-300/30 hover:bg-white/[0.075] hover:text-white"
             title="Участники группы"
           >
             <Users size={14} />
@@ -77,7 +77,7 @@ export function ChatHeader({
         )}
         <button
           onClick={onOpenDocumentsPanel}
-          className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-zinc-300 transition hover:border-violet-300/25 hover:text-white"
+          className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.055] px-3.5 py-2 text-xs font-medium text-zinc-300 shadow-lg shadow-black/10 transition hover:border-violet-300/30 hover:bg-white/[0.075] hover:text-white"
           title="Документооборот"
         >
           <ShieldCheck size={14} />
@@ -86,14 +86,14 @@ export function ChatHeader({
         <div className="relative">
           <button
             onClick={onToggleChatActionsMenu}
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-zinc-300 transition hover:border-violet-300/25 hover:text-white"
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.055] text-zinc-300 shadow-lg shadow-black/10 transition hover:border-violet-300/30 hover:bg-white/[0.075] hover:text-white"
             title="Действия с чатом"
           >
             <MoreVertical size={16} />
           </button>
 
           {isChatActionsMenuOpen && (
-            <div className="absolute right-0 top-11 z-30 w-64 rounded-3xl border border-white/10 bg-[#202127] p-2 text-sm shadow-2xl shadow-black/50">
+            <div className="absolute right-0 top-12 z-30 w-64 rounded-3xl border border-white/10 bg-[#171923]/96 p-2 text-sm shadow-2xl shadow-black/50 backdrop-blur-2xl">
               <button
                 type="button"
                 onClick={onClearSelectedChatHistory}

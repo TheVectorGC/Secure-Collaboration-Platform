@@ -51,7 +51,7 @@ export function ComposerDock({
 }: ComposerDockProps) {
   if (forwardSelection) {
     return (
-      <div className="border-t border-white/8 bg-[#15161c]/92 px-5 py-4 backdrop-blur-2xl">
+      <div className="border-t border-white/8 bg-[#10121a]/88 px-5 py-4 shadow-[0_-18px_60px_rgba(0,0,0,0.22)] backdrop-blur-2xl">
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-4">
           <button
             type="button"
@@ -68,7 +68,7 @@ export function ComposerDock({
             type="button"
             onClick={onOpenForwardChatPicker}
             disabled={forwardSelection.selectedMessageIds.length === 0}
-            className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-br from-violet-500 via-fuchsia-500 to-pink-500 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-950/35 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45"
+            className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-br from-violet-500 via-fuchsia-500 to-pink-500 px-5 py-3 text-sm font-semibold text-white shadow-2xl shadow-violet-950/35 transition hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-45"
           >
             Переслать
             <Send size={16} />

@@ -244,16 +244,35 @@ export type DocumentAttachmentMessageContent = {
 export type CreateDocumentRequestDto = {
   chatId: string;
   mediaFileId: string;
+  title: string;
+  description: string | null;
   fileName: string;
   mimeType: string;
   sizeBytes: number;
   plaintextSha256Base64: string;
   encryptedSha256Base64: string;
+  requiredSignerAccountIds: string[];
 };
 
-export type DocumentStatus = 'ACTIVE' | 'REJECTED';
+export type RejectDocumentRequestDto = {
+  reason: string | null;
+};
+
+export type DocumentStatus = 'ACTIVE' | 'PENDING_SIGNATURES' | 'PARTIALLY_SIGNED' | 'FULLY_SIGNED' | 'REJECTED' | 'CANCELLED';
+export type DocumentSignerStatus = 'PENDING' | 'SIGNED' | 'REJECTED';
 export type SignatureAlgorithm = 'ED25519';
 export type DocumentSigningKeyStatus = 'ACTIVE' | 'REVOKED';
+
+export type DocumentSignerResponseDto = {
+  signerId: string;
+  documentId: string;
+  signerAccountId: string;
+  status: DocumentSignerStatus;
+  createdAt: string;
+  signedAt: string | null;
+  rejectedAt: string | null;
+  rejectionReason: string | null;
+};
 
 export type DocumentSignatureResponseDto = {
   signatureId: string;
@@ -272,6 +291,8 @@ export type DocumentResponseDto = {
   chatId: string;
   mediaFileId: string;
   ownerAccountId: string;
+  title: string;
+  description: string | null;
   fileName: string;
   mimeType: string;
   sizeBytes: number;
@@ -280,8 +301,13 @@ export type DocumentResponseDto = {
   status: DocumentStatus;
   rejectedByAccountId: string | null;
   rejectedAt: string | null;
+  rejectionReason: string | null;
+  cancelledByAccountId: string | null;
+  cancelledAt: string | null;
+  cancellationReason: string | null;
   createdAt: string;
   updatedAt: string;
+  signers: DocumentSignerResponseDto[];
   signatures: DocumentSignatureResponseDto[];
 };
 

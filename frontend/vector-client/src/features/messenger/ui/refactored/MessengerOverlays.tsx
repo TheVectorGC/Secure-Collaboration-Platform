@@ -37,8 +37,8 @@ export function MessengerOverlays({
   return (
     <>
       {isDeleteChatConfirmOpen && selectedChat && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-[#1d1f26] p-5 shadow-2xl shadow-black/60">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-md">
+          <div className="vector-surface-card w-full max-w-md p-5">
             <div className="text-lg font-semibold text-white">Удалить чат?</div>
             <div className="mt-2 text-sm leading-6 text-zinc-400">
               Чат исчезнет из списка на этом устройстве. История переписки не очищается и может снова появиться, если собеседник напишет новое сообщение.
@@ -64,8 +64,8 @@ export function MessengerOverlays({
       )}
 
       {droppedImageFiles.length > 0 && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-[#1d1f26] p-5 shadow-2xl shadow-black/60">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-md">
+          <div className="vector-surface-card w-full max-w-md p-5">
             <div className="flex items-start gap-4">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-violet-500/15 text-violet-100">
                 <ImageIcon size={22} />
@@ -130,8 +130,8 @@ export function MessengerOverlays({
       )}
 
       {isDevToolsOpen && isAdmin && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-[2rem] border border-white/10 bg-[#18191d] p-6 shadow-2xl shadow-black/50">
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/55 p-4 backdrop-blur-md">
+          <div className="vector-surface-card w-full max-w-lg p-6">
             <div className="mb-5 flex items-center justify-between gap-4">
               <div>
                 <div className="text-xl font-semibold text-zinc-50">Dev tools</div>

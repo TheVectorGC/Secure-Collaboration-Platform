@@ -80,8 +80,8 @@ function AuthBootstrap({ children }: { children: React.ReactNode }) {
 
   if (!isReady) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#111214] text-sm text-zinc-400">
-        Загрузка Vector…
+      <div className="relative flex h-screen items-center justify-center overflow-hidden bg-[#08090f] text-sm text-zinc-400 before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_50%_35%,rgba(139,92,246,0.22),transparent_28rem)] before:content-['']">
+        <span className="relative rounded-full border border-white/10 bg-white/[0.045] px-5 py-3 shadow-2xl shadow-black/30 backdrop-blur-xl">Загрузка Vector…</span>
       </div>
     );
   }

@@ -1,6 +1,7 @@
 package dev.documentservice.service;
 
 import dev.documentservice.model.dto.request.CreateDocumentRequestDto;
+import dev.documentservice.model.dto.request.RejectDocumentRequestDto;
 import dev.documentservice.model.dto.request.SignDocumentRequestDto;
 import dev.documentservice.model.dto.response.DocumentResponseDto;
 import java.util.List;
@@ -17,5 +18,7 @@ public interface DocumentService {
 
     DocumentResponseDto signDocument(UUID currentAccountId, UUID documentId, SignDocumentRequestDto requestDto);
 
-    DocumentResponseDto rejectDocument(UUID currentAccountId, UUID documentId);
+    DocumentResponseDto rejectDocument(UUID currentAccountId, UUID documentId, RejectDocumentRequestDto requestDto);
+
+    DocumentResponseDto cancelDocument(UUID currentAccountId, UUID documentId, RejectDocumentRequestDto requestDto);
 }

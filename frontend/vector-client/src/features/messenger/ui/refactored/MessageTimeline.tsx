@@ -77,10 +77,10 @@ export function MessageTimeline({
 
   return (
     <div className="relative min-h-0 flex-1">
-      <div ref={timelineScrollContainerRef} onScroll={onTimelineScroll} className="h-full overflow-y-auto px-8 py-6">
-        <div className="mx-auto flex max-w-4xl flex-col gap-3">
+      <div ref={timelineScrollContainerRef} onScroll={onTimelineScroll} className="relative h-full overflow-y-auto px-8 py-7">
+        <div className="relative mx-auto flex max-w-4xl flex-col gap-3">
         {visibleSelectedMessages.length === 0 && (
-          <div className="rounded-[1.8rem] border border-dashed border-white/10 bg-white/[0.02] p-8 text-center text-sm text-zinc-500">
+          <div className="rounded-[1.8rem] border border-dashed border-white/10 bg-white/[0.035] p-8 text-center text-sm text-zinc-500 shadow-2xl shadow-black/15 backdrop-blur-xl">
             Пока сообщений нет. Напиши первое сообщение ниже.
           </div>
         )}
@@ -174,8 +174,8 @@ export function MessageTimeline({
                       }}
                       className={`rounded-[1.35rem] px-4 py-2.5 shadow-lg ${
                         isOwnMessage
-                          ? 'rounded-br-md bg-gradient-to-br from-violet-500 via-fuchsia-600 to-pink-600 text-white shadow-violet-950/30'
-                          : 'rounded-bl-md border border-white/10 bg-[#24262d]/96 text-zinc-100 shadow-black/20 backdrop-blur'
+                          ? 'rounded-br-md bg-gradient-to-br from-violet-500 via-fuchsia-600 to-pink-600 text-white shadow-violet-950/35 ring-1 ring-white/12'
+                          : 'rounded-bl-md border border-white/10 bg-[#1c202b]/92 text-zinc-100 shadow-black/25 ring-1 ring-white/[0.025] backdrop-blur-xl'
                       }`}
                     >
                       {shouldShowGroupSender && (
@@ -330,7 +330,7 @@ export function MessageTimeline({
         <button
           type="button"
           onClick={onJumpToBottom}
-          className="absolute bottom-5 right-8 inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#24262d]/95 px-4 py-2 text-sm font-medium text-zinc-100 shadow-2xl shadow-black/35 backdrop-blur transition hover:-translate-y-0.5 hover:bg-[#2d3038]"
+          className="absolute bottom-6 right-8 inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#1b1f2b]/95 px-4 py-2.5 text-sm font-semibold text-zinc-100 shadow-2xl shadow-black/40 ring-1 ring-violet-300/10 backdrop-blur-2xl transition hover:-translate-y-0.5 hover:border-violet-300/25 hover:bg-[#252a38]"
           title="Перейти к новым сообщениям"
         >
           <ArrowDown size={16} />

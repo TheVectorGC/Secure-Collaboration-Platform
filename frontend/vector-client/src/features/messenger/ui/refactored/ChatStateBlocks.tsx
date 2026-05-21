@@ -3,7 +3,7 @@ import { MessageCircle } from 'lucide-react';
 export function EmptyChatState() {
   return (
     <div className="flex flex-1 items-center justify-center px-8">
-      <div className="rounded-[2rem] border border-white/10 bg-white/[0.03] p-10 text-center shadow-2xl shadow-black/30">
+      <div className="vector-surface-card max-w-lg p-10 text-center">
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-gradient-to-br from-violet-500 to-fuchsia-500 shadow-lg shadow-violet-950/40">
           <MessageCircle size={28} />
         </div>
@@ -25,13 +25,13 @@ export function ChatAlerts({ errorMessage, isGroupChatReadOnly }: ChatAlertsProp
   return (
     <>
       {errorMessage && (
-        <div className="border-b border-red-400/20 bg-red-500/10 px-7 py-3 text-sm text-red-200">
+        <div className="border-b border-red-400/20 bg-red-500/10 px-7 py-3 text-sm text-red-100 shadow-lg shadow-red-950/10">
           {errorMessage}
         </div>
       )}
 
       {isGroupChatReadOnly && (
-        <div className="border-b border-amber-300/20 bg-amber-500/10 px-7 py-3 text-sm text-amber-100">
+        <div className="border-b border-amber-300/20 bg-amber-500/10 px-7 py-3 text-sm text-amber-100 shadow-lg shadow-amber-950/10">
           Вы исключены из группы. Вы можете читать доступную историю, но отправка сообщений, файлов, документов и typing отключены.
         </div>
       )}

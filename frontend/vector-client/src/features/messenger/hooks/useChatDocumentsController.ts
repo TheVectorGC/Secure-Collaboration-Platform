@@ -1,8 +1,15 @@
 import { useState } from 'react';
-import { createDocument, getChatDocuments, registerDocumentSigningKey, rejectDocument, signDocument } from '../../documents/api/documentsApi';
+import { cancelDocument, createDocument, getChatDocuments, registerDocumentSigningKey, rejectDocument, signDocument } from '../../documents/api/documentsApi';
 import { downloadEncryptedMediaFile, uploadEncryptedMediaFile } from '../../media/api/mediaApi';
 import { buildDocumentAttachmentContent, decryptDownloadedFile, encryptFileForUpload, parseDocumentAttachmentMessageContent } from '../../media/lib/fileCrypto';
 import type { ChatResponseDto, DocumentAttachmentMessageContent, DocumentResponseDto, FileAttachmentMessageContent } from '../../../shared/types/api';
+
+export type DocumentCreationDraft = {
+  file: File;
+  title: string;
+  description: string;
+  requiredSignerAccountIds: string[];
+};
 
 type UseChatDocumentsControllerParams = {
   selectedChatId: string | null;
@@ -37,6 +44,7 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
   const [isDocumentsPanelOpen, setIsDocumentsPanelOpen] = useState(false);
   const [chatDocuments, setChatDocuments] = useState<DocumentResponseDto[]>([]);
   const [isLoadingDocuments, setIsLoadingDocuments] = useState(false);
+  const [pendingDocumentFile, setPendingDocumentFile] = useState<File | null>(null);
 
   async function loadChatDocuments() {
     if (!selectedChatId) {
@@ -75,13 +83,32 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
       return;
     }
 
+    setIsAttachmentMenuOpen(false);
+    setErrorMessage(null);
+    setPendingDocumentFile(file);
+  }
+
+  function cancelPendingDocumentCreation() {
+    setPendingDocumentFile(null);
+  }
+
+  async function confirmDocumentCreation(draft: DocumentCreationDraft) {
+    if (!selectedChatId || !selectedChat || !deviceId || !isSelectedChatWritable) {
+      setErrorMessage(isSelectedChatWritable ? 'Сначала выбери чат для отправки документа.' : 'Вы исключены из группы и не можете отправлять документы.');
+      return;
+    }
+
+    if (draft.requiredSignerAccountIds.length === 0) {
+      setErrorMessage('Выбери хотя бы одного подписанта документа.');
+      return;
+    }
+
     setIsSending(true);
     setIsUploadingFile(true);
-    setIsAttachmentMenuOpen(false);
     setErrorMessage(null);
 
     try {
-      const encryptionResult = await encryptFileForUpload(file);
+      const encryptionResult = await encryptFileForUpload(draft.file);
       const uploadedFile = await uploadEncryptedMediaFile(
         selectedChatId,
         encryptionResult.encryptedBlob,
@@ -90,14 +117,17 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
       const documentItem = await createDocument({
         chatId: selectedChatId,
         mediaFileId: uploadedFile.id,
-        fileName: file.name,
-        mimeType: file.type || 'application/octet-stream',
-        sizeBytes: file.size,
+        title: draft.title.trim(),
+        description: draft.description.trim() || null,
+        fileName: draft.file.name,
+        mimeType: draft.file.type || 'application/octet-stream',
+        sizeBytes: draft.file.size,
         plaintextSha256Base64: encryptionResult.plaintextSha256Base64,
         encryptedSha256Base64: encryptionResult.encryptedSha256Base64,
+        requiredSignerAccountIds: draft.requiredSignerAccountIds,
       });
       const attachmentContent = buildDocumentAttachmentContent(
-        file,
+        draft.file,
         documentItem.documentId,
         uploadedFile.id,
         uploadedFile.encryptedSizeBytes,
@@ -106,11 +136,13 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
 
       await sendEncryptedChatContent(JSON.stringify(attachmentContent), 'FILE');
       setChatDocuments((previousDocuments) => [documentItem, ...previousDocuments.filter((item) => item.documentId !== documentItem.documentId)]);
+      setPendingDocumentFile(null);
+      setIsDocumentsPanelOpen(true);
       sendCurrentTypingState(false);
     }
     catch (error) {
       console.error(error);
-      setErrorMessage('Не удалось зашифровать и отправить документ.');
+      setErrorMessage('Не удалось создать и отправить документ.');
     }
     finally {
       setIsSending(false);
@@ -204,11 +236,11 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
     }
   }
 
-  async function handleRejectDocument(documentItem: DocumentResponseDto) {
+  async function handleRejectDocument(documentItem: DocumentResponseDto, reason: string | null) {
     setErrorMessage(null);
 
     try {
-      const updatedDocument = await rejectDocument(documentItem.documentId);
+      const updatedDocument = await rejectDocument(documentItem.documentId, { reason });
       setChatDocuments((previousDocuments) => previousDocuments.map((item) => item.documentId === updatedDocument.documentId ? updatedDocument : item));
     }
     catch (error) {
@@ -217,17 +249,34 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
     }
   }
 
+  async function handleCancelDocument(documentItem: DocumentResponseDto, reason: string | null) {
+    setErrorMessage(null);
+
+    try {
+      const updatedDocument = await cancelDocument(documentItem.documentId, { reason });
+      setChatDocuments((previousDocuments) => previousDocuments.map((item) => item.documentId === updatedDocument.documentId ? updatedDocument : item));
+    }
+    catch (error) {
+      console.error(error);
+      setErrorMessage('Не удалось отменить документ.');
+    }
+  }
+
   return {
     isDocumentsPanelOpen,
     setIsDocumentsPanelOpen,
     chatDocuments,
     isLoadingDocuments,
+    pendingDocumentFile,
     loadChatDocuments,
     openDocumentsPanel,
     handleAttachDocument,
+    cancelPendingDocumentCreation,
+    confirmDocumentCreation,
     handleDownloadAttachment,
     handleDownloadDocument,
     handleSignDocument,
     handleRejectDocument,
+    handleCancelDocument,
   };
 }

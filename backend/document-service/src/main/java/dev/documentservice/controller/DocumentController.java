@@ -1,6 +1,7 @@
 package dev.documentservice.controller;
 
 import dev.documentservice.model.dto.request.CreateDocumentRequestDto;
+import dev.documentservice.model.dto.request.RejectDocumentRequestDto;
 import dev.documentservice.model.dto.request.SignDocumentRequestDto;
 import dev.documentservice.model.dto.response.DocumentResponseDto;
 import dev.documentservice.service.CurrentAccountService;
@@ -55,7 +56,20 @@ public class DocumentController {
     }
 
     @PatchMapping("/{documentId}/reject")
-    public ResponseEntity<DocumentResponseDto> rejectDocument(@PathVariable UUID documentId) {
-        return ResponseEntity.ok(documentService.rejectDocument(currentAccountService.getCurrentAccountId(), documentId));
+    public ResponseEntity<DocumentResponseDto> rejectDocument(
+        @PathVariable UUID documentId,
+        @Valid @RequestBody(required = false) RejectDocumentRequestDto requestDto
+    ) {
+        RejectDocumentRequestDto effectiveRequestDto = requestDto == null ? new RejectDocumentRequestDto(null) : requestDto;
+        return ResponseEntity.ok(documentService.rejectDocument(currentAccountService.getCurrentAccountId(), documentId, effectiveRequestDto));
+    }
+
+    @PatchMapping("/{documentId}/cancel")
+    public ResponseEntity<DocumentResponseDto> cancelDocument(
+        @PathVariable UUID documentId,
+        @Valid @RequestBody(required = false) RejectDocumentRequestDto requestDto
+    ) {
+        RejectDocumentRequestDto effectiveRequestDto = requestDto == null ? new RejectDocumentRequestDto(null) : requestDto;
+        return ResponseEntity.ok(documentService.cancelDocument(currentAccountService.getCurrentAccountId(), documentId, effectiveRequestDto));
     }
 }

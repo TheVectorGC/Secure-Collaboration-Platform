@@ -92,7 +92,7 @@ function ComposerActionButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.045] text-zinc-300 transition hover:border-violet-300/35 hover:bg-white/[0.08] hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
+      className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.055] text-zinc-300 shadow-lg shadow-black/10 transition hover:border-violet-300/35 hover:bg-white/[0.085] hover:text-white active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45"
       title={title}
     >
       {children}
@@ -139,7 +139,7 @@ export function ChatComposer({
   }
 
   return (
-    <div className="border-t border-white/8 bg-[#15161c]/92 px-5 py-4 backdrop-blur-2xl">
+    <div className="border-t border-white/8 bg-[#10121a]/88 px-5 py-4 shadow-[0_-18px_60px_rgba(0,0,0,0.22)] backdrop-blur-2xl">
       <div className="mx-auto max-w-4xl">
         <input
           type="file"
@@ -245,7 +245,7 @@ export function ChatComposer({
           </div>
         )}
 
-        <div className="relative flex items-end gap-3 rounded-[1.85rem] border border-white/10 bg-white/[0.052] px-4 py-3 shadow-2xl shadow-black/24">
+        <div className="relative flex items-end gap-3 rounded-[1.85rem] border border-white/10 bg-white/[0.06] px-4 py-3 shadow-2xl shadow-black/26 ring-1 ring-white/[0.025]">
           <div className="relative">
             <ComposerActionButton
               title="Прикрепить"
@@ -278,17 +278,6 @@ export function ChatComposer({
                     <span className="block text-xs text-zinc-500">Для подписи и согласования</span>
                   </span>
                 </label>
-                <button
-                  type="button"
-                  onClick={() => void handleOpenDocumentsPanel()}
-                  className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm text-zinc-200 transition hover:bg-white/[0.07]"
-                >
-                  <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-fuchsia-500/15 text-fuchsia-200"><Sparkles size={18} /></span>
-                  <span>
-                    <span className="block font-medium">Документы чата</span>
-                    <span className="block text-xs text-zinc-500">Открыть защищённые документы</span>
-                  </span>
-                </button>
               </div>
             )}
           </div>

@@ -10,6 +10,8 @@ public record DocumentResponseDto(
     UUID chatId,
     UUID mediaFileId,
     UUID ownerAccountId,
+    String title,
+    String description,
     String fileName,
     String mimeType,
     long sizeBytes,
@@ -18,7 +20,12 @@ public record DocumentResponseDto(
     DocumentStatus status,
     UUID rejectedByAccountId,
     OffsetDateTime rejectedAt,
+    String rejectionReason,
+    UUID cancelledByAccountId,
+    OffsetDateTime cancelledAt,
+    String cancellationReason,
     OffsetDateTime createdAt,
     OffsetDateTime updatedAt,
+    List<DocumentSignerResponseDto> signers,
     List<DocumentSignatureResponseDto> signatures
 ) {}

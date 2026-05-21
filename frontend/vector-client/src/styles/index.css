@@ -135,3 +135,55 @@ button {
 .vector-ambient-glow {
   animation: vector-subtle-glow 5s ease-in-out infinite;
 }
+
+.vector-surface-card {
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 32px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.082), rgba(255, 255, 255, 0.032)),
+    rgba(16, 18, 26, 0.9);
+  box-shadow:
+    0 28px 90px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(28px);
+}
+
+.vector-panel {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.028)),
+    rgba(18, 20, 29, 0.86);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(28px);
+}
+
+.vector-glass-subtle {
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.045);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055);
+}
+
+.vector-focus-ring:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(168, 85, 247, 0.16);
+}
+
+.vector-chat-wallpaper {
+  background:
+    radial-gradient(circle at 20% 14%, rgba(124, 58, 237, 0.12), transparent 28rem),
+    radial-gradient(circle at 92% 20%, rgba(14, 165, 233, 0.08), transparent 28rem),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 44%),
+    #0c0e14;
+}
+
+.vector-chat-wallpaper::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.18;
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.16) 1px, transparent 0);
+  background-size: 34px 34px;
+  mask-image: linear-gradient(to bottom, transparent, black 18%, black 82%, transparent);
+}

@@ -1,11 +1,17 @@
 import { FormEvent, useState } from 'react';
-import { KeyRound, Lock, MessageCircle, Sparkles, WandSparkles } from 'lucide-react';
+import { ArrowRight, CheckCircle2, LockKeyhole, MessageCircle, ShieldCheck, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { login, getCurrentProfile } from '../features/auth/api/authApi';
 import { useAuthStore } from '../features/auth/model/authStore';
 import { useDirectoryStore } from '../features/directory/model/directoryStore';
 import { GlowButton } from '../shared/ui/GlowButton';
 import { TextInput } from '../shared/ui/TextInput';
+
+const PRODUCT_HIGHLIGHTS = [
+  'Сквозное шифрование сообщений и вложений',
+  'Корпоративные чаты, документы и подписи',
+  'Локальное защищённое хранилище ключей',
+];
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -18,9 +24,10 @@ export function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  function fillAdminCredentials() {
+  function fillSystemAdministratorCredentials() {
     setLoginValue('admin');
     setPassword('InitialPassword123!');
+    setErrorMessage(null);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -30,7 +37,7 @@ export function LoginPage() {
 
     try {
       if (!window.vectorCrypto) {
-        throw new Error('Vector desktop crypto bridge is unavailable. Run the Electron client, not a regular browser tab.');
+        throw new Error('Vector desktop crypto bridge is unavailable.');
       }
 
       const clientInstallationId = await window.vectorCrypto.getOrCreateClientInstallationId();
@@ -55,12 +62,11 @@ export function LoginPage() {
       setProfile(profile);
       upsertProfile(profile);
 
-
       navigate('/messenger');
     }
     catch (error) {
       console.error(error);
-      setErrorMessage('Не удалось войти. Проверь логин, пароль и запущенные backend сервисы.');
+      setErrorMessage('Не удалось войти. Проверьте логин и пароль.');
     }
     finally {
       setIsLoading(false);
@@ -68,74 +74,75 @@ export function LoginPage() {
   }
 
   return (
-    <div className="relative flex h-screen overflow-hidden bg-[#111214] text-white">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_10%_10%,rgba(168,85,247,0.2),transparent_26rem),radial-gradient(circle_at_80%_80%,rgba(217,70,239,0.14),transparent_28rem)]" />
+    <div className="relative flex h-screen overflow-hidden bg-[#07080d] text-white">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_16%_18%,rgba(124,58,237,0.34),transparent_30rem),radial-gradient(circle_at_82%_12%,rgba(14,165,233,0.16),transparent_28rem),radial-gradient(circle_at_68%_92%,rgba(236,72,153,0.18),transparent_34rem)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,rgba(255,255,255,0.075)_0_1px,transparent_1px_90px),linear-gradient(30deg,rgba(255,255,255,0.05)_0_1px,transparent_1px_110px)] opacity-25" />
 
-      <section className="relative hidden flex-1 flex-col justify-between border-r border-white/10 bg-white/[0.03] p-14 lg:flex">
-        <div>
-          <div className="inline-flex items-center gap-3 rounded-full border border-violet-300/20 bg-violet-400/10 px-4 py-2 text-sm text-violet-200">
-            <Sparkles size={16} />
-            Premium secure desktop messenger
+      <section className="relative hidden flex-1 flex-col justify-between p-12 xl:flex">
+        <div className="flex items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/[0.08] shadow-2xl shadow-violet-950/40 ring-1 ring-white/10 backdrop-blur-xl">
+            <MessageCircle size={24} className="text-violet-100" />
           </div>
-
-          <div className="mt-24 max-w-2xl">
-            <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-3xl bg-gradient-to-br from-violet-500 to-fuchsia-500 shadow-2xl shadow-violet-950/40">
-              <MessageCircle size={32} />
-            </div>
-            <h1 className="text-6xl font-semibold tracking-tight text-zinc-50">
-              Vector
-            </h1>
-            <p className="mt-6 text-xl leading-8 text-zinc-400">
-              Лаконичный desktop-клиент в духе Telegram: тёмный, быстрый и ориентированный на realtime коммуникацию.
-            </p>
+          <div>
+            <div className="text-lg font-semibold tracking-tight text-zinc-50">Vector</div>
+            <div className="text-xs font-medium uppercase tracking-[0.26em] text-violet-200/60">Secure Workspace</div>
           </div>
         </div>
 
-        <div className="grid gap-4 text-sm text-zinc-500">
-          <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5">
-            <div className="mb-2 text-zinc-300">Что уже работает</div>
-            <div>Identity, refresh token, messaging REST, Kafka events, realtime gateway, WebSocket updates.</div>
+        <div className="max-w-3xl">
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-4 py-2 text-sm text-zinc-300 shadow-2xl shadow-black/20 backdrop-blur-xl">
+            <Sparkles size={15} className="text-violet-200" />
+            Защищённая корпоративная коммуникация
           </div>
+          <h1 className="max-w-3xl text-6xl font-semibold leading-[1.03] tracking-[-0.045em] text-zinc-50 2xl:text-7xl">
+            Рабочие чаты, документы и подписи в одном защищённом клиенте.
+          </h1>
+          <p className="mt-7 max-w-2xl text-lg leading-8 text-zinc-400">
+            Desktop-приложение для команд, которым важны приватность, контроль доступа и аккуратный рабочий процесс без лишней технической сложности.
+          </p>
+
+          <div className="mt-10 grid max-w-2xl gap-3">
+            {PRODUCT_HIGHLIGHTS.map((highlight) => (
+              <div key={highlight} className="flex items-center gap-3 rounded-3xl border border-white/10 bg-white/[0.045] px-4 py-3 shadow-xl shadow-black/10 backdrop-blur-xl">
+                <CheckCircle2 size={18} className="shrink-0 text-emerald-300" />
+                <span className="text-sm text-zinc-300">{highlight}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 text-sm text-zinc-500">
+          <ShieldCheck size={17} className="text-violet-300/70" />
+          <span>Vector Desktop защищает рабочие данные на уровне устройства и канала связи.</span>
         </div>
       </section>
 
-      <section className="relative flex w-full items-center justify-center px-6 lg:w-[500px]">
+      <section className="relative flex w-full items-center justify-center px-6 py-10 xl:w-[540px] xl:border-l xl:border-white/10 xl:bg-black/10 xl:backdrop-blur-2xl">
         <form
           onSubmit={handleSubmit}
-          className="w-full max-w-md rounded-[2rem] border border-white/10 bg-[#191a1f]/92 p-8 shadow-2xl shadow-black/40 backdrop-blur-xl"
+          className="vector-surface-card w-full max-w-md p-8"
         >
-          <div className="mb-8 flex items-start justify-between gap-4">
-            <div>
-              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/[0.06] text-violet-300">
-                <Lock size={22} />
-              </div>
-              <h2 className="text-3xl font-semibold tracking-tight">Вход</h2>
-              <p className="mt-2 text-sm leading-6 text-zinc-500">
-                Введи данные пользователя или быстро подставь initial admin для проверки системы.
-              </p>
+          <div className="mb-8 text-center">
+            <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-[1.4rem] bg-gradient-to-br from-violet-500 via-fuchsia-500 to-pink-500 text-white shadow-2xl shadow-violet-950/45">
+              <LockKeyhole size={27} />
             </div>
-
-            <button
-              type="button"
-              onClick={fillAdminCredentials}
-              className="inline-flex items-center gap-2 rounded-2xl border border-violet-300/20 bg-violet-400/10 px-3 py-2 text-xs font-medium text-violet-200 transition hover:border-violet-300/40 hover:bg-violet-400/15"
-            >
-              <WandSparkles size={14} />
-              Admin
-            </button>
+            <h2 className="text-3xl font-semibold tracking-[-0.03em] text-zinc-50">Вход в Vector</h2>
+            <p className="mx-auto mt-3 max-w-xs text-sm leading-6 text-zinc-400">
+              Используйте корпоративную учётную запись, чтобы продолжить работу в защищённом пространстве.
+            </p>
           </div>
 
           <div className="space-y-5">
             <TextInput
-              label="Login"
+              label="Логин или email"
               value={loginValue}
               onChange={(event) => setLoginValue(event.target.value)}
-              placeholder="admin или username"
+              placeholder="Введите логин"
               autoComplete="username"
             />
 
             <TextInput
-              label="Password"
+              label="Пароль"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               placeholder="Введите пароль"
@@ -144,22 +151,27 @@ export function LoginPage() {
             />
 
             {errorMessage && (
-              <div className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+              <div className="rounded-3xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-100 shadow-lg shadow-red-950/10">
                 {errorMessage}
               </div>
             )}
 
-            <GlowButton className="w-full" disabled={isLoading || !loginValue.trim() || !password.trim()}>
-              {isLoading ? 'Подключаемся...' : 'Войти'}
+            <GlowButton className="group w-full justify-center" disabled={isLoading || !loginValue.trim() || !password.trim()}>
+              <span>{isLoading ? 'Выполняется вход…' : 'Войти'}</span>
+              {!isLoading && <ArrowRight size={17} className="transition group-hover:translate-x-0.5" />}
             </GlowButton>
+
+            <button
+              type="button"
+              onClick={fillSystemAdministratorCredentials}
+              className="w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-medium text-zinc-300 transition hover:border-violet-300/30 hover:bg-white/[0.07] hover:text-white"
+            >
+              System Administrator
+            </button>
           </div>
 
-          <div className="mt-6 rounded-2xl border border-white/8 bg-black/20 p-4 text-xs text-zinc-500">
-            <div className="mb-2 flex items-center gap-2 text-zinc-300">
-              <KeyRound size={14} />
-              Быстрый доступ для разработки
-            </div>
-            <div>admin / InitialPassword123!</div>
+          <div className="mt-7 rounded-3xl border border-white/10 bg-white/[0.035] px-4 py-3 text-center text-xs leading-5 text-zinc-500">
+            Доступ предоставляется только зарегистрированным сотрудникам организации.
           </div>
         </form>
       </section>

@@ -35,6 +35,12 @@ public class DocumentEntity {
     @Column(name = "owner_account_id", nullable = false)
     private UUID ownerAccountId;
 
+    @Column(name = "title", nullable = false, length = 255)
+    private String title;
+
+    @Column(name = "description", length = 2000)
+    private String description;
+
     @Column(name = "file_name", nullable = false, length = 255)
     private String fileName;
 
@@ -65,4 +71,16 @@ public class DocumentEntity {
 
     @Column(name = "rejected_at")
     private OffsetDateTime rejectedAt;
+
+    @Column(name = "rejection_reason", length = 1000)
+    private String rejectionReason;
+
+    @Column(name = "cancelled_by_account_id")
+    private UUID cancelledByAccountId;
+
+    @Column(name = "cancelled_at")
+    private OffsetDateTime cancelledAt;
+
+    @Column(name = "cancellation_reason", length = 1000)
+    private String cancellationReason;
 }

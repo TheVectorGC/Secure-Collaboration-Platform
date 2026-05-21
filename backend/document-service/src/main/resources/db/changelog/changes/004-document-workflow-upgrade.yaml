@@ -1,0 +1,94 @@
+databaseChangeLog:
+  - changeSet:
+      id: 004-document-workflow-upgrade
+      author: document-service
+      changes:
+        - addColumn:
+            tableName: documents
+            columns:
+              - column:
+                  name: title
+                  type: VARCHAR(255)
+              - column:
+                  name: description
+                  type: VARCHAR(2000)
+              - column:
+                  name: rejection_reason
+                  type: VARCHAR(1000)
+              - column:
+                  name: cancelled_by_account_id
+                  type: UUID
+              - column:
+                  name: cancelled_at
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: cancellation_reason
+                  type: VARCHAR(1000)
+        - sql:
+            sql: UPDATE documents SET title = file_name WHERE title IS NULL
+        - addNotNullConstraint:
+            tableName: documents
+            columnName: title
+            columnDataType: VARCHAR(255)
+        - sql:
+            sql: UPDATE documents SET status = 'PENDING_SIGNATURES' WHERE status = 'ACTIVE'
+        - createTable:
+            tableName: document_signers
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: document_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: signer_account_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: VARCHAR(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: signed_at
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: rejected_at
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: rejection_reason
+                  type: VARCHAR(1000)
+        - addUniqueConstraint:
+            tableName: document_signers
+            columnNames: document_id, signer_account_id
+            constraintName: uk_document_signers_document_signer
+        - createIndex:
+            tableName: document_signers
+            indexName: idx_document_signers_document_id
+            columns:
+              - column:
+                  name: document_id
+        - createIndex:
+            tableName: document_signers
+            indexName: idx_document_signers_signer_account_id
+            columns:
+              - column:
+                  name: signer_account_id
+        - sql:
+            sql: INSERT INTO document_signers (id, document_id, signer_account_id, status, created_at, signed_at) SELECT md5(random()::text || clock_timestamp()::text)::uuid, document_id, signer_account_id, 'SIGNED', signed_at, signed_at FROM document_signatures ON CONFLICT DO NOTHING
+        - sql:
+            sql: UPDATE documents SET status = 'PARTIALLY_SIGNED' WHERE status = 'PENDING_SIGNATURES' AND id IN (SELECT document_id FROM document_signers WHERE status = 'SIGNED')
+        - sql:
+            sql: UPDATE documents SET status = 'REJECTED', rejection_reason = NULL WHERE rejected_by_account_id IS NOT NULL

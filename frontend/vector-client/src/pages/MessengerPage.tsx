@@ -23,6 +23,7 @@ import {
   getAccountActivityLabel,
   buildAccountLastActivityMap,
   DocumentsPanel,
+  DocumentCreationModal,
   isCurrentAccountActiveInChat,
   getActiveGroupParticipantAccountIds,
   getChatPresentation,
@@ -517,11 +518,15 @@ export function MessengerPage() {
     isLoadingDocuments,
     loadChatDocuments,
     openDocumentsPanel,
+    pendingDocumentFile,
     handleAttachDocument,
+    cancelPendingDocumentCreation,
+    confirmDocumentCreation,
     handleDownloadAttachment,
     handleDownloadDocument,
     handleSignDocument,
     handleRejectDocument,
+    handleCancelDocument,
   } = useChatDocumentsController({
     selectedChatId,
     selectedChat,
@@ -654,16 +659,27 @@ export function MessengerPage() {
         onOpenProfile={(accountId) => void openMiniProfileByAccountId(accountId)}
       />
 
+      <DocumentCreationModal
+        file={pendingDocumentFile}
+        selectedChat={selectedChat}
+        currentAccountId={profile?.accountId}
+        profilesById={profilesById}
+        onClose={cancelPendingDocumentCreation}
+        onConfirm={confirmDocumentCreation}
+      />
+
       <DocumentsPanel
         isOpen={isDocumentsPanelOpen}
         documents={chatDocuments}
         isLoading={isLoadingDocuments}
         activeAccountId={profile?.accountId}
+        profilesById={profilesById}
         onClose={() => setIsDocumentsPanelOpen(false)}
         onRefresh={loadChatDocuments}
         onDownload={handleDownloadDocument}
         onSign={handleSignDocument}
         onReject={handleRejectDocument}
+        onCancel={handleCancelDocument}
       />
 
       <MessengerOverlays
@@ -704,7 +720,7 @@ export function MessengerPage() {
         onOpenDevTools={() => setIsDevToolsOpen(true)}
       />
 
-      <main className="relative z-10 flex min-w-0 flex-1 flex-col bg-[#101116]/74 backdrop-blur-sm">
+      <main className="vector-chat-wallpaper relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden bg-[#0c0e14]/84 backdrop-blur-sm">
         {!selectedChat || !selectedChatPresentation ? (
           <EmptyChatState />
         ) : (
