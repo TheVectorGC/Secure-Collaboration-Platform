@@ -1,6 +1,6 @@
 import { KeyboardEvent, useEffect, useRef, useState } from 'react';
 import type { ChatResponseDto } from '../../../shared/types/api';
-import { getActiveGroupParticipantAccountIds } from '../../../pages/MessengerPageSupport';
+import { getActiveGroupParticipantAccountIds } from '../lib/messengerCore';
 
 type SendTypingEventRequest = {
   chatId: string;

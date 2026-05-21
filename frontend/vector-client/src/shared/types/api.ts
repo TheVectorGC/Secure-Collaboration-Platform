@@ -252,6 +252,7 @@ export type CreateDocumentRequestDto = {
   plaintextSha256Base64: string;
   encryptedSha256Base64: string;
   requiredSignerAccountIds: string[];
+  observerAccountIds?: string[];
 };
 
 export type RejectDocumentRequestDto = {
@@ -260,6 +261,7 @@ export type RejectDocumentRequestDto = {
 
 export type DocumentStatus = 'ACTIVE' | 'PENDING_SIGNATURES' | 'PARTIALLY_SIGNED' | 'FULLY_SIGNED' | 'REJECTED' | 'CANCELLED';
 export type DocumentSignerStatus = 'PENDING' | 'SIGNED' | 'REJECTED';
+export type DocumentObserverRole = 'OBSERVER';
 export type SignatureAlgorithm = 'ED25519';
 export type DocumentSigningKeyStatus = 'ACTIVE' | 'REVOKED';
 
@@ -272,6 +274,14 @@ export type DocumentSignerResponseDto = {
   signedAt: string | null;
   rejectedAt: string | null;
   rejectionReason: string | null;
+};
+
+export type DocumentObserverResponseDto = {
+  observerId: string;
+  documentId: string;
+  observerAccountId: string;
+  role: DocumentObserverRole;
+  createdAt: string;
 };
 
 export type DocumentSignatureResponseDto = {
@@ -308,6 +318,7 @@ export type DocumentResponseDto = {
   createdAt: string;
   updatedAt: string;
   signers: DocumentSignerResponseDto[];
+  observers: DocumentObserverResponseDto[];
   signatures: DocumentSignatureResponseDto[];
 };
 

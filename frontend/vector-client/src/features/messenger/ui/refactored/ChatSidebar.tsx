@@ -1,9 +1,9 @@
-import { Check, CheckCheck, Plus, Search, Star, Wifi, WifiOff, Wrench } from 'lucide-react';
+import { Check, CheckCheck, FileText, Plus, Search, Star, Wifi, WifiOff, Wrench } from 'lucide-react';
 import { formatChatTime } from '../../../../shared/lib/dateFormat';
 import { getDirectCompanionAccountId, getDisplayName } from '../../../../shared/lib/profile';
 import type { ChatResponseDto, MessageResponseDto, ProfileResponseDto } from '../../../../shared/types/api';
 import type { AccountPresenceState } from '../../../realtime/model/realtimeStore';
-import { getAccountAvatarUrl, getChatPresentation, getLastTimelineMessage, getOutgoingMessageStatus, getPreviewTextColorClass, getVisibleChatMessages, buildChatPreviewFromMessage, calculateUnreadCount, type LocalChatState, UserAvatar } from '../../../../pages/MessengerPageSupport';
+import { getAccountAvatarUrl, getChatPresentation, getLastTimelineMessage, getOutgoingMessageStatus, getPreviewTextColorClass, getVisibleChatMessages, buildChatPreviewFromMessage, calculateUnreadCount, type LocalChatState, UserAvatar } from '../../lib/messengerCore';
 
 type ChatSidebarProps = {
   chats: ChatResponseDto[];
@@ -25,6 +25,8 @@ type ChatSidebarProps = {
   onCloseOpenedChatMenu: () => void;
   onOpenSettings: () => void;
   onOpenDevTools: () => void;
+  onOpenDocumentsWorkspace: () => void;
+  pendingDocumentCount: number;
 };
 
 export function ChatSidebar({
@@ -47,6 +49,8 @@ export function ChatSidebar({
   onCloseOpenedChatMenu,
   onOpenSettings,
   onOpenDevTools,
+  onOpenDocumentsWorkspace,
+  pendingDocumentCount,
 }: ChatSidebarProps) {
   const currentUserDisplayName = currentProfile ? getDisplayName(currentProfile) : 'Vector user';
 
@@ -59,13 +63,27 @@ export function ChatSidebar({
             <div className="mt-1 text-2xl font-semibold tracking-tight text-zinc-50">Чаты</div>
           </div>
 
-          <button
-            onClick={onCreateChatOpen}
-            className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-lg shadow-violet-950/40 transition hover:brightness-110"
-            title="Новый чат"
-          >
-            <Plus size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onOpenDocumentsWorkspace}
+              className="relative flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.055] text-zinc-300 shadow-lg shadow-black/10 transition hover:border-violet-300/30 hover:text-white"
+              title="Документы"
+            >
+              <FileText size={18} />
+              {pendingDocumentCount > 0 && (
+                <span className="absolute -right-1.5 -top-1.5 flex min-w-5 items-center justify-center rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold text-zinc-950 shadow-lg shadow-amber-950/40">
+                  {pendingDocumentCount > 99 ? '99+' : pendingDocumentCount}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={onCreateChatOpen}
+              className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-lg shadow-violet-950/40 transition hover:brightness-110"
+              title="Новый чат"
+            >
+              <Plus size={18} />
+            </button>
+          </div>
         </div>
 
         <div className="vector-glass-subtle flex items-center gap-3 rounded-3xl px-4 py-3 text-zinc-500 shadow-inner shadow-black/20 transition focus-within:border-violet-300/35">

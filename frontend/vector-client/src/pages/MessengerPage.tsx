@@ -22,16 +22,15 @@ import {
   getLastPeerActivityAt,
   getAccountActivityLabel,
   buildAccountLastActivityMap,
-  DocumentsPanel,
-  DocumentCreationModal,
   isCurrentAccountActiveInChat,
   getActiveGroupParticipantAccountIds,
   getChatPresentation,
-  NewChatModal,
-  GroupManagementModal,
-  SettingsModal,
-  MiniProfileModal,
-} from './MessengerPageSupport';
+} from '../features/messenger/lib/messengerCore';
+import { DocumentCreationModal, DocumentsPanel } from '../features/documents/ui/DocumentWorkflowModals';
+import { NewChatModal } from '../features/messenger/ui/modals/NewChatModal';
+import { GroupManagementModal } from '../features/messenger/ui/modals/GroupManagementModal';
+import { SettingsModal } from '../features/settings/ui/SettingsModal';
+import { MiniProfileModal } from '../features/profile/ui/MiniProfileModal';
 import { MessengerOverlays } from '../features/messenger/ui/refactored/MessengerOverlays';
 import { ChatSidebar } from '../features/messenger/ui/refactored/ChatSidebar';
 import { ChatHeader } from '../features/messenger/ui/refactored/ChatHeader';
@@ -516,8 +515,11 @@ export function MessengerPage() {
     setIsDocumentsPanelOpen,
     chatDocuments,
     isLoadingDocuments,
+    documentsPanelScope,
     loadChatDocuments,
-    openDocumentsPanel,
+    openDocumentsWorkspace,
+    loadWorkspaceDocuments,
+    documentNotificationCount,
     pendingDocumentFile,
     handleAttachDocument,
     cancelPendingDocumentCreation,
@@ -527,6 +529,8 @@ export function MessengerPage() {
     handleSignDocument,
     handleRejectDocument,
     handleCancelDocument,
+    handleHideDocument,
+    verifyLocalDocumentFile,
   } = useChatDocumentsController({
     selectedChatId,
     selectedChat,
@@ -675,11 +679,13 @@ export function MessengerPage() {
         activeAccountId={profile?.accountId}
         profilesById={profilesById}
         onClose={() => setIsDocumentsPanelOpen(false)}
-        onRefresh={loadChatDocuments}
+        onRefresh={documentsPanelScope === 'WORKSPACE' ? loadWorkspaceDocuments : loadChatDocuments}
         onDownload={handleDownloadDocument}
         onSign={handleSignDocument}
         onReject={handleRejectDocument}
         onCancel={handleCancelDocument}
+        onHide={handleHideDocument}
+        onVerifyFile={verifyLocalDocumentFile}
       />
 
       <MessengerOverlays
@@ -718,6 +724,8 @@ export function MessengerPage() {
         onCloseOpenedChatMenu={() => setOpenedChatMenuId(null)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenDevTools={() => setIsDevToolsOpen(true)}
+        onOpenDocumentsWorkspace={openDocumentsWorkspace}
+        pendingDocumentCount={documentNotificationCount}
       />
 
       <main className="vector-chat-wallpaper relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden bg-[#0c0e14]/84 backdrop-blur-sm">
@@ -732,7 +740,6 @@ export function MessengerPage() {
               isChatActionsMenuOpen={isChatActionsMenuOpen}
               onOpenGroupManagement={() => setIsGroupManagementOpen(true)}
               onOpenDirectProfile={() => void openMiniProfileByAccountId(selectedDirectCompanionAccountId)}
-              onOpenDocumentsPanel={openDocumentsPanel}
               onToggleChatActionsMenu={() => setIsChatActionsMenuOpen((previousValue) => !previousValue)}
               onClearSelectedChatHistory={handleClearSelectedChatHistory}
               onOpenDeleteChatConfirm={() => {
@@ -830,8 +837,6 @@ export function MessengerPage() {
               onMessageBlur={() => sendCurrentTypingState(false)}
               onTextareaKeyDown={handleTextareaKeyDown}
               onAttachFile={handleAttachFile}
-              onAttachDocument={handleAttachDocument}
-              onOpenDocumentsPanel={openDocumentsPanel}
               onAppendEmoji={appendEmojiToMessage}
               onSendCurrentMessage={handleSendCurrentMessage}
             />

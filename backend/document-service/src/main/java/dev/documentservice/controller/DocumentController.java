@@ -72,4 +72,10 @@ public class DocumentController {
         RejectDocumentRequestDto effectiveRequestDto = requestDto == null ? new RejectDocumentRequestDto(null) : requestDto;
         return ResponseEntity.ok(documentService.cancelDocument(currentAccountService.getCurrentAccountId(), documentId, effectiveRequestDto));
     }
+
+    @PatchMapping("/{documentId}/hide")
+    public ResponseEntity<Void> hideDocument(@PathVariable UUID documentId) {
+        documentService.hideDocument(currentAccountService.getCurrentAccountId(), documentId);
+        return ResponseEntity.noContent().build();
+    }
 }

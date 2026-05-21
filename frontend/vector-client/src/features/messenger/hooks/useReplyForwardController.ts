@@ -7,7 +7,7 @@ import {
   ReplyDraft,
   getMessageContentPreview,
   isForwardableMessage,
-} from '../../../pages/MessengerPageSupport';
+} from '../lib/messengerCore';
 
 type UseReplyForwardControllerParams = {
   selectedChatId: string | null;

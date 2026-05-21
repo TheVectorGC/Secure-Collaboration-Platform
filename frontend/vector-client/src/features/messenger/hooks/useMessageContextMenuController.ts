@@ -1,6 +1,6 @@
 import { MouseEvent, useCallback, useEffect, useRef, useState } from 'react';
 import type { MessageResponseDto } from '../../../shared/types/api';
-import type { MessageContextMenuState } from '../../../pages/MessengerPageSupport';
+import type { MessageContextMenuState } from '../lib/messengerCore';
 
 type UseMessageContextMenuControllerParams = {
   currentAccountId: string | undefined;

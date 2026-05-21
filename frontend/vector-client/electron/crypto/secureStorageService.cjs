@@ -6,6 +6,21 @@ const path = require('node:path');
 const MASTER_KEY_FILE_NAME = 'vector-master-key.bin';
 const CLIENT_INSTALLATION_ID_FILE_NAME = 'vector-client-installation-id.bin';
 
+
+function normalizeClientInstallationNamespace(namespace) {
+  if (typeof namespace !== 'string') {
+    return 'default';
+  }
+
+  const normalizedNamespace = namespace.trim().toLowerCase();
+
+  if (!normalizedNamespace) {
+    return 'default';
+  }
+
+  return crypto.createHash('sha256').update(normalizedNamespace).digest('hex').slice(0, 32);
+}
+
 function getCryptoDirectory() {
   const cryptoDirectory = path.join(app.getPath('userData'), 'crypto');
   fs.mkdirSync(cryptoDirectory, { recursive: true });
@@ -16,8 +31,14 @@ function getMasterKeyFilePath() {
   return path.join(getCryptoDirectory(), MASTER_KEY_FILE_NAME);
 }
 
-function getClientInstallationIdFilePath() {
-  return path.join(getCryptoDirectory(), CLIENT_INSTALLATION_ID_FILE_NAME);
+function getClientInstallationIdFilePath(namespace) {
+  const normalizedNamespace = normalizeClientInstallationNamespace(namespace);
+
+  if (normalizedNamespace === 'default') {
+    return path.join(getCryptoDirectory(), CLIENT_INSTALLATION_ID_FILE_NAME);
+  }
+
+  return path.join(getCryptoDirectory(), `vector-client-installation-id-${normalizedNamespace}.bin`);
 }
 
 function createMasterKey() {
@@ -64,8 +85,8 @@ function clearMasterKey() {
   }
 }
 
-function getOrCreateClientInstallationId() {
-  const clientInstallationIdFilePath = getClientInstallationIdFilePath();
+function getOrCreateClientInstallationId(namespace) {
+  const clientInstallationIdFilePath = getClientInstallationIdFilePath(namespace);
 
   if (fs.existsSync(clientInstallationIdFilePath)) {
     return safeStorage.decryptString(fs.readFileSync(clientInstallationIdFilePath));

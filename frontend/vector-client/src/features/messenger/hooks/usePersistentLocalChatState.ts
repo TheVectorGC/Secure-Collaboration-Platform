@@ -3,7 +3,7 @@ import {
   LocalChatState,
   readLocalChatState,
   writeLocalChatState,
-} from '../../../pages/MessengerPageSupport';
+} from '../lib/messengerCore';
 
 export function usePersistentLocalChatState(accountId: string | undefined) {
   const [localChatState, setLocalChatState] = useState<LocalChatState>(() => readLocalChatState(accountId));

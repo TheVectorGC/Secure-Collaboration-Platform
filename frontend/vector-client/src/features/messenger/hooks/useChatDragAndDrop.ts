@@ -3,7 +3,7 @@ import type { ChatAttachmentDisplayMode } from '../ui/ChatComposer';
 import {
   dragEventContainsFiles,
   isImageFile,
-} from '../../../pages/MessengerPageSupport';
+} from '../lib/messengerCore';
 
 type UseChatDragAndDropParams = {
   isChatWritable: boolean;

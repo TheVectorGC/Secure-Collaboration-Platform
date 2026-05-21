@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   readLocalReactions,
   writeLocalReactions,
-} from '../../../pages/MessengerPageSupport';
+} from '../lib/messengerCore';
 
 export function useLocalMessageReactions(accountId: string | undefined) {
   const [localReactionsByMessageId, setLocalReactionsByMessageId] = useState<Record<string, string>>({});

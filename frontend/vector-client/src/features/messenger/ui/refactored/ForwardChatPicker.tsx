@@ -1,6 +1,6 @@
 import { Search, Star, X } from 'lucide-react';
 import type { ChatResponseDto, MessageResponseDto, ProfileResponseDto } from '../../../../shared/types/api';
-import { buildChatPreviewFromMessage, getAccountAvatarUrl, getChatPresentation, getLastTimelineMessage, getPreviewTextColorClass, getVisibleChatMessages, type LocalChatState, UserAvatar } from '../../../../pages/MessengerPageSupport';
+import { buildChatPreviewFromMessage, getAccountAvatarUrl, getChatPresentation, getLastTimelineMessage, getPreviewTextColorClass, getVisibleChatMessages, type LocalChatState, UserAvatar } from '../../lib/messengerCore';
 
 type ForwardChatPickerProps = {
   isOpen: boolean;

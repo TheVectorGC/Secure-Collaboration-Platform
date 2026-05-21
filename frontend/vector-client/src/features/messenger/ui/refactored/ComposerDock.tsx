@@ -1,6 +1,6 @@
 import { Send } from 'lucide-react';
 import { ChatComposer, type ChatAttachmentDisplayMode, type ComposerForwardPreview, type ComposerPendingAttachment, type ComposerReplyPreview } from '../ChatComposer';
-import type { ForwardSelectionState, PendingAttachmentDraft, ReplyDraft, ForwardedMessageSnapshot } from '../../../../pages/MessengerPageSupport';
+import type { ForwardSelectionState, PendingAttachmentDraft, ReplyDraft, ForwardedMessageSnapshot } from '../../lib/messengerCore';
 
 type ComposerDockProps = {
   messageText: string;
@@ -20,8 +20,6 @@ type ComposerDockProps = {
   onMessageBlur: () => void;
   onTextareaKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   onAttachFile: (file: File | null | undefined, attachmentDisplayMode: ChatAttachmentDisplayMode) => Promise<void>;
-  onAttachDocument: (file: File | null | undefined) => Promise<void>;
-  onOpenDocumentsPanel: () => Promise<void>;
   onAppendEmoji: (emoji: string) => void;
   onSendCurrentMessage: () => Promise<void>;
 };
@@ -44,8 +42,6 @@ export function ComposerDock({
   onMessageBlur,
   onTextareaKeyDown,
   onAttachFile,
-  onAttachDocument,
-  onOpenDocumentsPanel,
   onAppendEmoji,
   onSendCurrentMessage,
 }: ComposerDockProps) {
@@ -101,8 +97,6 @@ export function ComposerDock({
       onMessageBlur={onMessageBlur}
       onTextareaKeyDown={onTextareaKeyDown}
       onAttachFile={onAttachFile}
-      onAttachDocument={onAttachDocument}
-      onOpenDocumentsPanel={onOpenDocumentsPanel}
       onAppendEmoji={onAppendEmoji}
       onSendCurrentMessage={onSendCurrentMessage}
     />

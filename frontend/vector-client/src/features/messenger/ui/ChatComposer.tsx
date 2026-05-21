@@ -1,5 +1,5 @@
 import { KeyboardEvent, useMemo, useState } from 'react';
-import { FileText, Image as ImageIcon, LoaderCircle, MessageSquare, Paperclip, Send, ShieldCheck, Smile, Sparkles, X } from 'lucide-react';
+import { FileText, Image as ImageIcon, LoaderCircle, MessageSquare, Paperclip, Send, Smile, Sparkles, X } from 'lucide-react';
 
 export type ChatAttachmentDisplayMode = 'FILE' | 'IMAGE';
 
@@ -63,8 +63,6 @@ type ChatComposerProps = {
   onMessageBlur: () => void;
   onTextareaKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   onAttachFile: (file: File | null | undefined, attachmentDisplayMode: ChatAttachmentDisplayMode) => Promise<void>;
-  onAttachDocument: (file: File | null | undefined) => Promise<void>;
-  onOpenDocumentsPanel: () => Promise<void>;
   onAppendEmoji: (emoji: string) => void;
   replyPreview?: ComposerReplyPreview | null;
   forwardPreview?: ComposerForwardPreview | null;
@@ -110,8 +108,6 @@ export function ChatComposer({
   onMessageBlur,
   onTextareaKeyDown,
   onAttachFile,
-  onAttachDocument,
-  onOpenDocumentsPanel,
   onAppendEmoji,
   replyPreview,
   forwardPreview,
@@ -128,11 +124,6 @@ export function ChatComposer({
   const activeEmojiCategory = useMemo(() => (
     EMOJI_CATEGORIES.find((emojiCategory) => emojiCategory.id === activeEmojiCategoryId) ?? EMOJI_CATEGORIES[0]
   ), [activeEmojiCategoryId]);
-
-  async function handleOpenDocumentsPanel() {
-    setIsAttachmentMenuOpen(false);
-    await onOpenDocumentsPanel();
-  }
 
   function handleEmojiClick(emoji: string) {
     onAppendEmoji(emoji);
@@ -166,18 +157,6 @@ export function ChatComposer({
             files.slice(0, 8).forEach((file) => void onAttachFile(file, 'IMAGE'));
           }}
           id="vector-composer-image-input"
-        />
-
-        <input
-          type="file"
-          className="hidden"
-          onChange={(event) => {
-            const file = event.target.files?.[0] ?? null;
-            event.target.value = '';
-            setIsAttachmentMenuOpen(false);
-            void onAttachDocument(file);
-          }}
-          id="vector-composer-document-input"
         />
 
         {(replyPreview || forwardPreview || pendingAttachments.length > 0) && (
@@ -269,13 +248,6 @@ export function ChatComposer({
                   <span>
                     <span className="block font-medium">Файл</span>
                     <span className="block text-xs text-zinc-500">Отправить как вложение</span>
-                  </span>
-                </label>
-                <label htmlFor="vector-composer-document-input" className="flex w-full cursor-pointer items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm text-zinc-200 transition hover:bg-white/[0.07]">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-200"><ShieldCheck size={18} /></span>
-                  <span>
-                    <span className="block font-medium">Документ</span>
-                    <span className="block text-xs text-zinc-500">Для подписи и согласования</span>
                   </span>
                 </label>
               </div>

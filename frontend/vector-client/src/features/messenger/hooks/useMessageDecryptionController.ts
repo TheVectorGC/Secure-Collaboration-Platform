@@ -3,7 +3,7 @@ import type { MessageResponseDto } from '../../../shared/types/api';
 import {
   decryptDirectMessageWithAvailablePayloads,
   isDecryptionPlaceholder,
-} from '../../../pages/MessengerPageSupport';
+} from '../lib/messengerCore';
 
 type UseMessageDecryptionControllerParams = {
   accountId: string | undefined;

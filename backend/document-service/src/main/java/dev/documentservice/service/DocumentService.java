@@ -21,4 +21,6 @@ public interface DocumentService {
     DocumentResponseDto rejectDocument(UUID currentAccountId, UUID documentId, RejectDocumentRequestDto requestDto);
 
     DocumentResponseDto cancelDocument(UUID currentAccountId, UUID documentId, RejectDocumentRequestDto requestDto);
+
+    void hideDocument(UUID currentAccountId, UUID documentId);
 }

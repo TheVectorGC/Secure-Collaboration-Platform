@@ -6,7 +6,7 @@ import {
   buildCompressedImageFileName,
   compressImageForChat,
   PendingAttachmentDraft,
-} from '../../../pages/MessengerPageSupport';
+} from '../lib/messengerCore';
 import {
   buildFileAttachmentContent,
   encryptFileForUpload,

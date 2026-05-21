@@ -15,4 +15,6 @@ public interface DocumentSignerRepository extends JpaRepository<DocumentSignerEn
     List<DocumentSignerEntity> findByDocumentId(UUID documentId);
 
     List<DocumentSignerEntity> findByDocumentIdIn(Collection<UUID> documentIds);
+
+    List<DocumentSignerEntity> findBySignerAccountIdOrderByCreatedAtDesc(UUID signerAccountId);
 }

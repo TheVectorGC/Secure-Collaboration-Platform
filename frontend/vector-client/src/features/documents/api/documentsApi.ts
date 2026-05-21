@@ -46,6 +46,10 @@ export async function rejectDocument(documentId: string, request: RejectDocument
   return response.data;
 }
 
+export async function hideDocument(documentId: string): Promise<void> {
+  await documentHttpClient.patch(`/api/v1/documents/${documentId}/hide`);
+}
+
 export async function cancelDocument(documentId: string, request: RejectDocumentRequestDto): Promise<DocumentResponseDto> {
   const response = await documentHttpClient.patch<DocumentResponseDto>(`/api/v1/documents/${documentId}/cancel`, request);
   return response.data;

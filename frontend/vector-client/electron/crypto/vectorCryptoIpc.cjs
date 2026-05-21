@@ -21,8 +21,8 @@ function validateInitializeRequest(request) {
 }
 
 function registerVectorCryptoIpc() {
-  ipcMain.handle('vectorCrypto:getOrCreateClientInstallationId', async () => {
-    return secureStorageService.getOrCreateClientInstallationId();
+  ipcMain.handle('vectorCrypto:getOrCreateClientInstallationId', async (_event, namespace) => {
+    return secureStorageService.getOrCreateClientInstallationId(namespace);
   });
 
   ipcMain.handle('vectorCrypto:getHealth', async () => {

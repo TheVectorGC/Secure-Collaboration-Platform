@@ -1,7 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('vectorCrypto', {
-  getOrCreateClientInstallationId: () => ipcRenderer.invoke('vectorCrypto:getOrCreateClientInstallationId'),
+  getOrCreateClientInstallationId: (namespace) => ipcRenderer.invoke('vectorCrypto:getOrCreateClientInstallationId', namespace),
   getHealth: () => ipcRenderer.invoke('vectorCrypto:getHealth'),
   initializeLocalVault: (request) => ipcRenderer.invoke('vectorCrypto:initializeLocalVault', request),
   getOrCreateDocumentSigningKey: (request) => ipcRenderer.invoke('vectorCrypto:getOrCreateDocumentSigningKey', request),

@@ -2,8 +2,8 @@ import { type Dispatch, type SetStateAction } from 'react';
 import { addGroupParticipant, createDirectChat, createGroupChat, removeGroupParticipant } from '../../chats/api/chatsApi';
 import { sendMessage } from '../../messages/api/messagesApi';
 import type { ChatResponseDto, DeviceMessagePayloadRequestDto, ProfileResponseDto } from '../../../shared/types/api';
-import type { GroupHistoryAccessMode } from '../../../pages/MessengerPageSupport';
-import { getActiveGroupParticipantAccountIds } from '../../../pages/MessengerPageSupport';
+import type { GroupHistoryAccessMode } from '../lib/messengerCore';
+import { getActiveGroupParticipantAccountIds } from '../lib/messengerCore';
 
 type UseGroupChatControllerParams = {
   selectedChatId: string | null;

@@ -12,4 +12,8 @@ public interface DocumentRepository extends JpaRepository<DocumentEntity, UUID> 
     List<DocumentEntity> findByChatIdOrderByCreatedAtDesc(UUID chatId);
 
     List<DocumentEntity> findByChatIdInOrderByCreatedAtDesc(Collection<UUID> chatIds);
+
+    List<DocumentEntity> findByOwnerAccountIdOrderByCreatedAtDesc(UUID ownerAccountId);
+
+    List<DocumentEntity> findByIdInOrderByCreatedAtDesc(Collection<UUID> documentIds);
 }

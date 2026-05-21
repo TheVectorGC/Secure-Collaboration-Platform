@@ -1,5 +1,5 @@
 import type { ChatResponseDto } from '../../../shared/types/api';
-import type { LocalChatState } from '../../../pages/MessengerPageSupport';
+import type { LocalChatState } from '../lib/messengerCore';
 
 type UseLocalChatActionsParams = {
   selectedChatId: string | null;

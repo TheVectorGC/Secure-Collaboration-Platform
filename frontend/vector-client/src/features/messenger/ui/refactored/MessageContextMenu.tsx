@@ -2,7 +2,7 @@ import type { RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { Download, MessageSquare, Send } from 'lucide-react';
 import type { DocumentAttachmentMessageContent, FileAttachmentMessageContent, MessageResponseDto } from '../../../../shared/types/api';
-import { QUICK_REACTION_ITEMS, type MessageContextMenuState } from '../../../../pages/MessengerPageSupport';
+import { QUICK_REACTION_ITEMS, type MessageContextMenuState } from '../../lib/messengerCore';
 
 type MessageContextMenuProps = {
   contextMenu: MessageContextMenuState | null;

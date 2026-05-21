@@ -27,5 +27,7 @@ public record DocumentResponseDto(
     OffsetDateTime createdAt,
     OffsetDateTime updatedAt,
     List<DocumentSignerResponseDto> signers,
+    List<DocumentObserverResponseDto> observers,
     List<DocumentSignatureResponseDto> signatures
-) {}
+) {
+}

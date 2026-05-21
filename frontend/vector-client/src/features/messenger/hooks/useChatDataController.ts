@@ -2,7 +2,7 @@ import { useEffect, type MutableRefObject } from 'react';
 import { createSelfChat, getChat, getChats } from '../../chats/api/chatsApi';
 import { getChatMessages, markMessageDelivered } from '../../messages/api/messagesApi';
 import type { ChatResponseDto, MessageResponseDto } from '../../../shared/types/api';
-import type { LocalChatState } from '../../../pages/MessengerPageSupport';
+import type { LocalChatState } from '../lib/messengerCore';
 
 
 type UpdateLocalChatState = (updater: (previousValue: LocalChatState) => LocalChatState) => void;

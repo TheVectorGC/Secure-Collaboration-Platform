@@ -3,8 +3,8 @@ import { getActiveAccountDevices } from '../../devices/api/devicesApi';
 import { getPreKeyBundle } from '../../crypto/api/cryptoKeysApi';
 import { sendMessage } from '../../messages/api/messagesApi';
 import type { ChatResponseDto, DeviceMessagePayloadRequestDto, FileAttachmentMessageContent, MessageResponseDto } from '../../../shared/types/api';
-import type { ForwardedMessageSnapshot, PendingAttachmentDraft, ReplyDraft } from '../../../pages/MessengerPageSupport';
-import { buildRichMessageContent, getActiveGroupParticipantAccountIds, isCurrentAccountActiveInChat } from '../../../pages/MessengerPageSupport';
+import type { ForwardedMessageSnapshot, PendingAttachmentDraft, ReplyDraft } from '../lib/messengerCore';
+import { buildRichMessageContent, getActiveGroupParticipantAccountIds, isCurrentAccountActiveInChat } from '../lib/messengerCore';
 
 type UseMessageSendingControllerParams = {
   selectedChatId: string | null;

@@ -17,7 +17,7 @@ import {
   isSameCalendarDate,
   parseGroupSystemMessagePayload,
   parseRichMessageContent,
-} from '../../../../pages/MessengerPageSupport';
+} from '../../lib/messengerCore';
 import { formatMessageDate, formatMessageTime } from '../../../../shared/lib/dateFormat';
 
 type MessageTimelineProps = {

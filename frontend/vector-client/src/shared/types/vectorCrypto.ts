@@ -230,7 +230,7 @@ export type GetRestoredDeviceIdsRequest = {
 };
 
 export type VectorCryptoApi = {
-  getOrCreateClientInstallationId: () => Promise<string>;
+  getOrCreateClientInstallationId: (namespace?: string | null) => Promise<string>;
   getHealth: () => Promise<VectorCryptoHealth>;
   initializeLocalVault: (request: InitializeLocalVaultRequest) => Promise<InitializeLocalVaultResponse>;
   getOrCreateDocumentSigningKey: (request: GetOrCreateDocumentSigningKeyRequest) => Promise<DocumentSigningKeyResponse>;

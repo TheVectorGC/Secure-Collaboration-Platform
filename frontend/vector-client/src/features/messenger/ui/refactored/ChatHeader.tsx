@@ -1,5 +1,5 @@
-import { Eraser, MoreVertical, ShieldCheck, Star, Trash2, Users } from 'lucide-react';
-import { getAccountAvatarUrl, type ChatPresentation, UserAvatar } from '../../../../pages/MessengerPageSupport';
+import { Eraser, MoreVertical, Star, Trash2, Users } from 'lucide-react';
+import { getAccountAvatarUrl, type ChatPresentation, UserAvatar } from '../../lib/messengerCore';
 import type { ChatResponseDto } from '../../../../shared/types/api';
 
 type ChatHeaderProps = {
@@ -9,7 +9,6 @@ type ChatHeaderProps = {
   isChatActionsMenuOpen: boolean;
   onOpenGroupManagement: () => void;
   onOpenDirectProfile: () => void;
-  onOpenDocumentsPanel: () => void;
   onToggleChatActionsMenu: () => void;
   onClearSelectedChatHistory: () => void;
   onOpenDeleteChatConfirm: () => void;
@@ -22,7 +21,6 @@ export function ChatHeader({
   isChatActionsMenuOpen,
   onOpenGroupManagement,
   onOpenDirectProfile,
-  onOpenDocumentsPanel,
   onToggleChatActionsMenu,
   onClearSelectedChatHistory,
   onOpenDeleteChatConfirm,
@@ -75,14 +73,6 @@ export function ChatHeader({
             Участники
           </button>
         )}
-        <button
-          onClick={onOpenDocumentsPanel}
-          className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.055] px-3.5 py-2 text-xs font-medium text-zinc-300 shadow-lg shadow-black/10 transition hover:border-violet-300/30 hover:bg-white/[0.075] hover:text-white"
-          title="Документооборот"
-        >
-          <ShieldCheck size={14} />
-          Документы
-        </button>
         <div className="relative">
           <button
             onClick={onToggleChatActionsMenu}
@@ -93,7 +83,7 @@ export function ChatHeader({
           </button>
 
           {isChatActionsMenuOpen && (
-            <div className="absolute right-0 top-12 z-30 w-64 rounded-3xl border border-white/10 bg-[#171923]/96 p-2 text-sm shadow-2xl shadow-black/50 backdrop-blur-2xl">
+            <div className="absolute right-0 top-12 z-[80] w-64 rounded-3xl border border-white/10 bg-[#171923]/96 p-2 text-sm shadow-2xl shadow-black/50 backdrop-blur-2xl">
               <button
                 type="button"
                 onClick={onClearSelectedChatHistory}

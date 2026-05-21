@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type RefObject } from 'react';
 import { markChatRead } from '../../messages/api/messagesApi';
 import type { MessageResponseDto } from '../../../shared/types/api';
-import type { LocalChatState } from '../../../pages/MessengerPageSupport';
-import { calculateUnreadCount, getLastTimelineMessage } from '../../../pages/MessengerPageSupport';
+import type { LocalChatState } from '../lib/messengerCore';
+import { calculateUnreadCount, getLastTimelineMessage } from '../lib/messengerCore';
 
 type UpdateLocalChatState = (updater: (previousValue: LocalChatState) => LocalChatState) => void;
 

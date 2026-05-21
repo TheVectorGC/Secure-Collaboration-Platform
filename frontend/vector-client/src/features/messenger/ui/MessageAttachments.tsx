@@ -63,7 +63,7 @@ export function ImageAttachmentPreview({
     <>
       <button
         type="button"
-        className="block max-w-[420px] overflow-hidden rounded-3xl bg-black/15 text-left shadow-lg shadow-black/15"
+        className="block w-full max-w-[420px] overflow-hidden rounded-3xl bg-black/35 text-left shadow-lg shadow-black/15"
         onClick={(event) => {
           event.stopPropagation();
 
@@ -73,9 +73,9 @@ export function ImageAttachmentPreview({
         }}
         title="Открыть изображение"
       >
-        <div className="flex min-h-[180px] items-center justify-center bg-black/20">
+        <div className="flex aspect-square max-h-[420px] min-h-[220px] w-full items-center justify-center bg-black">
           {previewUrl ? (
-            <img src={previewUrl} alt={attachment.fileName} className="max-h-[430px] w-full object-contain" draggable={false} />
+            <img src={previewUrl} alt={attachment.fileName} className="h-full w-full object-contain" draggable={false} />
           ) : (
             <div className="flex flex-col items-center gap-3 px-6 py-10 text-center text-xs text-zinc-400">
               {isLoadingPreview ? <LoaderCircle size={22} className="animate-spin" /> : <ImageIcon size={24} />}
