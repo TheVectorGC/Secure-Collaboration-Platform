@@ -260,6 +260,7 @@ export function MessageTimeline({
                     )}
                     {shouldShowGroupReadDetails && (
                       <GroupReadDetailsPopover
+                        isOwnMessage={isOwnMessage}
                         readReceiptDetails={readReceiptDetails}
                         onOpenProfile={onOpenProfile}
                       />
@@ -353,13 +354,14 @@ function FileAttachmentBlock({ attachment, isOwnMessage, onDownload }: { attachm
 }
 
 type GroupReadDetailsPopoverProps = {
+  isOwnMessage: boolean;
   readReceiptDetails: ReturnType<typeof getReadReceiptDetails>;
   onOpenProfile: (profile: ProfileResponseDto) => void;
 };
 
-function GroupReadDetailsPopover({ readReceiptDetails, onOpenProfile }: GroupReadDetailsPopoverProps) {
+function GroupReadDetailsPopover({ isOwnMessage, readReceiptDetails, onOpenProfile }: GroupReadDetailsPopoverProps) {
   return (
-    <div className="absolute right-0 top-full z-20 mt-2 w-72 rounded-3xl border border-white/10 bg-[#202127] p-4 text-left shadow-2xl shadow-black/50">
+    <div className={`absolute top-full z-20 mt-2 w-72 rounded-3xl border border-white/10 bg-[#202127] p-4 text-left shadow-2xl shadow-black/50 ${isOwnMessage ? 'right-0' : 'left-0'}`}>
       <div className="text-sm font-semibold text-zinc-100">Статус прочтения</div>
       <div className="mt-3 grid gap-3 text-xs">
         <div>

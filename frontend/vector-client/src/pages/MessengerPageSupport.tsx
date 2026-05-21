@@ -1,66 +1,38 @@
-import { DragEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { DragEvent, useEffect, useMemo, useState } from 'react';
 import {
-  Check,
-  CheckCheck,
-  Circle,
   LoaderCircle,
   LogOut,
   MessageCircle,
-  Paperclip,
   FileText,
-  Eraser,
   Download,
-  Image as ImageIcon,
-  Plus,
   Search,
-  Smile,
-  Send,
-  Star,
   Users,
-  Trash2,
   UserPlus,
   UserMinus,
   KeyRound,
   Clock3,
   Mail,
   MessageSquare,
-  CornerUpLeft,
   User,
-  MoreVertical,
   LockKeyhole,
   Monitor,
   RefreshCw,
   Settings,
   ShieldCheck,
   Wifi,
-  WifiOff,
-  Wrench,
   X,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { addGroupParticipant, createDirectChat, createGroupChat, createSelfChat, getChat, getChats, removeGroupParticipant } from '../features/chats/api/chatsApi';
-import { createDocument, getChatDocuments, registerDocumentSigningKey, rejectDocument, signDocument } from '../features/documents/api/documentsApi';
 import { searchProfiles, updateCurrentProfileAvatar } from '../features/directory/api/profilesApi';
-import { getActiveAccountDevices } from '../features/devices/api/devicesApi';
 import { useDirectoryStore } from '../features/directory/model/directoryStore';
-import { logout as logoutRequest } from '../features/auth/api/authApi';
-import { useAuthStore } from '../features/auth/model/authStore';
-import { getChatMessages, markChatRead, markMessageDelivered, sendMessage } from '../features/messages/api/messagesApi';
-import { downloadEncryptedMediaFile, uploadEncryptedMediaFile } from '../features/media/api/mediaApi';
-import { buildDocumentAttachmentContent, buildFileAttachmentContent, decryptDownloadedFile, encryptFileForUpload, formatFileSize, parseDocumentAttachmentMessageContent, parseFileAttachmentMessageContent } from '../features/media/lib/fileCrypto';
-import { useMessengerStore } from '../features/messenger/model/messengerStore';
-import { useRealtimeConnection } from '../features/realtime/useRealtimeConnection';
-import { useRealtimeStore, type AccountPresenceState } from '../features/realtime/model/realtimeStore';
-import { DevAccountPanel } from '../features/admin/ui/DevAccountPanel';
-import { ChatComposer, type ChatAttachmentDisplayMode, type ComposerForwardPreview, type ComposerPendingAttachment, type ComposerReplyPreview } from '../features/messenger/ui/ChatComposer';
+import { getActiveAccountDevices } from '../features/devices/api/devicesApi';
+import { formatFileSize, parseDocumentAttachmentMessageContent, parseFileAttachmentMessageContent } from '../features/media/lib/fileCrypto';
 import { DocumentAttachmentPreview, ImageAttachmentPreview } from '../features/messenger/ui/MessageAttachments';
-import { useCryptoBootstrap } from '../features/crypto/useCryptoBootstrap';
-import { useCryptoStore } from '../features/crypto/model/cryptoStore';
-import { getPreKeyBundle } from '../features/crypto/api/cryptoKeysApi';
+import { type ChatAttachmentDisplayMode } from '../features/messenger/ui/ChatComposer';
 import { downloadKeyBackup, getKeyBackupStatus, uploadKeyBackup, type KeyBackupStatusResponseDto } from '../features/crypto/api/keyBackupApi';
-import { formatChatTime, formatLastSeen, formatMessageDate, formatMessageTime } from '../shared/lib/dateFormat';
+import { formatLastSeen, formatMessageTime } from '../shared/lib/dateFormat';
 import { getAvatarGradient, getInitials } from '../shared/lib/avatar';
 import { getDirectCompanionAccountId, getDisplayName } from '../shared/lib/profile';
+import type { AccountPresenceState } from '../features/realtime/model/realtimeStore';
 import type { ActiveDeviceResponseDto, AddGroupParticipantRequestDto, ChatResponseDto, DocumentAttachmentMessageContent, DocumentResponseDto, FileAttachmentMessageContent, MessageResponseDto, ProfileResponseDto } from '../shared/types/api';
 
 

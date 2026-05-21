@@ -1,118 +1,30 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Check,
-  CheckCheck,
-  Circle,
-  LoaderCircle,
-  LogOut,
-  MessageCircle,
-  Paperclip,
-  FileText,
-  Eraser,
-  Download,
-  Image as ImageIcon,
-  Plus,
-  Search,
-  Smile,
-  Send,
-  Star,
-  Users,
-  Trash2,
-  UserPlus,
-  UserMinus,
-  KeyRound,
-  Clock3,
-  Mail,
-  MessageSquare,
-  CornerUpLeft,
-  User,
-  MoreVertical,
-  LockKeyhole,
-  Monitor,
-  RefreshCw,
-  Settings,
-  ShieldCheck,
-  Wifi,
-  WifiOff,
-  Wrench,
-  X,
-} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { addGroupParticipant, createDirectChat, createGroupChat, createSelfChat, getChat, getChats, removeGroupParticipant } from '../features/chats/api/chatsApi';
-import { createDocument, getChatDocuments, registerDocumentSigningKey, rejectDocument, signDocument } from '../features/documents/api/documentsApi';
-import { searchProfiles, updateCurrentProfileAvatar } from '../features/directory/api/profilesApi';
-import { getActiveAccountDevices } from '../features/devices/api/devicesApi';
-import { useDirectoryStore } from '../features/directory/model/directoryStore';
 import { logout as logoutRequest } from '../features/auth/api/authApi';
 import { useAuthStore } from '../features/auth/model/authStore';
-import { getChatMessages, markChatRead, markMessageDelivered, sendMessage } from '../features/messages/api/messagesApi';
-import { downloadEncryptedMediaFile, uploadEncryptedMediaFile } from '../features/media/api/mediaApi';
-import { buildDocumentAttachmentContent, decryptDownloadedFile, encryptFileForUpload, formatFileSize, parseDocumentAttachmentMessageContent, parseFileAttachmentMessageContent } from '../features/media/lib/fileCrypto';
-import { useMessengerStore } from '../features/messenger/model/messengerStore';
-import { useRealtimeConnection } from '../features/realtime/useRealtimeConnection';
-import { useRealtimeStore, type AccountPresenceState } from '../features/realtime/model/realtimeStore';
-import { DevAccountPanel } from '../features/admin/ui/DevAccountPanel';
-import { type ComposerForwardPreview, type ComposerPendingAttachment, type ComposerReplyPreview } from '../features/messenger/ui/ChatComposer';
 import { useCryptoBootstrap } from '../features/crypto/useCryptoBootstrap';
 import { useCryptoStore } from '../features/crypto/model/cryptoStore';
-import { getPreKeyBundle } from '../features/crypto/api/cryptoKeysApi';
-import { downloadKeyBackup, getKeyBackupStatus, uploadKeyBackup, type KeyBackupStatusResponseDto } from '../features/crypto/api/keyBackupApi';
-import { formatChatTime, formatLastSeen, formatMessageDate, formatMessageTime } from '../shared/lib/dateFormat';
-import { getAvatarGradient, getInitials } from '../shared/lib/avatar';
-import { getDirectCompanionAccountId, getDisplayName } from '../shared/lib/profile';
-import type { ActiveDeviceResponseDto, AddGroupParticipantRequestDto, ChatResponseDto, DocumentAttachmentMessageContent, DocumentResponseDto, FileAttachmentMessageContent, MessageResponseDto, ProfileResponseDto } from '../shared/types/api';
-
-
+import { useDirectoryStore } from '../features/directory/model/directoryStore';
+import { getChatMessages } from '../features/messages/api/messagesApi';
+import { useMessengerStore } from '../features/messenger/model/messengerStore';
+import { useRealtimeConnection } from '../features/realtime/useRealtimeConnection';
+import { useRealtimeStore } from '../features/realtime/model/realtimeStore';
+import { getDirectCompanionAccountId } from '../shared/lib/profile';
+import type { ProfileResponseDto } from '../shared/types/api';
 import {
-  EMOJI_ITEMS,
-  QUICK_REACTION_ITEMS,
-  RichMessageContent,
-  LocalChatState,
-  ChatListPreview,
   getLocalAvatarStorageKey,
-  createLocalAvatarDataUrl,
-  getLocalChatStateStorageKey,
-  createEmptyLocalChatState,
-  isSameCalendarDate,
   getVisibleChatMessages,
   getLastTimelineMessage,
-  parseRichMessageContent,
-  buildRichMessageContent,
-  getMessageContentPreview,
   getDownloadableAttachmentFromPlainText,
-  buildChatPreviewFromMessage,
-  calculateUnreadCount,
   getLastPeerActivityAt,
-  getPreviewTextColorClass,
-  Avatar,
-  UserAvatar,
-  buildCompressedImageFileName,
-  compressImageForChat,
-  getAccountAvatarUrl,
   getAccountActivityLabel,
   buildAccountLastActivityMap,
   DocumentsPanel,
-  getAllGroupParticipants,
-  getActiveGroupParticipants,
-  getCurrentGroupParticipant,
   isCurrentAccountActiveInChat,
   getActiveGroupParticipantAccountIds,
-  isGroupMembershipChangedSystemText,
   getChatPresentation,
-  getOutgoingMessageStatus,
-  getReadReceiptDetails,
-  getParticipantDisplayName,
-  parseGroupSystemMessagePayload,
-  getProfileDisplayNameById,
-  formatGroupSystemMessage,
-  ReplyReferenceBlock,
-  ForwardedMessageCard,
   NewChatModal,
-  GroupHistoryAccessMode,
   GroupManagementModal,
-  formatDeviceTime,
-  CryptoStatusBadge,
-  SettingsTab,
   SettingsModal,
   MiniProfileModal,
 } from './MessengerPageSupport';
@@ -172,11 +84,11 @@ export function MessengerPage() {
   const [isCreateChatOpen, setIsCreateChatOpen] = useState(false);
   const [isDevToolsOpen, setIsDevToolsOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isAttachmentMenuOpen, setIsAttachmentMenuOpen] = useState(false);
+  const [, setIsAttachmentMenuOpen] = useState(false);
   const [isGroupManagementOpen, setIsGroupManagementOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [readDetailsMessageId, setReadDetailsMessageId] = useState<string | null>(null);
-  const [openedChatMenuId, setOpenedChatMenuId] = useState<string | null>(null);
+  const [, setOpenedChatMenuId] = useState<string | null>(null);
   const [isChatActionsMenuOpen, setIsChatActionsMenuOpen] = useState(false);
   const [isDeleteChatConfirmOpen, setIsDeleteChatConfirmOpen] = useState(false);
   const { localChatState, updateLocalChatState } = usePersistentLocalChatState(profile?.accountId);
@@ -184,9 +96,6 @@ export function MessengerPage() {
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const messageElementRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const imageInputRef = useRef<HTMLInputElement | null>(null);
-  const documentInputRef = useRef<HTMLInputElement | null>(null);
   const deliveredMarkersRef = useRef<Set<string>>(new Set());
   const readMarkersRef = useRef<Set<string>>(new Set());
   const { highlightedMessageId, scrollToMessage } = useMessageNavigationController(messageElementRefs);
@@ -289,10 +198,6 @@ export function MessengerPage() {
     () => new Set(selectedChatActiveParticipantAccountIds),
     [selectedChatActiveParticipantAccountIds],
   );
-  const selectedChatCurrentParticipant = useMemo(
-    () => getCurrentGroupParticipant(selectedChat, profile?.accountId),
-    [profile?.accountId, selectedChat],
-  );
   const isSelectedChatWritable = isCurrentAccountActiveInChat(selectedChat, profile?.accountId);
   const selectedTypingStates = selectedChatId
     ? (typingByChatId[selectedChatId] ?? []).filter((typingState) => selectedChat?.type !== 'GROUP' || selectedChatActiveParticipantAccountIdSet.has(typingState.accountId))
@@ -303,7 +208,6 @@ export function MessengerPage() {
     messageContextMenuRef,
     openMessageContextMenu,
     closeMessageContextMenu,
-    setMessageContextMenu,
   } = useMessageContextMenuController({
     currentAccountId: profile?.accountId,
     getMessageById: (messageId) => visibleSelectedMessages.find((message) => message.messageId === messageId) ?? null,
@@ -561,7 +465,6 @@ export function MessengerPage() {
   });
 
   const selectedChatPresentation = selectedChat ? getChatPresentation(selectedChat, profile, profilesById) : null;
-  const currentUserDisplayName = profile ? getDisplayName(profile) : 'Vector user';
   const selectedTypingText = isSelectedChatWritable && selectedTypingStates.length > 0
     ? selectedTypingStates.length === 1
       ? `${selectedTypingStates[0].username || 'Пользователь'} печатает…`
