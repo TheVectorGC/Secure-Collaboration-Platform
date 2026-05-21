@@ -36,6 +36,9 @@ public class ChatEntity {
     @Column(name = "name", length = 120)
     private String name;
 
+    @Column(name = "avatar_data_url", columnDefinition = "TEXT")
+    private String avatarDataUrl;
+
     @Column(name = "direct_chat_key", unique = true, length = 80)
     private String directChatKey;
 

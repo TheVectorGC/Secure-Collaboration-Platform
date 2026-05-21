@@ -3,6 +3,7 @@ package dev.messagingservice.controller;
 import dev.messagingservice.model.dto.request.AddGroupParticipantRequestDto;
 import dev.messagingservice.model.dto.request.CreateDirectChatRequestDto;
 import dev.messagingservice.model.dto.request.CreateGroupChatRequestDto;
+import dev.messagingservice.model.dto.request.UpdateGroupAvatarRequestDto;
 import dev.messagingservice.model.dto.response.ChatResponseDto;
 import dev.messagingservice.service.ChatService;
 import dev.messagingservice.service.CurrentAccountService;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -83,6 +85,19 @@ public class ChatController {
             currentAccountService.getCurrentAccountId(),
             chatId,
             participantAccountId
+        ));
+    }
+
+    @Operation(summary = "Update group avatar")
+    @PutMapping("/{chatId}/avatar")
+    public ResponseEntity<ChatResponseDto> updateGroupAvatar(
+        @PathVariable UUID chatId,
+        @Valid @RequestBody UpdateGroupAvatarRequestDto updateGroupAvatarRequestDto
+    ) {
+        return ResponseEntity.ok(chatService.updateGroupAvatar(
+            currentAccountService.getCurrentAccountId(),
+            chatId,
+            updateGroupAvatarRequestDto
         ));
     }
 

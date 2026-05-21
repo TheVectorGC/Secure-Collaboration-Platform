@@ -104,6 +104,47 @@ public class ProfileServiceImpl implements ProfileService {
                 .toList();
     }
 
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AccountProfileResponseDto> getProfilesByAccountIds(List<UUID> accountIds) {
+        if (accountIds == null || accountIds.isEmpty()) {
+            return List.of();
+        }
+
+        List<UUID> uniqueAccountIds = accountIds.stream()
+                .filter(accountId -> accountId != null)
+                .distinct()
+                .limit(500)
+                .toList();
+
+        if (uniqueAccountIds.isEmpty()) {
+            return List.of();
+        }
+
+        Map<UUID, AccountEntity> accountById = new LinkedHashMap<>();
+        accountRepository.findAllById(uniqueAccountIds)
+                .forEach(accountEntity -> accountById.put(accountEntity.getId(), accountEntity));
+
+        Map<UUID, ProfileEntity> profileByAccountId = new LinkedHashMap<>();
+        profileRepository.findByAccountIdIn(uniqueAccountIds)
+                .forEach(profileEntity -> profileByAccountId.put(profileEntity.getAccountId(), profileEntity));
+
+        return uniqueAccountIds.stream()
+                .map(accountId -> {
+                    AccountEntity accountEntity = accountById.get(accountId);
+                    ProfileEntity profileEntity = profileByAccountId.get(accountId);
+
+                    if (accountEntity == null || profileEntity == null) {
+                        return null;
+                    }
+
+                    return mappingService.mapToAccountProfileResponseDto(accountEntity, profileEntity);
+                })
+                .filter(profileResponseDto -> profileResponseDto != null)
+                .toList();
+    }
+
     private AccountEntity findAccountByUsername(String username) {
         return accountRepository.findByUsername(username)
                 .orElseThrow(() -> new AccountNotFoundException("Account with username '" + username + "' not found."));

@@ -1410,6 +1410,7 @@ export function GroupManagementModal({
   onClose,
   onAddParticipant,
   onRemoveParticipant,
+  onUpdateGroupAvatar,
   onOpenProfile,
 }: {
   isOpen: boolean;
@@ -1421,6 +1422,7 @@ export function GroupManagementModal({
   onClose: () => void;
   onAddParticipant: (profile: ProfileResponseDto, historyAccessMode: GroupHistoryAccessMode) => Promise<void>;
   onRemoveParticipant: (participantAccountId: string) => Promise<void>;
+  onUpdateGroupAvatar: (chatId: string, file: File | null) => Promise<void>;
   onOpenProfile: (profile: ProfileResponseDto) => void;
 }) {
   const upsertProfiles = useDirectoryStore((state) => state.upsertProfiles);
@@ -1430,6 +1432,7 @@ export function GroupManagementModal({
   const [isSearching, setIsSearching] = useState(false);
   const [busyAccountId, setBusyAccountId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isAvatarUploading, setIsAvatarUploading] = useState(false);
 
   const activeParticipantIds = useMemo(() => {
     if (!chat) {
@@ -1459,6 +1462,7 @@ export function GroupManagementModal({
       setIsSearching(false);
       setBusyAccountId(null);
       setErrorMessage(null);
+      setIsAvatarUploading(false);
       return;
     }
 
@@ -1514,6 +1518,26 @@ export function GroupManagementModal({
     }
   }
 
+  async function handleGroupAvatarSelected(file: File | null) {
+    if (!chat || !canManageMembers) {
+      return;
+    }
+
+    setIsAvatarUploading(true);
+    setErrorMessage(null);
+
+    try {
+      await onUpdateGroupAvatar(chat.chatId, file);
+    }
+    catch (error) {
+      console.error(error);
+      setErrorMessage('Не удалось обновить аватар группы.');
+    }
+    finally {
+      setIsAvatarUploading(false);
+    }
+  }
+
   async function handleRemove(accountId: string) {
     setBusyAccountId(accountId);
     setErrorMessage(null);
@@ -1545,8 +1569,41 @@ export function GroupManagementModal({
           </div>
 
           <div className="mt-6 rounded-3xl border border-white/10 bg-white/[0.03] p-4">
-            <div className="text-sm font-semibold text-zinc-200">{chat.name ?? 'Групповой чат'}</div>
-            <div className="mt-1 text-xs text-zinc-500">{activeParticipants.length} активных участников • защищённый чат</div>
+            <div className="flex items-center gap-4">
+              <UserAvatar label={chat.name ?? 'Групповой чат'} imageUrl={chat.avatarDataUrl} size="lg" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-semibold text-zinc-200">{chat.name ?? 'Групповой чат'}</div>
+                <div className="mt-1 text-xs text-zinc-500">{activeParticipants.length} активных участников • защищённый чат</div>
+                {canManageMembers && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <label className="inline-flex cursor-pointer items-center rounded-2xl border border-violet-300/20 bg-violet-500/10 px-3 py-1.5 text-xs text-violet-100 transition hover:bg-violet-500/15">
+                      {isAvatarUploading ? 'Загрузка…' : 'Сменить аватар'}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={isAvatarUploading}
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0] ?? null;
+                          event.target.value = '';
+                          void handleGroupAvatarSelected(file);
+                        }}
+                      />
+                    </label>
+                    {chat.avatarDataUrl && (
+                      <button
+                        type="button"
+                        onClick={() => void handleGroupAvatarSelected(null)}
+                        disabled={isAvatarUploading}
+                        className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-zinc-300 transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Убрать
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="mt-5 max-h-[48vh] space-y-3 overflow-y-auto pr-1">
@@ -1672,7 +1729,7 @@ export function GroupManagementModal({
 
               return (
                 <div key={profile.accountId} className="flex items-center gap-3 rounded-3xl border border-white/8 bg-white/[0.03] px-4 py-3">
-                  <Avatar label={displayName} />
+                  <UserAvatar label={displayName} imageUrl={getAccountAvatarUrl(profile)} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-semibold text-zinc-100">{displayName}</div>
                     <div className="mt-1 truncate text-xs text-zinc-500">@{profile.username} • {profile.email}</div>
@@ -1904,7 +1961,7 @@ export function SettingsModal({
 
   useEffect(() => {
     setLocalAvatarDataUrl(profile?.avatarDataUrl ?? localStorage.getItem(getLocalAvatarStorageKey(profile?.accountId)));
-  }, [profile?.accountId]);
+  }, [profile?.accountId, profile?.avatarDataUrl]);
 
   useEffect(() => {
     if (isOpen && activeTab === 'devices') {

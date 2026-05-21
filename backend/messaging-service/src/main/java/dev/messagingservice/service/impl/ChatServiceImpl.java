@@ -7,6 +7,7 @@ import dev.messagingservice.exception.ChatNotFoundException;
 import dev.messagingservice.model.dto.request.AddGroupParticipantRequestDto;
 import dev.messagingservice.model.dto.request.CreateDirectChatRequestDto;
 import dev.messagingservice.model.dto.request.CreateGroupChatRequestDto;
+import dev.messagingservice.model.dto.request.UpdateGroupAvatarRequestDto;
 import dev.messagingservice.model.dto.response.ChatParticipantResponseDto;
 import dev.messagingservice.model.dto.response.ChatParticipantVisibilityWindowResponseDto;
 import dev.messagingservice.model.dto.response.ChatResponseDto;
@@ -45,6 +46,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class ChatServiceImpl implements ChatService {
     private static final UUID SYSTEM_DEVICE_ID = new UUID(0L, 0L);
+    private static final int MAX_AVATAR_DATA_URL_LENGTH = 700000;
 
     private final ChatRepository chatRepository;
     private final ChatParticipantRepository chatParticipantRepository;
@@ -243,6 +245,27 @@ public class ChatServiceImpl implements ChatService {
         return chatResponseDto;
     }
 
+
+    @Override
+    @Transactional
+    public ChatResponseDto updateGroupAvatar(UUID currentAccountId, UUID chatId, UpdateGroupAvatarRequestDto requestDto) {
+        ChatEntity chatEntity = getGroupChatForAdministration(currentAccountId, chatId);
+        String avatarDataUrl = normalizeAvatarDataUrl(requestDto.avatarDataUrl());
+        OffsetDateTime now = OffsetDateTime.now();
+        chatEntity.setAvatarDataUrl(avatarDataUrl);
+        chatEntity.setUpdatedAt(now);
+        ChatEntity savedChatEntity = chatRepository.save(chatEntity);
+
+        List<ChatParticipantEntity> participantEntities = chatParticipantRepository.findByChatId(chatId);
+        List<UUID> recipientAccountIds = participantEntities.stream()
+            .filter(currentParticipant -> currentParticipant.getStatus() == ChatParticipantStatus.ACTIVE)
+            .map(ChatParticipantEntity::getAccountId)
+            .toList();
+        ChatResponseDto chatResponseDto = mapToChatResponseDto(savedChatEntity, participantEntities);
+        publishChatUpdatedEvent(chatResponseDto, recipientAccountIds);
+        return chatResponseDto;
+    }
+
     @Override
     @Transactional(readOnly = true)
     public List<ChatResponseDto> getCurrentAccountChats(UUID currentAccountId) {
@@ -364,6 +387,25 @@ public class ChatServiceImpl implements ChatService {
         }
 
         return new HistoryBoundary(boundaryMessageEntity.getId(), boundaryMessageEntity.getCreatedAt());
+    }
+
+
+    private String normalizeAvatarDataUrl(String avatarDataUrl) {
+        if (avatarDataUrl == null || avatarDataUrl.trim().isEmpty()) {
+            return null;
+        }
+
+        String preparedAvatarDataUrl = avatarDataUrl.trim();
+
+        if (!preparedAvatarDataUrl.startsWith("data:image/")) {
+            throw new IllegalArgumentException("Group avatar must be an image data URL.");
+        }
+
+        if (preparedAvatarDataUrl.length() > MAX_AVATAR_DATA_URL_LENGTH) {
+            throw new IllegalArgumentException("Group avatar data URL is too large.");
+        }
+
+        return preparedAvatarDataUrl;
     }
 
     private ChatEntity getGroupChatForAdministration(UUID currentAccountId, UUID chatId) {
@@ -546,6 +588,7 @@ public class ChatServiceImpl implements ChatService {
             chatEntity.getId(),
             chatEntity.getType(),
             chatEntity.getName(),
+            chatEntity.getAvatarDataUrl(),
             chatEntity.getCurrentKeyEpoch() == null ? 1 : chatEntity.getCurrentKeyEpoch(),
             participantAccountIds,
             participantResponseDtos,

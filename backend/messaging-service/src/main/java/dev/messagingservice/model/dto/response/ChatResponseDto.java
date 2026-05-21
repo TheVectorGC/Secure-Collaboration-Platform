@@ -17,6 +17,9 @@ public record ChatResponseDto(
     @Schema(description = "Group display name. Null for direct chats.")
     String name,
 
+    @Schema(description = "Group avatar data URL. Null for direct and self chats or groups without uploaded avatar.")
+    String avatarDataUrl,
+
     @Schema(description = "Current group key epoch. For direct and self chats value is 1.")
     Integer currentKeyEpoch,
 

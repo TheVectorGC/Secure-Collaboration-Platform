@@ -117,7 +117,7 @@ export function ChatSidebar({
                       <Star size={18} />
                     </div>
                   ) : (
-                    <UserAvatar label={presentation.avatarLabel} imageUrl={getAccountAvatarUrl(presentation.companionProfile)} />
+                    <UserAvatar label={presentation.avatarLabel} imageUrl={chat.type === 'GROUP' ? chat.avatarDataUrl : getAccountAvatarUrl(presentation.companionProfile)} />
                   )}
                   {chat.type === 'DIRECT' && (
                     <span className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-[#17181c] ${companionPresence?.isOnline ? 'bg-emerald-400' : 'bg-zinc-600'}`} />

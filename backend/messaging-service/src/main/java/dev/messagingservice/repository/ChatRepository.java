@@ -19,8 +19,8 @@ public interface ChatRepository extends JpaRepository<ChatEntity, UUID> {
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query(
         value = """
-            insert into chats (id, type, name, direct_chat_key, self_account_id, current_key_epoch, created_by_account_id, created_at, updated_at)
-            values (:chatId, 'SELF', null, null, :accountId, 1, :accountId, :createdAt, :createdAt)
+            insert into chats (id, type, name, avatar_data_url, direct_chat_key, self_account_id, current_key_epoch, created_by_account_id, created_at, updated_at)
+            values (:chatId, 'SELF', null, null, null, :accountId, 1, :accountId, :createdAt, :createdAt)
             on conflict (self_account_id) do nothing
             """,
         nativeQuery = true
@@ -34,8 +34,8 @@ public interface ChatRepository extends JpaRepository<ChatEntity, UUID> {
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query(
         value = """
-            insert into chats (id, type, name, direct_chat_key, self_account_id, current_key_epoch, created_by_account_id, created_at, updated_at)
-            values (:chatId, 'DIRECT', null, :directChatKey, null, 1, :createdByAccountId, :createdAt, :createdAt)
+            insert into chats (id, type, name, avatar_data_url, direct_chat_key, self_account_id, current_key_epoch, created_by_account_id, created_at, updated_at)
+            values (:chatId, 'DIRECT', null, null, :directChatKey, null, 1, :createdByAccountId, :createdAt, :createdAt)
             on conflict (direct_chat_key) do nothing
             """,
         nativeQuery = true

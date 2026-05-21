@@ -97,6 +97,10 @@ export type CreateGroupChatRequestDto = {
   participantAccountIds: string[];
 };
 
+export type UpdateGroupAvatarRequestDto = {
+  avatarDataUrl: string | null;
+};
+
 export type GroupHistoryAccessMode = 'FULL_HISTORY' | 'NEW_MESSAGES_ONLY' | 'FROM_MESSAGE';
 
 export type AddGroupParticipantRequestDto = {
@@ -129,6 +133,7 @@ export type ChatResponseDto = {
   chatId: string;
   type: ChatType;
   name: string | null;
+  avatarDataUrl?: string | null;
   currentKeyEpoch: number;
   participantAccountIds: string[];
   participants: ChatParticipantResponseDto[];

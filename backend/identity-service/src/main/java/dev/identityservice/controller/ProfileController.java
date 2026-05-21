@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.security.Principal;
 import java.util.List;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -39,6 +40,12 @@ public class ProfileController {
             @Valid @RequestBody UpdateProfileAvatarRequestDto requestDto
     ) {
         return ResponseEntity.ok(profileService.updateCurrentProfileAvatar(principal.getName(), requestDto));
+    }
+
+    @Operation(summary = "Get profiles by account IDs")
+    @GetMapping("/accounts")
+    public ResponseEntity<List<AccountProfileResponseDto>> getProfilesByAccountIds(@RequestParam List<UUID> accountIds) {
+        return ResponseEntity.ok(profileService.getProfilesByAccountIds(accountIds));
     }
 
     @Operation(summary = "Search corporate users")

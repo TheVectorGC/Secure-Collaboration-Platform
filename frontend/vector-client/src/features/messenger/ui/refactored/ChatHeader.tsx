@@ -51,7 +51,7 @@ export function ChatHeader({
                 <Star size={20} />
               </div>
               )
-            : <UserAvatar label={selectedChatPresentation.avatarLabel} imageUrl={getAccountAvatarUrl(selectedChatPresentation.companionProfile)} size="lg" />}
+            : <UserAvatar label={selectedChatPresentation.avatarLabel} imageUrl={selectedChat.type === 'GROUP' ? selectedChat.avatarDataUrl : getAccountAvatarUrl(selectedChatPresentation.companionProfile)} size="lg" />}
 
           <div className="min-w-0">
             <div className="truncate text-lg font-semibold text-zinc-50 transition group-hover:text-violet-100">

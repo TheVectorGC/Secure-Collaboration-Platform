@@ -83,7 +83,7 @@ export function ForwardChatPicker({
                     <Star size={18} />
                   </div>
                 ) : (
-                  <UserAvatar label={presentation.avatarLabel} imageUrl={getAccountAvatarUrl(presentation.companionProfile)} />
+                  <UserAvatar label={presentation.avatarLabel} imageUrl={chat.type === 'GROUP' ? chat.avatarDataUrl : getAccountAvatarUrl(presentation.companionProfile)} />
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold text-zinc-100">{presentation.title}</div>

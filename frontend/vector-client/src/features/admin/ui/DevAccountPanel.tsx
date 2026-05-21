@@ -12,6 +12,8 @@ export function DevAccountPanel() {
   const defaultUsername = useMemo(() => `user${Math.floor(Math.random() * 10000)}`, []);
   const [username, setUsername] = useState(defaultUsername);
   const [email, setEmail] = useState(`${defaultUsername}@company.local`);
+  const [firstName, setFirstName] = useState('Test');
+  const [lastName, setLastName] = useState('User');
   const [password, setPassword] = useState('UserPassword123!');
   const [isLoading, setIsLoading] = useState(false);
   const [createdAccount, setCreatedAccount] = useState<CreatedDevAccount | null>(null);
@@ -27,8 +29,8 @@ export function DevAccountPanel() {
       const registration = await createAccountRegistration({
         username,
         email,
-        firstName: 'Test',
-        lastName: 'User',
+        firstName,
+        lastName,
         middleName: null,
         expiresAt,
       });
@@ -71,6 +73,18 @@ export function DevAccountPanel() {
           onChange={(event) => setEmail(event.target.value)}
           className="w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-zinc-200 outline-none focus:border-violet-400/50"
           placeholder="email"
+        />
+        <input
+          value={firstName}
+          onChange={(event) => setFirstName(event.target.value)}
+          className="w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-zinc-200 outline-none focus:border-violet-400/50"
+          placeholder="Имя"
+        />
+        <input
+          value={lastName}
+          onChange={(event) => setLastName(event.target.value)}
+          className="w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-zinc-200 outline-none focus:border-violet-400/50"
+          placeholder="Фамилия"
         />
         <input
           value={password}

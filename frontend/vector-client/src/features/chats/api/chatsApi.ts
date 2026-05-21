@@ -1,5 +1,5 @@
 import { messagingHttpClient } from '../../../shared/api/httpClient';
-import type { AddGroupParticipantRequestDto, ChatResponseDto, CreateDirectChatRequestDto, CreateGroupChatRequestDto } from '../../../shared/types/api';
+import type { AddGroupParticipantRequestDto, ChatResponseDto, CreateDirectChatRequestDto, CreateGroupChatRequestDto, UpdateGroupAvatarRequestDto } from '../../../shared/types/api';
 
 export async function getChats(): Promise<ChatResponseDto[]> {
   const response = await messagingHttpClient.get<ChatResponseDto[]>('/api/v1/chats');
@@ -34,5 +34,10 @@ export async function addGroupParticipant(chatId: string, request: AddGroupParti
 
 export async function removeGroupParticipant(chatId: string, participantAccountId: string): Promise<ChatResponseDto> {
   const response = await messagingHttpClient.delete<ChatResponseDto>(`/api/v1/chats/${chatId}/participants/${participantAccountId}`);
+  return response.data;
+}
+
+export async function updateGroupChatAvatar(chatId: string, request: UpdateGroupAvatarRequestDto): Promise<ChatResponseDto> {
+  const response = await messagingHttpClient.put<ChatResponseDto>(`/api/v1/chats/${chatId}/avatar`, request);
   return response.data;
 }

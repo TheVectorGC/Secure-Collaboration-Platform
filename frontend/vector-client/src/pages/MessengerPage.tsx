@@ -4,14 +4,17 @@ import { logout as logoutRequest } from '../features/auth/api/authApi';
 import { useAuthStore } from '../features/auth/model/authStore';
 import { useCryptoBootstrap } from '../features/crypto/useCryptoBootstrap';
 import { useCryptoStore } from '../features/crypto/model/cryptoStore';
+import { getProfilesByAccountIds } from '../features/directory/api/profilesApi';
 import { useDirectoryStore } from '../features/directory/model/directoryStore';
 import { getChatMessages } from '../features/messages/api/messagesApi';
+import { updateGroupChatAvatar } from '../features/chats/api/chatsApi';
 import { useMessengerStore } from '../features/messenger/model/messengerStore';
 import { useRealtimeConnection } from '../features/realtime/useRealtimeConnection';
 import { useRealtimeStore } from '../features/realtime/model/realtimeStore';
 import { getDirectCompanionAccountId } from '../shared/lib/profile';
 import type { ProfileResponseDto } from '../shared/types/api';
 import {
+  createLocalAvatarDataUrl,
   getLocalAvatarStorageKey,
   getVisibleChatMessages,
   getLastTimelineMessage,
@@ -79,6 +82,7 @@ export function MessengerPage() {
 
   const profilesById = useDirectoryStore((state) => state.profilesById);
   const upsertProfile = useDirectoryStore((state) => state.upsertProfile);
+  const upsertProfiles = useDirectoryStore((state) => state.upsertProfiles);
 
   const [chatSearchQuery, setChatSearchQuery] = useState('');
   const [isCreateChatOpen, setIsCreateChatOpen] = useState(false);
@@ -144,9 +148,61 @@ export function MessengerPage() {
     }
   }, [profile, upsertProfile]);
 
+  const knownProfileAccountIds = useMemo(() => {
+    const accountIds = new Set<string>();
+
+    if (profile?.accountId) {
+      accountIds.add(profile.accountId);
+    }
+
+    chats.forEach((chat) => {
+      chat.participantAccountIds.forEach((accountId) => accountIds.add(accountId));
+      chat.participants?.forEach((participant) => accountIds.add(participant.accountId));
+    });
+
+    return Array.from(accountIds);
+  }, [chats, profile?.accountId]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function refreshKnownProfiles() {
+      if (knownProfileAccountIds.length === 0) {
+        return;
+      }
+
+      try {
+        const profiles = await getProfilesByAccountIds(knownProfileAccountIds);
+
+        if (!isCancelled) {
+          upsertProfiles(profiles);
+
+          if (profile?.accountId) {
+            const currentProfile = profiles.find((loadedProfile) => loadedProfile.accountId === profile.accountId);
+
+            if (currentProfile) {
+              setProfile(currentProfile);
+            }
+          }
+        }
+      }
+      catch (error) {
+        console.warn('Failed to refresh known profiles.', error);
+      }
+    }
+
+    void refreshKnownProfiles();
+    const intervalId = window.setInterval(refreshKnownProfiles, 10000);
+
+    return () => {
+      isCancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [knownProfileAccountIds, profile?.accountId, setProfile, upsertProfiles]);
+
   useEffect(() => {
     setLocalAvatarDataUrl(profile?.avatarDataUrl ?? localStorage.getItem(getLocalAvatarStorageKey(profile?.accountId)));
-  }, [profile?.accountId]);
+  }, [profile?.accountId, profile?.avatarDataUrl]);
 
   useEffect(() => {
     function handleKeyboardShortcut(event: globalThis.KeyboardEvent) {
@@ -444,6 +500,13 @@ export function MessengerPage() {
     }
   }
 
+  async function handleUpdateGroupAvatar(chatId: string, file: File | null) {
+    setErrorMessage(null);
+    const avatarDataUrl = file ? await createLocalAvatarDataUrl(file) : null;
+    const updatedChat = await updateGroupChatAvatar(chatId, { avatarDataUrl });
+    upsertChat(updatedChat);
+  }
+
   const {
     handleCreateDirectChat,
     handleCreateGroupChat,
@@ -535,6 +598,7 @@ export function MessengerPage() {
         onClose={() => setIsGroupManagementOpen(false)}
         onAddParticipant={handleAddGroupParticipant}
         onRemoveParticipant={handleRemoveGroupParticipant}
+        onUpdateGroupAvatar={handleUpdateGroupAvatar}
         onOpenProfile={setMiniProfile}
       />
 

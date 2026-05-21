@@ -396,6 +396,7 @@ public class MessageServiceImpl implements MessageService {
             chatEntity.getId(),
             chatEntity.getType(),
             chatEntity.getName(),
+            chatEntity.getAvatarDataUrl(),
             chatEntity.getCurrentKeyEpoch() == null ? 1 : chatEntity.getCurrentKeyEpoch(),
             participantAccountIds,
             participantResponseDtos,
@@ -516,5 +517,3 @@ public class MessageServiceImpl implements MessageService {
         return value.trim();
     }
 }
-
-
