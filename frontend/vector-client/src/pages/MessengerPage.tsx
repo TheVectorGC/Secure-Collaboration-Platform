@@ -53,6 +53,7 @@ import { useMessageSendingController } from '../features/messenger/hooks/useMess
 import { useChatDocumentsController } from '../features/messenger/hooks/useChatDocumentsController';
 import { useGroupChatController } from '../features/messenger/hooks/useGroupChatController';
 import { useMessageNavigationController } from '../features/messenger/hooks/useMessageNavigationController';
+import { useChatViewportController } from '../features/messenger/hooks/useChatViewportController';
 
 export function MessengerPage() {
   const navigate = useNavigate();
@@ -442,6 +443,24 @@ export function MessengerPage() {
     setIsDeleteChatConfirmOpen,
   });
 
+  const {
+    timelineScrollContainerRef,
+    unreadIncomingCount,
+    isJumpToBottomVisible,
+    handleTimelineScroll,
+    handleJumpToBottom,
+  } = useChatViewportController({
+    selectedChatId,
+    currentAccountId: profile?.accountId,
+    visibleSelectedMessages,
+    localChatState,
+    isSelectedChatWritable,
+    updateLocalChatState,
+    messagesEndRef,
+    messageElementRefs,
+    readMarkersRef,
+  });
+
   const { refreshSelectedChat } = useChatDataController({
     selectedChatId,
     selectedChat,
@@ -460,8 +479,6 @@ export function MessengerPage() {
     setErrorMessage,
     setReadDetailsMessageId,
     deliveredMarkersRef,
-    readMarkersRef,
-    messagesEndRef,
   });
 
   const {
@@ -726,7 +743,12 @@ export function MessengerPage() {
               selectedTypingText={selectedTypingText}
               messageElementRefs={messageElementRefs}
               messagesEndRef={messagesEndRef}
+              timelineScrollContainerRef={timelineScrollContainerRef}
+              unreadIncomingCount={unreadIncomingCount}
+              isJumpToBottomVisible={isJumpToBottomVisible}
               onToggleForwardSelectedMessage={toggleForwardSelectedMessage}
+              onTimelineScroll={handleTimelineScroll}
+              onJumpToBottom={handleJumpToBottom}
               onOpenMessageContextMenu={openMessageContextMenu}
               onScrollToMessage={scrollToMessage}
               onDownloadAttachment={handleDownloadAttachment}

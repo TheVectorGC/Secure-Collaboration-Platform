@@ -1,5 +1,5 @@
 import type { MutableRefObject, RefObject } from 'react';
-import { Check, CheckCheck, Download, FileText } from 'lucide-react';
+import { ArrowDown, Check, CheckCheck, Download, FileText } from 'lucide-react';
 import { getAccountDisplayName } from '../../../../shared/lib/profile';
 import { formatFileSize, parseDocumentAttachmentMessageContent, parseFileAttachmentMessageContent } from '../../../media/lib/fileCrypto';
 import { DocumentAttachmentPreview, ImageAttachmentPreview } from '../MessageAttachments';
@@ -33,7 +33,12 @@ type MessageTimelineProps = {
   selectedTypingText: string | null;
   messageElementRefs: MutableRefObject<Record<string, HTMLDivElement | null>>;
   messagesEndRef: RefObject<HTMLDivElement | null>;
+  timelineScrollContainerRef: RefObject<HTMLDivElement | null>;
+  unreadIncomingCount: number;
+  isJumpToBottomVisible: boolean;
   onToggleForwardSelectedMessage: (message: MessageResponseDto) => void;
+  onTimelineScroll: () => void;
+  onJumpToBottom: () => void;
   onOpenMessageContextMenu: (event: React.MouseEvent<HTMLElement>, messageId: string) => void;
   onScrollToMessage: (messageId: string) => void;
   onDownloadAttachment: (attachment: FileAttachmentMessageContent | DocumentAttachmentMessageContent) => Promise<void>;
@@ -55,7 +60,12 @@ export function MessageTimeline({
   selectedTypingText,
   messageElementRefs,
   messagesEndRef,
+  timelineScrollContainerRef,
+  unreadIncomingCount,
+  isJumpToBottomVisible,
   onToggleForwardSelectedMessage,
+  onTimelineScroll,
+  onJumpToBottom,
   onOpenMessageContextMenu,
   onScrollToMessage,
   onDownloadAttachment,
@@ -66,8 +76,9 @@ export function MessageTimeline({
   const renderedMessages = visibleSelectedMessages.filter((message) => message.messageType !== 'GROUP_KEY_DISTRIBUTION');
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto px-8 py-6">
-      <div className="mx-auto flex max-w-4xl flex-col gap-3">
+    <div className="relative min-h-0 flex-1">
+      <div ref={timelineScrollContainerRef} onScroll={onTimelineScroll} className="h-full overflow-y-auto px-8 py-6">
+        <div className="mx-auto flex max-w-4xl flex-col gap-3">
         {visibleSelectedMessages.length === 0 && (
           <div className="rounded-[1.8rem] border border-dashed border-white/10 bg-white/[0.02] p-8 text-center text-sm text-zinc-500">
             Пока сообщений нет. Напиши первое сообщение ниже.
@@ -311,8 +322,21 @@ export function MessageTimeline({
           </div>
         )}
 
-        <div ref={messagesEndRef} />
+          <div ref={messagesEndRef} />
+        </div>
       </div>
+
+      {isJumpToBottomVisible && (
+        <button
+          type="button"
+          onClick={onJumpToBottom}
+          className="absolute bottom-5 right-8 inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#24262d]/95 px-4 py-2 text-sm font-medium text-zinc-100 shadow-2xl shadow-black/35 backdrop-blur transition hover:-translate-y-0.5 hover:bg-[#2d3038]"
+          title="Перейти к новым сообщениям"
+        >
+          <ArrowDown size={16} />
+          <span>{unreadIncomingCount > 99 ? '99+' : unreadIncomingCount}</span>
+        </button>
+      )}
     </div>
   );
 }

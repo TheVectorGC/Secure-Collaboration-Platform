@@ -1,9 +1,9 @@
 import { useEffect, type MutableRefObject } from 'react';
 import { createSelfChat, getChat, getChats } from '../../chats/api/chatsApi';
-import { getChatMessages, markChatRead, markMessageDelivered } from '../../messages/api/messagesApi';
+import { getChatMessages, markMessageDelivered } from '../../messages/api/messagesApi';
 import type { ChatResponseDto, MessageResponseDto } from '../../../shared/types/api';
 import type { LocalChatState } from '../../../pages/MessengerPageSupport';
-import { getLastTimelineMessage } from '../../../pages/MessengerPageSupport';
+
 
 type UpdateLocalChatState = (updater: (previousValue: LocalChatState) => LocalChatState) => void;
 
@@ -25,8 +25,6 @@ type UseChatDataControllerParams = {
   setErrorMessage: (message: string | null) => void;
   setReadDetailsMessageId: (messageId: string | null) => void;
   deliveredMarkersRef: MutableRefObject<Set<string>>;
-  readMarkersRef: MutableRefObject<Set<string>>;
-  messagesEndRef: MutableRefObject<HTMLDivElement | null>;
 };
 
 export function useChatDataController(params: UseChatDataControllerParams) {
@@ -47,8 +45,6 @@ export function useChatDataController(params: UseChatDataControllerParams) {
     setErrorMessage,
     setReadDetailsMessageId,
     deliveredMarkersRef,
-    readMarkersRef,
-    messagesEndRef,
   } = params;
 
   async function refreshSelectedChat(options?: { silent?: boolean }) {
@@ -203,32 +199,8 @@ export function useChatDataController(params: UseChatDataControllerParams) {
   }, [selectedChatId]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
-  }, [selectedChatId]);
-
-  useEffect(() => {
     setReadDetailsMessageId(null);
   }, [selectedChatId]);
-
-  useEffect(() => {
-    if (!selectedChatId || visibleSelectedMessages.length === 0) {
-      return;
-    }
-
-    const lastVisibleMessage = getLastTimelineMessage(visibleSelectedMessages);
-
-    if (!lastVisibleMessage) {
-      return;
-    }
-
-    updateLocalChatState((previousValue) => ({
-      ...previousValue,
-      readAtByChatId: {
-        ...previousValue.readAtByChatId,
-        [selectedChatId]: lastVisibleMessage.createdAt,
-      },
-    }));
-  }, [selectedChatId, visibleSelectedMessages]);
 
   useEffect(() => {
     if (!selectedChatId || !currentAccountId || visibleSelectedMessages.length === 0 || !isSelectedChatWritable) {
@@ -254,22 +226,6 @@ export function useChatDataController(params: UseChatDataControllerParams) {
       });
     });
 
-    const lastIncomingMessage = incomingMessages.at(-1);
-
-    if (!lastIncomingMessage) {
-      return;
-    }
-
-    const readMarker = `${selectedChatId}:${lastIncomingMessage.messageId}:read`;
-
-    if (readMarkersRef.current.has(readMarker)) {
-      return;
-    }
-
-    readMarkersRef.current.add(readMarker);
-    markChatRead(selectedChatId, lastIncomingMessage.messageId).catch((error) => {
-      console.error(error);
-    });
   }, [isSelectedChatWritable, currentAccountId, selectedChatId, visibleSelectedMessages]);
 
   return {
