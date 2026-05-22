@@ -1,5 +1,5 @@
 import { messagingHttpClient } from '../../../shared/api/httpClient';
-import type { AddGroupParticipantRequestDto, ChatResponseDto, CreateDirectChatRequestDto, CreateGroupChatRequestDto, UpdateGroupAvatarRequestDto } from '../../../shared/types/api';
+import type { AccountKeyEnvelopeResponseDto, AddGroupParticipantRequestDto, ChatResponseDto, CreateDirectChatRequestDto, CreateGroupChatRequestDto, UpdateGroupAvatarRequestDto, UpsertGroupEpochKeyEnvelopeRequestDto } from '../../../shared/types/api';
 
 export async function getChats(): Promise<ChatResponseDto[]> {
   const response = await messagingHttpClient.get<ChatResponseDto[]>('/api/v1/chats');
@@ -39,5 +39,16 @@ export async function removeGroupParticipant(chatId: string, participantAccountI
 
 export async function updateGroupChatAvatar(chatId: string, request: UpdateGroupAvatarRequestDto): Promise<ChatResponseDto> {
   const response = await messagingHttpClient.put<ChatResponseDto>(`/api/v1/chats/${chatId}/avatar`, request);
+  return response.data;
+}
+
+
+export async function upsertGroupEpochKeyEnvelope(chatId: string, request: UpsertGroupEpochKeyEnvelopeRequestDto): Promise<void> {
+  await messagingHttpClient.put(`/api/v1/chats/${chatId}/group-key-envelopes`, request);
+}
+
+
+export async function getCurrentAccountGroupEpochKeyEnvelope(chatId: string, epoch: number): Promise<AccountKeyEnvelopeResponseDto> {
+  const response = await messagingHttpClient.get<AccountKeyEnvelopeResponseDto>(`/api/v1/chats/${chatId}/group-key-envelopes/${epoch}/me`);
   return response.data;
 }

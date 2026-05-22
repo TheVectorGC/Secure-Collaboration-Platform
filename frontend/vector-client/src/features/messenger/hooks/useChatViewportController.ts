@@ -22,7 +22,7 @@ function isReadableIncomingMessage(message: MessageResponseDto, currentAccountId
   return Boolean(currentAccountId)
     && message.senderAccountId !== currentAccountId
     && message.messageType !== 'SYSTEM'
-    && message.messageType !== 'GROUP_KEY_DISTRIBUTION';
+   ;
 }
 
 function isNearTimelineBottom(element: HTMLDivElement): boolean {

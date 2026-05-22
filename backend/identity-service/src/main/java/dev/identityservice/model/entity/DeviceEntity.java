@@ -50,9 +50,27 @@ public class DeviceEntity {
     @Column(name = "client_version", length = 50)
     private String clientVersion;
 
+    @Column(name = "os_name", length = 120)
+    private String osName;
+
+    @Column(name = "os_version", length = 120)
+    private String osVersion;
+
+    @Column(name = "architecture", length = 64)
+    private String architecture;
+
+    @Column(name = "hostname", length = 120)
+    private String hostname;
+
+    @Column(name = "device_fingerprint", length = 128)
+    private String deviceFingerprint;
+
     @Column(name = "last_seen_at")
     private OffsetDateTime lastSeenAt;
 
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
+
+    @Column(name = "updated_at", nullable = false)
+    private OffsetDateTime updatedAt;
 }

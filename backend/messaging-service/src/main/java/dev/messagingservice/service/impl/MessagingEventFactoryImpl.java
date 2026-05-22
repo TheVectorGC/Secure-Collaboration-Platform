@@ -3,6 +3,8 @@ package dev.messagingservice.service.impl;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.messagingservice.model.dto.response.ChatResponseDto;
+import dev.messagingservice.model.entity.GroupEpochKeyEnvelopeEntity;
+import dev.messagingservice.model.entity.MessageAccountKeyEnvelopeEntity;
 import dev.messagingservice.model.entity.MessageDevicePayloadEntity;
 import dev.messagingservice.model.entity.MessageEntity;
 import dev.messagingservice.model.enumeration.MessagingEventType;
@@ -25,6 +27,8 @@ public class MessagingEventFactoryImpl implements MessagingEventFactory {
     public MessagingEventDto createMessageCreatedEvent(
             MessageEntity messageEntity,
             List<MessageDevicePayloadEntity> payloadEntities,
+            List<MessageAccountKeyEnvelopeEntity> accountKeyEnvelopeEntities,
+            GroupEpochKeyEnvelopeEntity groupEpochKeyEnvelopeEntity,
             List<UUID> recipientAccountIds
     ) {
         Map<String, Object> payload = new LinkedHashMap<>();
@@ -32,10 +36,17 @@ public class MessagingEventFactoryImpl implements MessagingEventFactory {
         payload.put("messageId", messageEntity.getId());
         payload.put("senderAccountId", messageEntity.getSenderAccountId());
         payload.put("senderDeviceId", messageEntity.getSenderDeviceId());
+        payload.put("clientMessageId", messageEntity.getClientMessageId());
         payload.put("messageType", messageEntity.getMessageType());
         payload.put("encryptionType", messageEntity.getEncryptionType());
         payload.put("encryptedPayload", messageEntity.getEncryptedPayload());
+        payload.put("contentAlgorithm", messageEntity.getContentAlgorithm());
+        payload.put("contentInitializationVectorBase64", messageEntity.getContentInitializationVectorBase64());
+        payload.put("contentAuthenticationTagBase64", messageEntity.getContentAuthenticationTagBase64());
+        payload.put("groupKeyEpoch", messageEntity.getGroupKeyEpoch());
         payload.put("devicePayloads", createDevicePayloads(payloadEntities));
+        payload.put("accountKeyEnvelopes", createAccountKeyEnvelopes(accountKeyEnvelopeEntities));
+        payload.put("groupEpochKeyEnvelope", groupEpochKeyEnvelopeEntity == null ? null : createGroupEpochKeyEnvelope(groupEpochKeyEnvelopeEntity));
         payload.put("createdAt", messageEntity.getCreatedAt());
 
         return createEvent(
@@ -123,6 +134,27 @@ public class MessagingEventFactoryImpl implements MessagingEventFactory {
                     return payload;
                 })
                 .toList();
+    }
+
+
+    private List<Map<String, Object>> createAccountKeyEnvelopes(List<MessageAccountKeyEnvelopeEntity> envelopeEntities) {
+        return envelopeEntities.stream()
+                .map(envelopeEntity -> {
+                    Map<String, Object> payload = new LinkedHashMap<>();
+                    payload.put("targetAccountId", envelopeEntity.getTargetAccountId());
+                    payload.put("algorithm", envelopeEntity.getAlgorithm());
+                    payload.put("encryptedKeyBase64", envelopeEntity.getEncryptedKeyBase64());
+                    return payload;
+                })
+                .toList();
+    }
+
+    private Map<String, Object> createGroupEpochKeyEnvelope(GroupEpochKeyEnvelopeEntity envelopeEntity) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("targetAccountId", envelopeEntity.getTargetAccountId());
+        payload.put("algorithm", envelopeEntity.getAlgorithm());
+        payload.put("encryptedKeyBase64", envelopeEntity.getEncryptedKeyBase64());
+        return payload;
     }
 
     private MessagingEventDto createEvent(

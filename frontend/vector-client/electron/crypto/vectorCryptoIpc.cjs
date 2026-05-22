@@ -4,7 +4,8 @@ const secureStorageService = require('./secureStorageService.cjs');
 const localCryptoRepository = require('./localCryptoRepository.cjs');
 const signalKeyService = require('./signalKeyService.cjs');
 const signalMessageService = require('./signalMessageService.cjs');
-const keyBackupService = require('./keyBackupService.cjs');
+const accountBackupService = require('./accountBackupService.cjs');
+const deviceEnvironmentService = require('./deviceEnvironmentService.cjs');
 
 function validateInitializeRequest(request) {
   if (!request || typeof request !== 'object') {
@@ -21,8 +22,12 @@ function validateInitializeRequest(request) {
 }
 
 function registerVectorCryptoIpc() {
-  ipcMain.handle('vectorCrypto:getOrCreateClientInstallationId', async (_event, namespace) => {
-    return secureStorageService.getOrCreateClientInstallationId(namespace);
+  ipcMain.handle('vectorCrypto:getOrCreateClientInstallationId', async () => {
+    return secureStorageService.getOrCreateClientInstallationId();
+  });
+
+  ipcMain.handle('vectorCrypto:getDeviceEnvironment', async () => {
+    return deviceEnvironmentService.getDeviceEnvironment();
   });
 
   ipcMain.handle('vectorCrypto:getHealth', async () => {
@@ -73,6 +78,31 @@ function registerVectorCryptoIpc() {
     return localCryptoRepository.signDocumentHash(request?.accountId, request?.deviceId, request?.documentHashBase64);
   });
 
+
+  ipcMain.handle('vectorCrypto:encryptContentWithNewKey', async (_event, request) => {
+    return signalMessageService.encryptContentWithNewKey(request);
+  });
+
+  ipcMain.handle('vectorCrypto:decryptContentWithKey', async (_event, request) => {
+    return signalMessageService.decryptContentWithKey(request);
+  });
+
+  ipcMain.handle('vectorCrypto:getOrCreateGroupEpochKey', async (_event, request) => {
+    return signalMessageService.getOrCreateGroupEpochKey(request);
+  });
+
+  ipcMain.handle('vectorCrypto:importGroupKeyFromBackupEnvelope', async (_event, request) => {
+    return signalMessageService.importGroupKeyFromBackupEnvelope(request);
+  });
+
+  ipcMain.handle('vectorCrypto:encryptGroupMessageV2', async (_event, request) => {
+    return signalMessageService.encryptGroupMessageV2(request);
+  });
+
+  ipcMain.handle('vectorCrypto:decryptGroupMessageV2', async (_event, request) => {
+    return signalMessageService.decryptGroupMessageV2(request);
+  });
+
   ipcMain.handle('vectorCrypto:encryptMessage', async (_event, request) => {
     return signalMessageService.encryptMessage(request);
   });
@@ -81,112 +111,69 @@ function registerVectorCryptoIpc() {
     return signalMessageService.encryptLocalMessage(request);
   });
 
-  ipcMain.handle('vectorCrypto:encryptGroupMessage', async (_event, request) => {
-    return signalMessageService.encryptGroupMessage(request);
-  });
-
-  ipcMain.handle('vectorCrypto:importGroupKey', async (_event, request) => {
-    return signalMessageService.importGroupKey(request);
-  });
-
   ipcMain.handle('vectorCrypto:exportGroupKeyPackagesForChat', async (_event, request) => {
     return signalMessageService.exportGroupKeyPackagesForChat(request);
   });
 
-  ipcMain.handle('vectorCrypto:decryptGroupMessage', async (_event, request) => {
-    if (request?.messageId) {
-      const cachedPlainText = localCryptoRepository.getCachedDecryptedMessage(
-        request.accountId,
-        request.deviceId,
-        request.messageId
-      );
-
-      if (cachedPlainText !== null) {
-        return {
-          plainText: cachedPlainText,
-          fromCache: true,
-        };
-      }
-    }
-
-    let decryptResponse;
-
+  ipcMain.handle('vectorCrypto:decryptMessage', async (_event, request) => {
     try {
-      decryptResponse = await signalMessageService.decryptGroupMessage(request);
+      const decryptResponse = await signalMessageService.decryptMessage(request);
+
+      return {
+        ...decryptResponse,
+        fromCache: false,
+      };
     }
     catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-
-      if (errorMessage.includes('Group key is not available')) {
+      if (request?.allowFailure) {
         return {
           plainText: null,
-          missingGroupKey: true,
           fromCache: false,
+          failed: true,
+          errorMessage: error instanceof Error ? error.message : String(error),
         };
       }
 
       throw error;
     }
+  });
 
-    if (request?.messageId) {
-      localCryptoRepository.saveCachedDecryptedMessage(
-        request.accountId,
-        request.deviceId,
-        request.messageId,
-        decryptResponse.plainText
-      );
-    }
+
+  ipcMain.handle('vectorCrypto:setAccountBackupPassword', async (_event, request) => {
+    return accountBackupService.setAccountBackupPassword(request);
+  });
+
+  ipcMain.handle('vectorCrypto:clearAccountBackupPassword', async (_event, request) => {
+    return accountBackupService.clearAccountBackupPassword(request);
+  });
+
+  ipcMain.handle('vectorCrypto:hasAccountBackupPassword', async (_event, request) => {
+    return accountBackupService.hasAccountBackupPassword(request?.accountId);
+  });
+
+
+  ipcMain.handle('vectorCrypto:createAccountBackupProfile', async (_event, request) => {
+    return accountBackupService.createAccountBackupProfile(request);
+  });
+
+  ipcMain.handle('vectorCrypto:unlockAccountBackupProfile', async (_event, request) => {
+    return accountBackupService.unlockAccountBackupProfile(request);
+  });
+
+  ipcMain.handle('vectorCrypto:encryptAccountKeyEnvelope', async (_event, request) => {
+    return accountBackupService.encryptAccountKeyEnvelope(request);
+  });
+
+  ipcMain.handle('vectorCrypto:decryptAccountKeyEnvelope', async (_event, request) => {
+    return accountBackupService.decryptAccountKeyEnvelope(request);
+  });
+
+  ipcMain.handle('vectorCrypto:clearAccountLocalVault', async (_event, request) => {
+    localCryptoRepository.clearAccountCryptoState(request?.accountId);
 
     return {
-      ...decryptResponse,
-      missingGroupKey: false,
-      fromCache: false,
+      cleared: true,
     };
-  });
-
-  ipcMain.handle('vectorCrypto:decryptMessage', async (_event, request) => {
-    if (request?.messageId) {
-      const cachedPlainText = localCryptoRepository.getCachedDecryptedMessage(
-        request.accountId,
-        request.deviceId,
-        request.messageId
-      );
-
-      if (cachedPlainText !== null) {
-        return {
-          plainText: cachedPlainText,
-          fromCache: true,
-        };
-      }
-    }
-
-    const decryptResponse = await signalMessageService.decryptMessage(request);
-
-    if (request?.messageId) {
-      localCryptoRepository.saveCachedDecryptedMessage(
-        request.accountId,
-        request.deviceId,
-        request.messageId,
-        decryptResponse.plainText
-      );
-    }
-
-    return {
-      ...decryptResponse,
-      fromCache: false,
-    };
-  });
-
-  ipcMain.handle('vectorCrypto:exportEncryptedKeyBackup', async (_event, request) => {
-    return keyBackupService.exportEncryptedKeyBackup(request);
-  });
-
-  ipcMain.handle('vectorCrypto:importEncryptedKeyBackup', async (_event, request) => {
-    return keyBackupService.importEncryptedKeyBackup(request);
-  });
-
-  ipcMain.handle('vectorCrypto:getRestoredDeviceIds', async (_event, request) => {
-    return keyBackupService.getRestoredDeviceIds(request?.accountId);
   });
 
   ipcMain.handle('vectorCrypto:clearLocalVault', async () => {

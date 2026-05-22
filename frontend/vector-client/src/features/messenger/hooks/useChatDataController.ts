@@ -157,7 +157,6 @@ export function useChatDataController(params: UseChatDataControllerParams) {
 
       return chatMessages.some((message) => (
         message.senderAccountId !== currentAccountId
-        && message.messageType !== 'GROUP_KEY_DISTRIBUTION'
         && new Date(message.createdAt).getTime() > clearedAtTime
       ));
     });
@@ -210,7 +209,6 @@ export function useChatDataController(params: UseChatDataControllerParams) {
     const incomingMessages = visibleSelectedMessages.filter((message) => (
       message.senderAccountId !== currentAccountId
       && message.messageType !== 'SYSTEM'
-      && message.messageType !== 'GROUP_KEY_DISTRIBUTION'
     ));
 
     incomingMessages.forEach((message) => {

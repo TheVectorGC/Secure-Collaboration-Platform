@@ -51,7 +51,7 @@ export function getProfileDisplayNameById(accountId: string | null, profilesById
   const profile = profilesById[accountId];
 
   if (!profile) {
-    return `${accountId.slice(0, 8)}…`;
+    return 'Профиль загружается';
   }
 
   return getDisplayName(profile);

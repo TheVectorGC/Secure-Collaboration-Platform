@@ -53,6 +53,18 @@ public class MessageEntity {
     @Column(name = "encrypted_payload", columnDefinition = "TEXT")
     private String encryptedPayload;
 
+    @Column(name = "content_algorithm", length = 64)
+    private String contentAlgorithm;
+
+    @Column(name = "content_initialization_vector_base64", length = 512)
+    private String contentInitializationVectorBase64;
+
+    @Column(name = "content_authentication_tag_base64", length = 512)
+    private String contentAuthenticationTagBase64;
+
+    @Column(name = "group_key_epoch")
+    private Integer groupKeyEpoch;
+
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 }

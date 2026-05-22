@@ -12,6 +12,8 @@ import org.springframework.stereotype.Repository;
 public interface DeviceRepository extends JpaRepository<DeviceEntity, UUID> {
     Optional<DeviceEntity> findByIdAndAccountId(UUID deviceId, UUID accountId);
 
+    Optional<DeviceEntity> findByAccountIdAndClientInstallationId(UUID accountId, String clientInstallationId);
+
     Optional<DeviceEntity> findByAccountIdAndClientInstallationIdAndStatus(
             UUID accountId,
             String clientInstallationId,
@@ -23,4 +25,6 @@ public interface DeviceRepository extends JpaRepository<DeviceEntity, UUID> {
     List<DeviceEntity> findByAccountIdAndStatus(UUID accountId, DeviceStatus status);
 
     boolean existsByIdAndAccountId(UUID deviceId, UUID accountId);
+
+    boolean existsByAccountIdAndStatus(UUID accountId, DeviceStatus status);
 }

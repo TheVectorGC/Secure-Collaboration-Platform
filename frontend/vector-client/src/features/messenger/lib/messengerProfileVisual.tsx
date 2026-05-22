@@ -90,10 +90,6 @@ export function buildAccountLastActivityMap(messagesByChatId: Record<string, Mes
   const lastActivityByAccountId: Record<string, string> = {};
 
   Object.values(messagesByChatId).flat().forEach((message) => {
-    if (message.messageType === 'GROUP_KEY_DISTRIBUTION') {
-      return;
-    }
-
     const previousActivityAt = lastActivityByAccountId[message.senderAccountId];
 
     if (!previousActivityAt || new Date(message.createdAt).getTime() > new Date(previousActivityAt).getTime()) {

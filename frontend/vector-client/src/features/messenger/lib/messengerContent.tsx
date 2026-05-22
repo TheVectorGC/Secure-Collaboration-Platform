@@ -142,7 +142,7 @@ export function getMessageContentPreview(plainText: string | undefined, fallback
 }
 
 export function isForwardableMessage(message: MessageResponseDto): boolean {
-  return message.messageType !== 'SYSTEM' && message.messageType !== 'GROUP_KEY_DISTRIBUTION';
+  return message.messageType !== 'SYSTEM';
 }
 export function getDownloadableAttachmentFromPlainText(plainText: string | null | undefined): FileAttachmentMessageContent | DocumentAttachmentMessageContent | null {
   if (!plainText || isDecryptionPlaceholder(plainText) || plainText === 'Расшифровка…') {

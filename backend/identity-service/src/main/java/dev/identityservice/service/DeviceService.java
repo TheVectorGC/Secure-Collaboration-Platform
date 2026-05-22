@@ -1,6 +1,7 @@
 package dev.identityservice.service;
 
 import dev.identityservice.model.dto.request.LoginRequestDto;
+import dev.identityservice.model.dto.request.UpdateDeviceMetadataRequestDto;
 import dev.identityservice.model.dto.response.ActiveDeviceResponseDto;
 import dev.identityservice.model.dto.response.DeviceResponseDto;
 import dev.identityservice.model.dto.response.InternalDeviceResponseDto;
@@ -17,6 +18,8 @@ public interface DeviceService {
     List<ActiveDeviceResponseDto> getActiveAccountDevices(UUID accountId);
 
     InternalDeviceResponseDto getInternalDevice(UUID deviceId);
+
+    DeviceResponseDto updateCurrentAccountDeviceMetadata(String username, UUID deviceId, UpdateDeviceMetadataRequestDto requestDto);
 
     void revokeCurrentAccountDevice(String username, UUID deviceId);
 

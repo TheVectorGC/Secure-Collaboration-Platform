@@ -2,9 +2,11 @@ import { useState, type Dispatch, type SetStateAction } from 'react';
 import { getActiveAccountDevices } from '../../devices/api/devicesApi';
 import { getPreKeyBundle } from '../../crypto/api/cryptoKeysApi';
 import { sendMessage } from '../../messages/api/messagesApi';
-import type { ChatResponseDto, DeviceMessagePayloadRequestDto, FileAttachmentMessageContent, MessageResponseDto } from '../../../shared/types/api';
-import type { ForwardedMessageSnapshot, PendingAttachmentDraft, ReplyDraft } from '../lib/messengerCore';
-import { buildRichMessageContent, getActiveGroupParticipantAccountIds, isCurrentAccountActiveInChat } from '../lib/messengerCore';
+import { getCurrentAccountGroupEpochKeyEnvelope } from '../../chats/api/chatsApi';
+import { getAccountBackupPublicKey } from '../../crypto/api/accountBackupProfileApi';
+import type { AccountKeyEnvelopeRequestDto, ChatResponseDto, DeviceMessagePayloadRequestDto, FileAttachmentMessageContent, MessageResponseDto } from '../../../shared/types/api';
+import type { ForwardedMessageSnapshot, PendingAttachmentDraft, ReplyDraft } from '../../../pages/MessengerPageSupport';
+import { buildRichMessageContent, getActiveGroupParticipantAccountIds, isCurrentAccountActiveInChat } from '../../../pages/MessengerPageSupport';
 
 type UseMessageSendingControllerParams = {
   selectedChatId: string | null;
@@ -53,6 +55,28 @@ export function useMessageSendingController(params: UseMessageSendingControllerP
     setDecryptedMessagesById,
   } = params;
   const [isSending, setIsSending] = useState(false);
+
+  async function buildAccountKeyEnvelopesForAccounts(keyBase64: string, targetAccountIds: string[]): Promise<AccountKeyEnvelopeRequestDto[]> {
+    if (!window.vectorCrypto) {
+      throw new Error('Local cryptography is not available.');
+    }
+
+    const uniqueTargetAccountIds = Array.from(new Set(targetAccountIds));
+
+    return Promise.all(uniqueTargetAccountIds.map(async (targetAccountId) => {
+      const publicKey = await getAccountBackupPublicKey(targetAccountId);
+      const encryptedEnvelope = await window.vectorCrypto!.encryptAccountKeyEnvelope({
+        backupPublicKeyBase64: publicKey.backupPublicKeyBase64,
+        keyBase64,
+      });
+
+      return {
+        targetAccountId,
+        algorithm: encryptedEnvelope.algorithm,
+        encryptedKeyBase64: encryptedEnvelope.encryptedKeyBase64,
+      };
+    }));
+  }
 
   async function buildEncryptedDevicePayloadsForAccounts(plainText: string, targetAccountIds: string[]): Promise<DeviceMessagePayloadRequestDto[]> {
     if (!deviceId || !currentAccountId) {
@@ -117,9 +141,49 @@ export function useMessageSendingController(params: UseMessageSendingControllerP
     return buildEncryptedDevicePayloadsForAccounts(plainText, getActiveGroupParticipantAccountIds(chatForRecipients));
   }
 
+
+  function isNotFoundError(error: unknown): boolean {
+    return (error as { response?: { status?: number } })?.response?.status === 404;
+  }
+
+  async function importCurrentGroupEpochKeyFromEnvelope(chatId: string, epoch: number): Promise<boolean> {
+    if (!currentAccountId || !deviceId || !window.vectorCrypto) {
+      return false;
+    }
+
+    try {
+      const envelope = await getCurrentAccountGroupEpochKeyEnvelope(chatId, epoch);
+      const decryptResponse = await window.vectorCrypto.decryptAccountKeyEnvelope({
+        accountId: currentAccountId,
+        encryptedKeyBase64: envelope.encryptedKeyBase64,
+      });
+      await window.vectorCrypto.importGroupKeyFromBackupEnvelope({
+        accountId: currentAccountId,
+        chatId,
+        epoch,
+        senderDeviceId: deviceId,
+        groupEpochKeyBase64: decryptResponse.keyBase64,
+      });
+      return true;
+    }
+    catch (error) {
+      if (isNotFoundError(error)) {
+        return false;
+      }
+
+      console.warn('Unable to import current group epoch key before sending.', {
+        chatId,
+        epoch,
+        currentAccountId,
+        error,
+      });
+      throw error;
+    }
+  }
+
   async function sendEncryptedChatContent(plainText: string, messageType: 'TEXT' | 'FILE' = 'TEXT') {
-    if (!selectedChatId || !deviceId) {
-      throw new Error('Chat or local device is not available.');
+    if (!selectedChatId || !deviceId || !window.vectorCrypto) {
+      throw new Error('Chat, local device or cryptography is not available.');
     }
 
     const currentChatState = selectedChat?.type === 'GROUP'
@@ -130,27 +194,70 @@ export function useMessageSendingController(params: UseMessageSendingControllerP
       throw new Error('Current account is not an active participant of this chat.');
     }
 
-    const groupEpoch = currentChatState?.currentKeyEpoch ?? 1;
-    const groupEncryptedMessage = currentChatState?.type === 'GROUP' && window.vectorCrypto
-      ? await window.vectorCrypto.encryptGroupMessage({
+    const targetAccountIds = getActiveGroupParticipantAccountIds(currentChatState);
+    const clientMessageId = crypto.randomUUID();
+
+    if (currentChatState?.type === 'GROUP') {
+      const groupEpoch = currentChatState.currentKeyEpoch ?? 1;
+      await importCurrentGroupEpochKeyFromEnvelope(selectedChatId, groupEpoch);
+      const groupEncryptedMessage = await window.vectorCrypto.encryptGroupMessageV2({
         accountId: currentAccountId ?? '',
         deviceId,
         chatId: selectedChatId,
         epoch: groupEpoch,
+        messageId: clientMessageId,
         plainText,
-      })
-      : null;
-    const devicePayloads = groupEncryptedMessage
-      ? await buildEncryptedDevicePayloads(groupEncryptedMessage.groupKeyPackagePlainText, currentChatState)
-      : await buildEncryptedDevicePayloads(plainText, currentChatState);
+      });
+      const devicePayloads = await buildEncryptedDevicePayloadsForAccounts(groupEncryptedMessage.groupKeyPackagePlainText, targetAccountIds);
+      const accountKeyEnvelopes = await buildAccountKeyEnvelopesForAccounts(groupEncryptedMessage.groupEpochKeyBase64, targetAccountIds);
+
+      const savedMessage = await sendMessage(selectedChatId, {
+        senderDeviceId: deviceId,
+        clientMessageId,
+        messageType,
+        encryptionType: 'GROUP',
+        encryptedPayload: groupEncryptedMessage.encryptedPayload,
+        contentAlgorithm: groupEncryptedMessage.algorithm,
+        contentInitializationVectorBase64: groupEncryptedMessage.initializationVectorBase64,
+        contentAuthenticationTagBase64: groupEncryptedMessage.authenticationTagBase64,
+        groupKeyEpoch: groupEpoch,
+        devicePayloads,
+        accountKeyEnvelopes,
+      });
+
+      upsertMessage(savedMessage);
+      setDecryptedMessagesById((previousValue) => ({
+        ...previousValue,
+        [savedMessage.messageId]: plainText,
+      }));
+
+      return savedMessage;
+    }
+
+    const encryptedContent = await window.vectorCrypto.encryptContentWithNewKey({ plainText });
+    const messageKeyPackagePlainText = JSON.stringify({
+      type: 'VECTOR_MESSAGE_KEY',
+      version: 1,
+      chatId: selectedChatId,
+      clientMessageId,
+      algorithm: encryptedContent.algorithm,
+      keyBase64: encryptedContent.keyBase64,
+    });
+    const devicePayloads = await buildEncryptedDevicePayloads(messageKeyPackagePlainText, currentChatState);
+    const accountKeyEnvelopes = await buildAccountKeyEnvelopesForAccounts(encryptedContent.keyBase64, targetAccountIds);
 
     const savedMessage = await sendMessage(selectedChatId, {
       senderDeviceId: deviceId,
-      clientMessageId: crypto.randomUUID(),
+      clientMessageId,
       messageType,
-      encryptionType: groupEncryptedMessage ? 'GROUP' : 'SIGNAL',
-      encryptedPayload: groupEncryptedMessage?.encryptedPayload ?? null,
+      encryptionType: 'CONTENT',
+      encryptedPayload: encryptedContent.encryptedPayload,
+      contentAlgorithm: encryptedContent.algorithm,
+      contentInitializationVectorBase64: encryptedContent.initializationVectorBase64,
+      contentAuthenticationTagBase64: encryptedContent.authenticationTagBase64,
+      groupKeyEpoch: null,
       devicePayloads,
+      accountKeyEnvelopes,
     });
 
     upsertMessage(savedMessage);

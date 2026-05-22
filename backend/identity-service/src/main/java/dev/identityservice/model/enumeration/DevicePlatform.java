@@ -1,7 +1,12 @@
 package dev.identityservice.model.enumeration;
 
 public enum DevicePlatform {
-    WINDOWS("Windows");
+    WINDOWS("Windows"),
+    MACOS("macOS"),
+    LINUX("Linux"),
+    ANDROID("Android"),
+    IOS("iOS"),
+    WEB("Web");
 
     private final String displayName;
 

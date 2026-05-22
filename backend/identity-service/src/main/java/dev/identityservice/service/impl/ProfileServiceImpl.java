@@ -6,7 +6,9 @@ import dev.identityservice.model.dto.response.AccountProfileResponseDto;
 import dev.identityservice.model.entity.AccountEntity;
 import dev.identityservice.model.entity.ProfileEntity;
 import dev.identityservice.model.enumeration.AvatarType;
+import dev.identityservice.model.enumeration.DeviceStatus;
 import dev.identityservice.repository.AccountRepository;
+import dev.identityservice.repository.DeviceRepository;
 import dev.identityservice.repository.ProfileRepository;
 import dev.identityservice.service.MappingService;
 import dev.identityservice.service.ProfileService;
@@ -28,6 +30,7 @@ public class ProfileServiceImpl implements ProfileService {
     private static final int MAX_AVATAR_DATA_URL_LENGTH = 700000;
 
     private final AccountRepository accountRepository;
+    private final DeviceRepository deviceRepository;
     private final ProfileRepository profileRepository;
     private final MappingService mappingService;
 
@@ -94,7 +97,7 @@ public class ProfileServiceImpl implements ProfileService {
         profileByAccountId.forEach((accountId, profileEntity) -> {
             AccountEntity accountEntity = accountById.get(accountId);
 
-            if (accountEntity != null) {
+            if (accountEntity != null && hasActiveDevice(accountEntity.getId())) {
                 result.add(mappingService.mapToAccountProfileResponseDto(accountEntity, profileEntity));
             }
         });
@@ -143,6 +146,10 @@ public class ProfileServiceImpl implements ProfileService {
                 })
                 .filter(profileResponseDto -> profileResponseDto != null)
                 .toList();
+    }
+
+    private boolean hasActiveDevice(UUID accountId) {
+        return deviceRepository.existsByAccountIdAndStatus(accountId, DeviceStatus.ACTIVE);
     }
 
     private AccountEntity findAccountByUsername(String username) {

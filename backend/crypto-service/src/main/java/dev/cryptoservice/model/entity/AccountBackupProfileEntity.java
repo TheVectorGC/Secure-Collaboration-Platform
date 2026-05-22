@@ -18,16 +18,19 @@ import lombok.Setter;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(name = "encrypted_key_backups")
-public class EncryptedKeyBackupEntity {
+@Table(name = "account_backup_profiles")
+public class AccountBackupProfileEntity {
     @Id
-    @Column(name = "account_id")
+    @Column(name = "account_id", nullable = false)
     private UUID accountId;
 
-    @Column(name = "backup_version", nullable = false)
-    private Long backupVersion;
+    @Column(name = "backup_public_key_base64", nullable = false, columnDefinition = "TEXT")
+    private String backupPublicKeyBase64;
 
-    @Column(name = "kdf_algorithm", nullable = false, length = 32)
+    @Column(name = "encrypted_backup_private_key_base64", nullable = false, columnDefinition = "TEXT")
+    private String encryptedBackupPrivateKeyBase64;
+
+    @Column(name = "kdf_algorithm", nullable = false, length = 64)
     private String kdfAlgorithm;
 
     @Column(name = "kdf_salt_base64", nullable = false, length = 512)
@@ -36,17 +39,14 @@ public class EncryptedKeyBackupEntity {
     @Column(name = "kdf_parameters_json", nullable = false, columnDefinition = "TEXT")
     private String kdfParametersJson;
 
-    @Column(name = "encryption_algorithm", nullable = false, length = 32)
-    private String encryptionAlgorithm;
+    @Column(name = "private_key_encryption_algorithm", nullable = false, length = 64)
+    private String privateKeyEncryptionAlgorithm;
 
-    @Column(name = "initialization_vector_base64", nullable = false, length = 512)
-    private String initializationVectorBase64;
+    @Column(name = "private_key_initialization_vector_base64", nullable = false, length = 512)
+    private String privateKeyInitializationVectorBase64;
 
-    @Column(name = "authentication_tag_base64", nullable = false, length = 512)
-    private String authenticationTagBase64;
-
-    @Column(name = "encrypted_backup_blob_base64", nullable = false, columnDefinition = "TEXT")
-    private String encryptedBackupBlobBase64;
+    @Column(name = "private_key_authentication_tag_base64", nullable = false, length = 512)
+    private String privateKeyAuthenticationTagBase64;
 
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;

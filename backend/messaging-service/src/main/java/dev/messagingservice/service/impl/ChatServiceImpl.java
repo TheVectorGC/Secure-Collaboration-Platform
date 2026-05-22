@@ -8,12 +8,15 @@ import dev.messagingservice.model.dto.request.AddGroupParticipantRequestDto;
 import dev.messagingservice.model.dto.request.CreateDirectChatRequestDto;
 import dev.messagingservice.model.dto.request.CreateGroupChatRequestDto;
 import dev.messagingservice.model.dto.request.UpdateGroupAvatarRequestDto;
+import dev.messagingservice.model.dto.request.UpsertGroupEpochKeyEnvelopeRequestDto;
 import dev.messagingservice.model.dto.response.ChatParticipantResponseDto;
 import dev.messagingservice.model.dto.response.ChatParticipantVisibilityWindowResponseDto;
+import dev.messagingservice.model.dto.response.AccountKeyEnvelopeResponseDto;
 import dev.messagingservice.model.dto.response.ChatResponseDto;
 import dev.messagingservice.model.entity.ChatEntity;
 import dev.messagingservice.model.entity.ChatParticipantEntity;
 import dev.messagingservice.model.entity.ChatParticipantVisibilityWindowEntity;
+import dev.messagingservice.model.entity.GroupEpochKeyEnvelopeEntity;
 import dev.messagingservice.model.entity.MessageEntity;
 import dev.messagingservice.model.enumeration.ChatParticipantRole;
 import dev.messagingservice.model.enumeration.ChatParticipantStatus;
@@ -24,6 +27,7 @@ import dev.messagingservice.model.enumeration.MessageType;
 import dev.messagingservice.repository.ChatParticipantRepository;
 import dev.messagingservice.repository.ChatParticipantVisibilityWindowRepository;
 import dev.messagingservice.repository.ChatRepository;
+import dev.messagingservice.repository.GroupEpochKeyEnvelopeRepository;
 import dev.messagingservice.repository.MessageRepository;
 import dev.messagingservice.service.ChatService;
 import dev.messagingservice.service.MessagingEventFactory;
@@ -52,6 +56,7 @@ public class ChatServiceImpl implements ChatService {
     private final ChatParticipantRepository chatParticipantRepository;
     private final ChatParticipantVisibilityWindowRepository chatParticipantVisibilityWindowRepository;
     private final MessageRepository messageRepository;
+    private final GroupEpochKeyEnvelopeRepository groupEpochKeyEnvelopeRepository;
     private final MessagingEventPublisher messagingEventPublisher;
     private final MessagingEventFactory messagingEventFactory;
     private final ObjectMapper objectMapper;
@@ -264,6 +269,75 @@ public class ChatServiceImpl implements ChatService {
         ChatResponseDto chatResponseDto = mapToChatResponseDto(savedChatEntity, participantEntities);
         publishChatUpdatedEvent(chatResponseDto, recipientAccountIds);
         return chatResponseDto;
+    }
+
+    @Override
+    @Transactional
+    public void upsertGroupEpochKeyEnvelope(UUID currentAccountId, UUID chatId, UpsertGroupEpochKeyEnvelopeRequestDto requestDto) {
+        ChatEntity chatEntity = chatRepository.findById(chatId)
+            .orElseThrow(() -> new ChatNotFoundException("Chat with ID '" + chatId + "' not found."));
+
+        if (chatEntity.getType() != ChatType.GROUP) {
+            throw new ChatAccessDeniedException("Group key envelopes are available only for group chats.");
+        }
+
+        ChatParticipantEntity currentParticipant = chatParticipantRepository.findByChatIdAndAccountId(chatId, currentAccountId)
+            .orElseThrow(() -> new ChatAccessDeniedException("Current account is not a group participant."));
+
+        if (currentParticipant.getStatus() != ChatParticipantStatus.ACTIVE) {
+            throw new ChatAccessDeniedException("Current account is not an active group participant.");
+        }
+
+        ChatParticipantEntity targetParticipant = chatParticipantRepository.findByChatIdAndAccountId(chatId, requestDto.targetAccountId())
+            .orElseThrow(() -> new ChatAccessDeniedException("Target account is not a group participant."));
+
+        if (targetParticipant.getStatus() != ChatParticipantStatus.ACTIVE) {
+            throw new ChatAccessDeniedException("Target account is not an active group participant.");
+        }
+
+        OffsetDateTime now = OffsetDateTime.now();
+        GroupEpochKeyEnvelopeEntity envelopeEntity = groupEpochKeyEnvelopeRepository
+            .findByChatIdAndEpochAndTargetAccountId(chatId, requestDto.epoch(), requestDto.targetAccountId())
+            .orElseGet(() -> GroupEpochKeyEnvelopeEntity.builder()
+                .chatId(chatId)
+                .epoch(requestDto.epoch())
+                .targetAccountId(requestDto.targetAccountId())
+                .createdAt(now)
+                .build());
+        envelopeEntity.setSenderDeviceId(requestDto.senderDeviceId());
+        envelopeEntity.setAlgorithm(requestDto.algorithm().trim());
+        envelopeEntity.setEncryptedKeyBase64(requestDto.encryptedKeyBase64().trim());
+        envelopeEntity.setUpdatedAt(now);
+        groupEpochKeyEnvelopeRepository.save(envelopeEntity);
+    }
+
+
+    @Override
+    @Transactional(readOnly = true)
+    public AccountKeyEnvelopeResponseDto getCurrentAccountGroupEpochKeyEnvelope(UUID currentAccountId, UUID chatId, Integer epoch) {
+        ChatEntity chatEntity = chatRepository.findById(chatId)
+            .orElseThrow(() -> new ChatNotFoundException("Chat with ID '" + chatId + "' not found."));
+
+        if (chatEntity.getType() != ChatType.GROUP) {
+            throw new ChatAccessDeniedException("Group key envelopes are available only for group chats.");
+        }
+
+        ChatParticipantEntity currentParticipant = chatParticipantRepository.findByChatIdAndAccountId(chatId, currentAccountId)
+            .orElseThrow(() -> new ChatAccessDeniedException("Current account is not a group participant."));
+
+        if (currentParticipant.getStatus() != ChatParticipantStatus.ACTIVE) {
+            throw new ChatAccessDeniedException("Current account is not an active group participant.");
+        }
+
+        GroupEpochKeyEnvelopeEntity envelopeEntity = groupEpochKeyEnvelopeRepository
+            .findByChatIdAndEpochAndTargetAccountId(chatId, epoch, currentAccountId)
+            .orElseThrow(() -> new ChatNotFoundException("Group epoch key envelope was not found."));
+
+        return new AccountKeyEnvelopeResponseDto(
+            envelopeEntity.getTargetAccountId(),
+            envelopeEntity.getAlgorithm(),
+            envelopeEntity.getEncryptedKeyBase64()
+        );
     }
 
     @Override
@@ -535,6 +609,8 @@ public class ChatServiceImpl implements ChatService {
         messagingEventPublisher.publish(messagingEventFactory.createMessageCreatedEvent(
             savedMessageEntity,
             List.of(),
+            List.of(),
+            null,
             recipientAccountIds
         ));
     }

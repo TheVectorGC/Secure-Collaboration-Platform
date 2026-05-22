@@ -1,6 +1,8 @@
 package dev.messagingservice.service;
 
 import dev.messagingservice.model.dto.response.ChatResponseDto;
+import dev.messagingservice.model.entity.GroupEpochKeyEnvelopeEntity;
+import dev.messagingservice.model.entity.MessageAccountKeyEnvelopeEntity;
 import dev.messagingservice.model.entity.MessageDevicePayloadEntity;
 import dev.messagingservice.model.entity.MessageEntity;
 import dev.messagingservice.model.event.MessagingEventDto;
@@ -12,6 +14,8 @@ public interface MessagingEventFactory {
     MessagingEventDto createMessageCreatedEvent(
             MessageEntity messageEntity,
             List<MessageDevicePayloadEntity> payloadEntities,
+            List<MessageAccountKeyEnvelopeEntity> accountKeyEnvelopeEntities,
+            GroupEpochKeyEnvelopeEntity groupEpochKeyEnvelopeEntity,
             List<UUID> recipientAccountIds
     );
 

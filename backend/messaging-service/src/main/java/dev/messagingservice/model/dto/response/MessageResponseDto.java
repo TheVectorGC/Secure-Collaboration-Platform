@@ -30,11 +30,29 @@ public record MessageResponseDto(
     @Schema(description = "Encryption type.")
     MessageEncryptionType encryptionType,
 
-    @Schema(description = "Primary encrypted payload for backward-compatible clients. New clients must use devicePayloads.")
+    @Schema(description = "AES-GCM encrypted message body or system payload.")
     String encryptedPayload,
 
-    @Schema(description = "Encrypted payloads available to the current account devices.")
+    @Schema(description = "Content encryption algorithm.")
+    String contentAlgorithm,
+
+    @Schema(description = "Content encryption initialization vector.")
+    String contentInitializationVectorBase64,
+
+    @Schema(description = "Content authentication tag.")
+    String contentAuthenticationTagBase64,
+
+    @Schema(description = "Group key epoch used for GROUP encrypted messages.")
+    Integer groupKeyEpoch,
+
+    @Schema(description = "Encrypted content key payloads available to the current account devices.")
     List<MessageDevicePayloadResponseDto> devicePayloads,
+
+    @Schema(description = "Encrypted account-level message key envelopes available to the current account.")
+    List<AccountKeyEnvelopeResponseDto> accountKeyEnvelopes,
+
+    @Schema(description = "Encrypted group epoch key envelope available to the current account.")
+    AccountKeyEnvelopeResponseDto groupEpochKeyEnvelope,
 
     @Schema(description = "Creation datetime.")
     OffsetDateTime createdAt,

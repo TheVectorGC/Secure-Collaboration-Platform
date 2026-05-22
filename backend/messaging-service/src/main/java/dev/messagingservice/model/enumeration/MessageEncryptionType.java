@@ -1,8 +1,8 @@
 package dev.messagingservice.model.enumeration;
 
 public enum MessageEncryptionType {
-    SIGNAL("Signal"),
-    GROUP("Group sender key"),
+    CONTENT("Content key"),
+    GROUP("Group epoch key"),
     NONE("None");
 
     private final String displayName;

@@ -1,6 +1,6 @@
 import { type Dispatch, type SetStateAction } from 'react';
-import { addGroupParticipant, createDirectChat, createGroupChat, removeGroupParticipant } from '../../chats/api/chatsApi';
-import { sendMessage } from '../../messages/api/messagesApi';
+import { addGroupParticipant, createDirectChat, createGroupChat, removeGroupParticipant, upsertGroupEpochKeyEnvelope } from '../../chats/api/chatsApi';
+import { getAccountBackupPublicKey } from '../../crypto/api/accountBackupProfileApi';
 import type { ChatResponseDto, DeviceMessagePayloadRequestDto, ProfileResponseDto } from '../../../shared/types/api';
 import type { GroupHistoryAccessMode } from '../lib/messengerCore';
 import { getActiveGroupParticipantAccountIds } from '../lib/messengerCore';
@@ -33,7 +33,6 @@ export function useGroupChatController(params: UseGroupChatControllerParams) {
     setErrorMessage,
     clearTemporarilyMissingGroupKeys,
     setDecryptedMessagesById,
-    buildEncryptedDevicePayloadsForAccounts,
   } = params;
 
   async function handleCreateDirectChat(profileToChat: ProfileResponseDto) {
@@ -54,27 +53,40 @@ export function useGroupChatController(params: UseGroupChatControllerParams) {
     upsertChat(chat);
     selectChat(chat.chatId);
     setIsCreateChatOpen(false);
+    await shareCurrentGroupEpochKeyWithAccounts(chat, getActiveGroupParticipantAccountIds(chat));
   }
 
-  async function sendGroupKeyDistributionPackage(targetAccountIds: string[], groupKeyPackagePlainText: string) {
-    if (!selectedChatId || !deviceId || !currentAccountId || targetAccountIds.length === 0) {
+  async function shareCurrentGroupEpochKeyWithAccounts(chat: ChatResponseDto, targetAccountIds: string[]) {
+    if (!currentAccountId || !deviceId || !window.vectorCrypto || targetAccountIds.length === 0) {
       return;
     }
 
-    const devicePayloads = await buildEncryptedDevicePayloadsForAccounts(groupKeyPackagePlainText, targetAccountIds);
-
-    await sendMessage(selectedChatId, {
-      senderDeviceId: deviceId,
-      clientMessageId: crypto.randomUUID(),
-      messageType: 'GROUP_KEY_DISTRIBUTION',
-      encryptionType: 'SIGNAL',
-      encryptedPayload: null,
-      devicePayloads,
+    const epoch = chat.currentKeyEpoch ?? 1;
+    const groupEpochKey = await window.vectorCrypto.getOrCreateGroupEpochKey({
+      accountId: currentAccountId,
+      deviceId,
+      chatId: chat.chatId,
+      epoch,
     });
+
+    await Promise.all(Array.from(new Set(targetAccountIds)).map(async (targetAccountId) => {
+      const publicKey = await getAccountBackupPublicKey(targetAccountId);
+      const encryptedEnvelope = await window.vectorCrypto!.encryptAccountKeyEnvelope({
+        backupPublicKeyBase64: publicKey.backupPublicKeyBase64,
+        keyBase64: groupEpochKey.groupEpochKeyBase64,
+      });
+      await upsertGroupEpochKeyEnvelope(chat.chatId, {
+        epoch,
+        targetAccountId,
+        senderDeviceId: deviceId,
+        algorithm: encryptedEnvelope.algorithm,
+        encryptedKeyBase64: encryptedEnvelope.encryptedKeyBase64,
+      });
+    }));
   }
 
   async function shareHistoricalGroupKeysWithParticipant(participantAccountId: string) {
-    if (!selectedChatId || !currentAccountId || !window.vectorCrypto) {
+    if (!selectedChatId || !currentAccountId || !deviceId || !window.vectorCrypto) {
       return;
     }
 
@@ -82,9 +94,21 @@ export function useGroupChatController(params: UseGroupChatControllerParams) {
       accountId: currentAccountId,
       chatId: selectedChatId,
     });
+    const publicKey = await getAccountBackupPublicKey(participantAccountId);
 
     for (const groupKeyPackagePlainText of exportedGroupKeys.packages) {
-      await sendGroupKeyDistributionPackage([participantAccountId], groupKeyPackagePlainText);
+      const groupKeyPackage = JSON.parse(groupKeyPackagePlainText) as { epoch: number; senderDeviceId: string; keyBase64: string };
+      const encryptedEnvelope = await window.vectorCrypto.encryptAccountKeyEnvelope({
+        backupPublicKeyBase64: publicKey.backupPublicKeyBase64,
+        keyBase64: groupKeyPackage.keyBase64,
+      });
+      await upsertGroupEpochKeyEnvelope(selectedChatId, {
+        epoch: groupKeyPackage.epoch,
+        targetAccountId: participantAccountId,
+        senderDeviceId: groupKeyPackage.senderDeviceId,
+        algorithm: encryptedEnvelope.algorithm,
+        encryptedKeyBase64: encryptedEnvelope.encryptedKeyBase64,
+      });
     }
   }
 
@@ -106,16 +130,8 @@ export function useGroupChatController(params: UseGroupChatControllerParams) {
     if (historyAccessMode === 'FULL_HISTORY') {
       await shareHistoricalGroupKeysWithParticipant(profileToAdd.accountId);
     }
-    else if (window.vectorCrypto && deviceId && currentAccountId) {
-      const currentGroupKeyPackage = await window.vectorCrypto.encryptGroupMessage({
-        accountId: currentAccountId,
-        deviceId,
-        chatId: updatedChat.chatId,
-        epoch: updatedChat.currentKeyEpoch ?? 1,
-        plainText: '[Состав группы обновлён]',
-      });
-      await sendGroupKeyDistributionPackage([profileToAdd.accountId], currentGroupKeyPackage.groupKeyPackagePlainText);
-    }
+
+    await shareCurrentGroupEpochKeyWithAccounts(updatedChat, getActiveGroupParticipantAccountIds(updatedChat));
   }
 
   async function handleRemoveGroupParticipant(participantAccountId: string) {
@@ -127,19 +143,7 @@ export function useGroupChatController(params: UseGroupChatControllerParams) {
     const updatedChat = await removeGroupParticipant(selectedChat.chatId, participantAccountId);
     upsertChat(updatedChat);
     clearTemporarilyMissingGroupKeys();
-
-    if (window.vectorCrypto && deviceId && currentAccountId) {
-      const activeRecipientAccountIds = getActiveGroupParticipantAccountIds(updatedChat).filter((accountId) => accountId !== currentAccountId);
-      const currentGroupKeyPackage = await window.vectorCrypto.encryptGroupMessage({
-        accountId: currentAccountId,
-        deviceId,
-        chatId: updatedChat.chatId,
-        epoch: updatedChat.currentKeyEpoch ?? 1,
-        plainText: '[Состав группы обновлён]',
-      });
-      await sendGroupKeyDistributionPackage(activeRecipientAccountIds, currentGroupKeyPackage.groupKeyPackagePlainText);
-    }
-
+    await shareCurrentGroupEpochKeyWithAccounts(updatedChat, getActiveGroupParticipantAccountIds(updatedChat));
     setDecryptedMessagesById((previousValue) => ({ ...previousValue }));
   }
 

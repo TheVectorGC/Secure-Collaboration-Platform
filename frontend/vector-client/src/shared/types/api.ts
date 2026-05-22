@@ -8,6 +8,10 @@ export type LoginRequestDto = {
   deviceName: string | null;
   platform: DevicePlatform | null;
   clientVersion: string | null;
+  osName?: string | null;
+  osVersion?: string | null;
+  architecture?: string | null;
+  hostname?: string | null;
 };
 
 export type RefreshTokenRequestDto = {
@@ -34,6 +38,11 @@ export type DeviceResponseDto = {
   platform: DevicePlatform;
   status: string;
   clientVersion: string | null;
+  osName: string | null;
+  osVersion: string | null;
+  architecture: string | null;
+  hostname: string | null;
+  deviceFingerprint: string | null;
   lastSeenAt: string | null;
   createdAt: string;
 };
@@ -46,6 +55,22 @@ export type ActiveDeviceResponseDto = {
   lastSeenAt: string | null;
   status?: string | null;
   clientVersion?: string | null;
+  osName?: string | null;
+  osVersion?: string | null;
+  architecture?: string | null;
+  hostname?: string | null;
+  deviceFingerprint?: string | null;
+};
+
+export type UpdateDeviceMetadataRequestDto = {
+  deviceName?: string | null;
+  platform?: DevicePlatform | null;
+  clientVersion?: string | null;
+  osName?: string | null;
+  osVersion?: string | null;
+  architecture?: string | null;
+  hostname?: string | null;
+  deviceFingerprint?: string | null;
 };
 
 export type ProfileResponseDto = {
@@ -101,6 +126,15 @@ export type UpdateGroupAvatarRequestDto = {
   avatarDataUrl: string | null;
 };
 
+
+export type UpsertGroupEpochKeyEnvelopeRequestDto = {
+  epoch: number;
+  targetAccountId: string;
+  senderDeviceId: string;
+  algorithm: string;
+  encryptedKeyBase64: string;
+};
+
 export type GroupHistoryAccessMode = 'FULL_HISTORY' | 'NEW_MESSAGES_ONLY' | 'FROM_MESSAGE';
 
 export type AddGroupParticipantRequestDto = {
@@ -144,8 +178,8 @@ export type ChatResponseDto = {
 };
 
 export type MessageCiphertextType = 'PRE_KEY' | 'SIGNAL' | 'LOCAL';
-export type MessageEncryptionType = 'SIGNAL' | 'GROUP' | 'NONE';
-export type MessageType = 'TEXT' | 'FILE' | 'IMAGE' | 'DOCUMENT' | 'GROUP_KEY_DISTRIBUTION' | 'SYSTEM';
+export type MessageEncryptionType = 'CONTENT' | 'GROUP' | 'NONE';
+export type MessageType = 'TEXT' | 'FILE' | 'IMAGE' | 'DOCUMENT' | 'SYSTEM';
 
 export type DeviceMessagePayloadRequestDto = {
   targetAccountId: string;
@@ -154,13 +188,24 @@ export type DeviceMessagePayloadRequestDto = {
   encryptedPayload: string;
 };
 
+export type AccountKeyEnvelopeRequestDto = {
+  targetAccountId: string;
+  algorithm: string;
+  encryptedKeyBase64: string;
+};
+
 export type SendMessageRequestDto = {
   senderDeviceId: string;
   clientMessageId: string;
   messageType: MessageType;
   encryptionType: MessageEncryptionType;
-  encryptedPayload?: string | null;
+  encryptedPayload: string;
+  contentAlgorithm: 'AES-256-GCM';
+  contentInitializationVectorBase64: string;
+  contentAuthenticationTagBase64: string;
+  groupKeyEpoch?: number | null;
   devicePayloads: DeviceMessagePayloadRequestDto[];
+  accountKeyEnvelopes: AccountKeyEnvelopeRequestDto[];
 };
 
 export type MessageDeliveryStatus = 'SENT' | 'DELIVERED' | 'READ';
@@ -179,6 +224,12 @@ export type MessageDevicePayloadResponseDto = {
   encryptedPayload: string;
 };
 
+export type AccountKeyEnvelopeResponseDto = {
+  targetAccountId: string;
+  algorithm: string;
+  encryptedKeyBase64: string;
+};
+
 export type MessageResponseDto = {
   messageId: string;
   chatId: string;
@@ -188,14 +239,20 @@ export type MessageResponseDto = {
   messageType: MessageType;
   encryptionType: MessageEncryptionType;
   encryptedPayload: string | null;
+  contentAlgorithm: 'AES-256-GCM' | null;
+  contentInitializationVectorBase64: string | null;
+  contentAuthenticationTagBase64: string | null;
+  groupKeyEpoch: number | null;
   devicePayloads: MessageDevicePayloadResponseDto[];
+  accountKeyEnvelopes: AccountKeyEnvelopeResponseDto[];
+  groupEpochKeyEnvelope: AccountKeyEnvelopeResponseDto | null;
   createdAt: string;
   deliveryStates: MessageDeliveryStateResponseDto[];
 };
 
 export type MediaFileResponseDto = {
   id: string;
-  chatId: string;
+  chatId: string | null;
   uploaderAccountId: string;
   encryptedSizeBytes: number;
   encryptedSha256Base64: string;
@@ -203,9 +260,8 @@ export type MediaFileResponseDto = {
 };
 
 export type UploadEncryptedMediaRequestDto = {
-  chatId: string | null;
+  chatId: string;
   encryptedSha256Base64: string;
-  accessAccountIds?: string[];
 };
 
 export type FileEncryptionMetadata = {
@@ -243,7 +299,7 @@ export type DocumentAttachmentMessageContent = {
 };
 
 export type CreateDocumentRequestDto = {
-  chatId?: string | null;
+  chatId: string | null;
   mediaFileId: string;
   title: string;
   description: string | null;
@@ -253,12 +309,8 @@ export type CreateDocumentRequestDto = {
   plaintextSha256Base64: string;
   encryptedSha256Base64: string;
   requiredSignerAccountIds: string[];
-  observerAccountIds?: string[];
+  observerAccountIds: string[];
   fileEncryption: FileEncryptionMetadata;
-};
-
-export type RejectDocumentRequestDto = {
-  reason: string | null;
 };
 
 export type DocumentStatus = 'ACTIVE' | 'PENDING_SIGNATURES' | 'PARTIALLY_SIGNED' | 'FULLY_SIGNED' | 'REJECTED' | 'CANCELLED';
@@ -268,22 +320,19 @@ export type SignatureAlgorithm = 'ED25519';
 export type DocumentSigningKeyStatus = 'ACTIVE' | 'REVOKED';
 
 export type DocumentSignerResponseDto = {
-  signerId: string;
-  documentId: string;
+  signerId?: string;
   signerAccountId: string;
   status: DocumentSignerStatus;
-  createdAt: string;
   signedAt: string | null;
   rejectedAt: string | null;
   rejectionReason: string | null;
 };
 
 export type DocumentObserverResponseDto = {
-  observerId: string;
-  documentId: string;
+  observerId?: string;
   observerAccountId: string;
   role: DocumentObserverRole;
-  createdAt: string;
+  addedAt: string;
 };
 
 export type DocumentSignatureResponseDto = {
@@ -310,20 +359,28 @@ export type DocumentResponseDto = {
   sizeBytes: number;
   plaintextSha256Base64: string;
   encryptedSha256Base64: string;
+  fileEncryption: FileEncryptionMetadata | null;
   status: DocumentStatus;
   rejectedByAccountId: string | null;
   rejectedAt: string | null;
   rejectionReason: string | null;
-  cancelledByAccountId: string | null;
-  cancelledAt: string | null;
-  cancellationReason: string | null;
+  cancelledByAccountId?: string | null;
+  cancelledAt?: string | null;
+  cancellationReason?: string | null;
+  hiddenForCurrentAccount: boolean;
   createdAt: string;
   updatedAt: string;
   signers: DocumentSignerResponseDto[];
   observers: DocumentObserverResponseDto[];
   signatures: DocumentSignatureResponseDto[];
-  hiddenForCurrentAccount?: boolean;
-  fileEncryption?: FileEncryptionMetadata | null;
+};
+
+export type RejectDocumentRequestDto = {
+  reason: string | null;
+};
+
+export type AddDocumentObserversRequestDto = {
+  observerAccountIds: string[];
 };
 
 export type RegisterDocumentSigningKeyRequestDto = {
@@ -348,15 +405,6 @@ export type SignDocumentRequestDto = {
   signatureBase64: string;
 };
 
-export type AddDocumentObserversRequestDto = {
-  observerAccountIds: string[];
-};
-
-export type DocumentChangedPayload = {
-  documentId: string;
-  document?: DocumentResponseDto | null;
-};
-
 export type RealtimeEventType = 'MESSAGE_CREATED' | 'MESSAGE_DELIVERED' | 'MESSAGE_READ' | 'CHAT_UPDATED' | 'TYPING' | 'PRESENCE_UPDATED' | 'PRESENCE_SNAPSHOT' | 'DOCUMENT_CREATED' | 'DOCUMENT_UPDATED' | 'DOCUMENT_SIGNED' | 'DOCUMENT_REJECTED' | 'DOCUMENT_CANCELLED' | 'DOCUMENT_HIDDEN' | 'DOCUMENT_OBSERVERS_ADDED';
 
 export type RealtimeEventDto = {
@@ -371,10 +419,17 @@ export type MessageCreatedPayload = {
   messageId: string;
   senderAccountId: string;
   senderDeviceId: string;
+  clientMessageId?: string | null;
   messageType: MessageType;
   encryptionType: MessageEncryptionType;
   encryptedPayload?: string | null;
+  contentAlgorithm?: 'AES-256-GCM' | null;
+  contentInitializationVectorBase64?: string | null;
+  contentAuthenticationTagBase64?: string | null;
+  groupKeyEpoch?: number | null;
   devicePayloads?: MessageDevicePayloadResponseDto[];
+  accountKeyEnvelopes?: AccountKeyEnvelopeResponseDto[];
+  groupEpochKeyEnvelope?: AccountKeyEnvelopeResponseDto | null;
   createdAt: string;
 };
 
@@ -395,6 +450,11 @@ export type MessageReadPayload = {
 
 export type ChatUpdatedPayload = {
   chat: ChatResponseDto;
+};
+
+export type DocumentChangedPayload = {
+  documentId: string;
+  document?: DocumentResponseDto | null;
 };
 
 export type TypingPayload = {

@@ -13,3 +13,5 @@ databaseChangeLog:
       file: db/changelog/changes/006-add-client-installation-id-to-devices.yaml
   - include:
       file: db/changelog/changes/007-add-profile-avatar-data-url.yaml
+  - include:
+      file: db/changelog/changes/008-add-device-metadata.yaml

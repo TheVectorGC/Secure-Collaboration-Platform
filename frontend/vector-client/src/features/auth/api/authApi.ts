@@ -2,6 +2,7 @@ import { identityHttpClient, refreshAccessToken } from '../../../shared/api/http
 import type {
   AuthenticationResponseDto,
   DeviceResponseDto,
+  UpdateDeviceMetadataRequestDto,
   LoginRequestDto,
   LogoutRequestDto,
   ProfileResponseDto,
@@ -32,5 +33,10 @@ export async function getCurrentProfile(): Promise<ProfileResponseDto> {
 
 export async function getCurrentDevices(): Promise<DeviceResponseDto[]> {
   const response = await identityHttpClient.get<DeviceResponseDto[]>('/api/v1/devices');
+  return response.data;
+}
+
+export async function updateCurrentDeviceMetadata(deviceId: string, request: UpdateDeviceMetadataRequestDto): Promise<DeviceResponseDto> {
+  const response = await identityHttpClient.put<DeviceResponseDto>(`/api/v1/devices/${deviceId}/metadata`, request);
   return response.data;
 }

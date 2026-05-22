@@ -3,6 +3,7 @@ package dev.messagingservice.controller.exceptionHandler;
 import dev.messagingservice.exception.ChatAccessDeniedException;
 import dev.messagingservice.exception.ChatNotFoundException;
 import dev.messagingservice.exception.DuplicateClientMessageException;
+import dev.messagingservice.exception.DeviceDirectoryUnavailableException;
 import dev.messagingservice.exception.MessageNotFoundException;
 import dev.messagingservice.exception.MessagePayloadValidationException;
 import dev.messagingservice.exception.TokenValidationException;
@@ -66,6 +67,12 @@ public class AppExceptionHandler {
     public ResponseEntity<StandardErrorResponse> handleTokenValidationException(TokenValidationException exception) {
         log.warn("TokenValidationException: {}.", exception.getMessage());
         return buildStandardErrorResponse("TokenValidationException", exception.getMessage(), HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(DeviceDirectoryUnavailableException.class)
+    public ResponseEntity<StandardErrorResponse> handleDeviceDirectoryUnavailableException(DeviceDirectoryUnavailableException exception) {
+        log.warn("DeviceDirectoryUnavailableException: {}.", exception.getMessage());
+        return buildStandardErrorResponse("DeviceDirectoryUnavailableException", exception.getMessage(), HttpStatus.BAD_GATEWAY);
     }
 
     @ExceptionHandler(RuntimeException.class)

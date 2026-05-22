@@ -13,7 +13,7 @@ export function getVisibleChatMessages(messages: MessageResponseDto[], clearedAt
 }
 
 export function getLastTimelineMessage(messages: MessageResponseDto[]): MessageResponseDto | null {
-  const visibleMessages = messages.filter((message) => message.messageType !== 'GROUP_KEY_DISTRIBUTION');
+  const visibleMessages = messages;
   return visibleMessages.at(-1) ?? null;
 }
 export function buildChatPreviewFromMessage(
@@ -93,7 +93,6 @@ export function calculateUnreadCount(messages: MessageResponseDto[], currentAcco
   return messages.filter((message) => (
     message.senderAccountId !== currentAccountId
     && message.messageType !== 'SYSTEM'
-    && message.messageType !== 'GROUP_KEY_DISTRIBUTION'
     && new Date(message.createdAt).getTime() > readAtTime
   )).length;
 }

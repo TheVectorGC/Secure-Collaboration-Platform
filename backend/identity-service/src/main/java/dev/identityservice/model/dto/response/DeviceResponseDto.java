@@ -23,6 +23,21 @@ public record DeviceResponseDto(
         @Schema(description = "Desktop client version.", example = "0.1.0")
         String clientVersion,
 
+        @Schema(description = "Operating system display name.")
+        String osName,
+
+        @Schema(description = "Operating system version.")
+        String osVersion,
+
+        @Schema(description = "CPU architecture.")
+        String architecture,
+
+        @Schema(description = "Local device hostname.")
+        String hostname,
+
+        @Schema(description = "SHA-256 fingerprint of the device identity key.")
+        String deviceFingerprint,
+
         @Schema(description = "Last device activity time.")
         OffsetDateTime lastSeenAt,
 

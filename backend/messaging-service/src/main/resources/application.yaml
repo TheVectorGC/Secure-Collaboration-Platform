@@ -30,6 +30,9 @@ spring:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
 
 application:
+  identity-service:
+    base-url: ${IDENTITY_SERVICE_BASE_URL:http://localhost:8085}
+
   security:
     jwt:
       issuer: ${JWT_ISSUER:identity-service}

@@ -1,3 +1,14 @@
+
+export type DeviceEnvironmentResponse = {
+  platform: 'WINDOWS' | 'MACOS' | 'LINUX' | 'ANDROID' | 'IOS' | 'WEB';
+  deviceName: string;
+  clientVersion: string;
+  osName: string;
+  osVersion: string;
+  architecture: string;
+  hostname: string;
+};
+
 export type VectorCryptoHealth = {
   available: boolean;
   safeStorageAvailable: boolean;
@@ -97,11 +108,14 @@ export type DecryptMessageRequest = {
   remoteDeviceId: string;
   ciphertextType: 'PRE_KEY' | 'SIGNAL' | 'LOCAL';
   encryptedPayload: string;
+  allowFailure?: boolean;
 };
 
 export type DecryptMessageResponse = {
-  plainText: string;
+  plainText: string | null;
   fromCache?: boolean;
+  failed?: boolean;
+  errorMessage?: string;
 };
 
 export type DecryptGroupMessageResponse = {
@@ -186,64 +200,150 @@ export type ExportGroupKeyPackagesForChatResponse = {
 };
 
 
-export type ExportEncryptedKeyBackupRequest = {
+export type SetAccountBackupPasswordRequest = {
   accountId: string;
-  recoveryPassword: string;
+  password: string;
+  kdfSaltBase64?: string;
+  kdfParametersJson?: string;
 };
 
-export type ExportEncryptedKeyBackupResponse = {
-  backupVersion: number;
+export type ClearAccountBackupPasswordRequest = {
+  accountId: string;
+};
+
+export type HasAccountBackupPasswordRequest = {
+  accountId: string;
+};
+
+export type ClearAccountLocalVaultRequest = {
+  accountId: string;
+};
+
+export type EncryptContentWithNewKeyRequest = {
+  plainText: string;
+};
+
+export type EncryptContentWithNewKeyResponse = {
+  algorithm: 'AES-256-GCM';
+  keyBase64: string;
+  encryptedPayload: string;
+  initializationVectorBase64: string;
+  authenticationTagBase64: string;
+};
+
+export type DecryptContentWithKeyRequest = {
+  keyBase64: string;
+  encryptedPayload: string;
+  initializationVectorBase64: string;
+  authenticationTagBase64: string;
+};
+
+export type CreateAccountBackupProfileRequest = {
+  accountId: string;
+};
+
+export type CreateAccountBackupProfileResponse = {
+  backupPublicKeyBase64: string;
+  encryptedBackupPrivateKeyBase64: string;
   kdfAlgorithm: string;
   kdfSaltBase64: string;
   kdfParametersJson: string;
-  encryptionAlgorithm: string;
+  privateKeyEncryptionAlgorithm: string;
+  privateKeyInitializationVectorBase64: string;
+  privateKeyAuthenticationTagBase64: string;
+};
+
+export type UnlockAccountBackupProfileRequest = {
+  accountId: string;
+  encryptedBackupPrivateKeyBase64: string;
+  kdfSaltBase64: string;
+  privateKeyInitializationVectorBase64: string;
+  privateKeyAuthenticationTagBase64: string;
+};
+
+export type EncryptAccountKeyEnvelopeRequest = {
+  backupPublicKeyBase64: string;
+  keyBase64: string;
+};
+
+export type EncryptAccountKeyEnvelopeResponse = {
+  algorithm: string;
+  encryptedKeyBase64: string;
+};
+
+export type DecryptAccountKeyEnvelopeRequest = {
+  accountId: string;
+  encryptedKeyBase64: string;
+};
+
+export type DecryptAccountKeyEnvelopeResponse = {
+  keyBase64: string;
+};
+
+export type EncryptGroupMessageV2Request = EncryptGroupMessageRequest & {
+  messageId: string;
+};
+
+export type EncryptGroupMessageV2Response = {
+  encryptionType: 'GROUP';
+  algorithm: 'AES-256-GCM';
+  encryptedPayload: string;
   initializationVectorBase64: string;
   authenticationTagBase64: string;
-  encryptedBackupBlobBase64: string;
-  exportedDeviceIds: string[];
+  groupEpochKeyBase64: string;
+  groupKeyPackagePlainText: string;
 };
 
-export type ImportEncryptedKeyBackupRequest = {
+export type DecryptGroupMessageV2Request = {
   accountId: string;
-  recoveryPassword: string;
-  backup: {
-    backupVersion: number;
-    kdfAlgorithm: string;
-    kdfSaltBase64: string;
-    kdfParametersJson: string;
-    encryptionAlgorithm: string;
-    initializationVectorBase64: string;
-    authenticationTagBase64: string;
-    encryptedBackupBlobBase64: string;
-  };
+  deviceId: string;
+  chatId: string;
+  epoch: number;
+  messageId: string;
+  encryptedPayload: string;
+  initializationVectorBase64: string;
+  authenticationTagBase64: string;
 };
 
-export type ImportEncryptedKeyBackupResponse = {
-  imported: boolean;
+export type GetOrCreateGroupEpochKeyRequest = {
   accountId: string;
-  importedDeviceIds: string[];
-  exportedAt: string;
+  deviceId: string;
+  chatId: string;
+  epoch: number;
 };
 
-export type GetRestoredDeviceIdsRequest = {
+export type ImportGroupKeyFromBackupEnvelopeRequest = {
   accountId: string;
+  chatId: string;
+  epoch: number;
+  senderDeviceId: string;
+  groupEpochKeyBase64: string;
 };
 
 export type VectorCryptoApi = {
-  getOrCreateClientInstallationId: (namespace?: string | null) => Promise<string>;
+  getOrCreateClientInstallationId: () => Promise<string>;
+  getDeviceEnvironment: () => Promise<DeviceEnvironmentResponse>;
   getHealth: () => Promise<VectorCryptoHealth>;
   initializeLocalVault: (request: InitializeLocalVaultRequest) => Promise<InitializeLocalVaultResponse>;
   getOrCreateDocumentSigningKey: (request: GetOrCreateDocumentSigningKeyRequest) => Promise<DocumentSigningKeyResponse>;
   signDocumentHash: (request: SignDocumentHashRequest) => Promise<SignDocumentHashResponse>;
+  encryptContentWithNewKey: (request: EncryptContentWithNewKeyRequest) => Promise<EncryptContentWithNewKeyResponse>;
+  decryptContentWithKey: (request: DecryptContentWithKeyRequest) => Promise<DecryptMessageResponse>;
+  createAccountBackupProfile: (request: CreateAccountBackupProfileRequest) => Promise<CreateAccountBackupProfileResponse>;
+  unlockAccountBackupProfile: (request: UnlockAccountBackupProfileRequest) => Promise<{ unlocked: boolean }>;
+  encryptAccountKeyEnvelope: (request: EncryptAccountKeyEnvelopeRequest) => Promise<EncryptAccountKeyEnvelopeResponse>;
+  decryptAccountKeyEnvelope: (request: DecryptAccountKeyEnvelopeRequest) => Promise<DecryptAccountKeyEnvelopeResponse>;
+  getOrCreateGroupEpochKey: (request: GetOrCreateGroupEpochKeyRequest) => Promise<{ chatId: string; epoch: number; senderDeviceId: string; groupEpochKeyBase64: string; groupKeyPackagePlainText: string }>;
+  importGroupKeyFromBackupEnvelope: (request: ImportGroupKeyFromBackupEnvelopeRequest) => Promise<{ imported: boolean }>;
+  encryptGroupMessageV2: (request: EncryptGroupMessageV2Request) => Promise<EncryptGroupMessageV2Response>;
+  decryptGroupMessageV2: (request: DecryptGroupMessageV2Request) => Promise<DecryptGroupMessageResponse>;
   encryptMessage: (request: EncryptMessageRequest) => Promise<EncryptMessageResponse>;
   encryptLocalMessage: (request: EncryptLocalMessageRequest) => Promise<EncryptMessageResponse>;
-  encryptGroupMessage: (request: EncryptGroupMessageRequest) => Promise<EncryptGroupMessageResponse>;
-  decryptGroupMessage: (request: DecryptGroupMessageRequest) => Promise<DecryptGroupMessageResponse>;
-  importGroupKey: (request: ImportGroupKeyRequest) => Promise<ImportGroupKeyResponse>;
   exportGroupKeyPackagesForChat: (request: ExportGroupKeyPackagesForChatRequest) => Promise<ExportGroupKeyPackagesForChatResponse>;
   decryptMessage: (request: DecryptMessageRequest) => Promise<DecryptMessageResponse>;
-  exportEncryptedKeyBackup: (request: ExportEncryptedKeyBackupRequest) => Promise<ExportEncryptedKeyBackupResponse>;
-  importEncryptedKeyBackup: (request: ImportEncryptedKeyBackupRequest) => Promise<ImportEncryptedKeyBackupResponse>;
-  getRestoredDeviceIds: (request: GetRestoredDeviceIdsRequest) => Promise<string[]>;
+  setAccountBackupPassword: (request: SetAccountBackupPasswordRequest) => Promise<{ stored: boolean; kdfSaltBase64: string }>;
+  clearAccountBackupPassword: (request: ClearAccountBackupPasswordRequest) => Promise<{ cleared: boolean }>;
+  hasAccountBackupPassword: (request: HasAccountBackupPasswordRequest) => Promise<boolean>;
+  clearAccountLocalVault: (request: ClearAccountLocalVaultRequest) => Promise<ClearLocalVaultResponse>;
   clearLocalVault: () => Promise<ClearLocalVaultResponse>;
 };

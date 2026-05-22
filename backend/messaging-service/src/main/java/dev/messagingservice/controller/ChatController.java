@@ -4,6 +4,8 @@ import dev.messagingservice.model.dto.request.AddGroupParticipantRequestDto;
 import dev.messagingservice.model.dto.request.CreateDirectChatRequestDto;
 import dev.messagingservice.model.dto.request.CreateGroupChatRequestDto;
 import dev.messagingservice.model.dto.request.UpdateGroupAvatarRequestDto;
+import dev.messagingservice.model.dto.request.UpsertGroupEpochKeyEnvelopeRequestDto;
+import dev.messagingservice.model.dto.response.AccountKeyEnvelopeResponseDto;
 import dev.messagingservice.model.dto.response.ChatResponseDto;
 import dev.messagingservice.service.ChatService;
 import dev.messagingservice.service.CurrentAccountService;
@@ -98,6 +100,30 @@ public class ChatController {
             currentAccountService.getCurrentAccountId(),
             chatId,
             updateGroupAvatarRequestDto
+        ));
+    }
+
+    @Operation(summary = "Share encrypted group epoch key envelope")
+    @PutMapping("/{chatId}/group-key-envelopes")
+    public ResponseEntity<Void> upsertGroupEpochKeyEnvelope(
+        @PathVariable UUID chatId,
+        @Valid @RequestBody UpsertGroupEpochKeyEnvelopeRequestDto requestDto
+    ) {
+        chatService.upsertGroupEpochKeyEnvelope(currentAccountService.getCurrentAccountId(), chatId, requestDto);
+        return ResponseEntity.noContent().build();
+    }
+
+
+    @Operation(summary = "Get encrypted group epoch key envelope for current account")
+    @GetMapping("/{chatId}/group-key-envelopes/{epoch}/me")
+    public ResponseEntity<AccountKeyEnvelopeResponseDto> getCurrentAccountGroupEpochKeyEnvelope(
+        @PathVariable UUID chatId,
+        @PathVariable Integer epoch
+    ) {
+        return ResponseEntity.ok(chatService.getCurrentAccountGroupEpochKeyEnvelope(
+            currentAccountService.getCurrentAccountId(),
+            chatId,
+            epoch
         ));
     }
 

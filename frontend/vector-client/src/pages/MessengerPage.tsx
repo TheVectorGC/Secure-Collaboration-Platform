@@ -4,8 +4,8 @@ import { logout as logoutRequest } from '../features/auth/api/authApi';
 import { useAuthStore } from '../features/auth/model/authStore';
 import { useCryptoBootstrap } from '../features/crypto/useCryptoBootstrap';
 import { useCryptoStore } from '../features/crypto/model/cryptoStore';
-import { getProfilesByAccountIds } from '../features/directory/api/profilesApi';
 import { useDirectoryStore } from '../features/directory/model/directoryStore';
+import { getProfilesByAccountIds } from '../features/directory/api/profilesApi';
 import { getChatMessages } from '../features/messages/api/messagesApi';
 import { updateGroupChatAvatar } from '../features/chats/api/chatsApi';
 import { useMessengerStore } from '../features/messenger/model/messengerStore';
@@ -14,8 +14,8 @@ import { useRealtimeStore } from '../features/realtime/model/realtimeStore';
 import { getDirectCompanionAccountId } from '../shared/lib/profile';
 import type { ProfileResponseDto } from '../shared/types/api';
 import {
-  createLocalAvatarDataUrl,
   getLocalAvatarStorageKey,
+  createLocalAvatarDataUrl,
   getVisibleChatMessages,
   getLastTimelineMessage,
   getDownloadableAttachmentFromPlainText,
@@ -25,13 +25,13 @@ import {
   isCurrentAccountActiveInChat,
   getActiveGroupParticipantAccountIds,
   getChatPresentation,
-} from '../features/messenger/lib/messengerCore';
+  NewChatModal,
+  SettingsModal,
+  MiniProfileModal,
+} from './MessengerPageSupport';
 import { DocumentCreationModal, DocumentsPanel } from '../features/documents/ui/DocumentWorkflowModals';
-import { NewChatModal } from '../features/messenger/ui/modals/NewChatModal';
-import { GroupManagementModal } from '../features/messenger/ui/modals/GroupManagementModal';
-import { SettingsModal } from '../features/settings/ui/SettingsModal';
-import { MiniProfileModal } from '../features/profile/ui/MiniProfileModal';
 import { MessengerOverlays } from '../features/messenger/ui/refactored/MessengerOverlays';
+import { GroupManagementModal } from '../features/messenger/ui/modals/GroupManagementModal';
 import { ChatSidebar } from '../features/messenger/ui/refactored/ChatSidebar';
 import { ChatHeader } from '../features/messenger/ui/refactored/ChatHeader';
 import { EmptyChatState, ChatAlerts } from '../features/messenger/ui/refactored/ChatStateBlocks';
@@ -63,7 +63,6 @@ export function MessengerPage() {
   const clearAuthentication = useAuthStore((state) => state.clearAuthentication);
   const setProfile = useAuthStore((state) => state.setProfile);
   const realtimeStatus = useRealtimeStore((state) => state.status);
-  const [restoredDeviceIds, setRestoredDeviceIds] = useState<string[]>([]);
   const [localAvatarDataUrl, setLocalAvatarDataUrl] = useState<string | null>(() => profile?.avatarDataUrl ?? localStorage.getItem(getLocalAvatarStorageKey(profile?.accountId)));
   const [miniProfile, setMiniProfile] = useState<ProfileResponseDto | null>(null);
   const typingByChatId = useRealtimeStore((state) => state.typingByChatId);
@@ -104,42 +103,6 @@ export function MessengerPage() {
   const deliveredMarkersRef = useRef<Set<string>>(new Set());
   const readMarkersRef = useRef<Set<string>>(new Set());
   const { highlightedMessageId, scrollToMessage } = useMessageNavigationController(messageElementRefs);
-  async function loadRestoredDeviceIds() {
-    if (!profile?.accountId || !window.vectorCrypto) {
-      setRestoredDeviceIds([]);
-      return;
-    }
-
-    try {
-      const loadedDeviceIds = await window.vectorCrypto.getRestoredDeviceIds({ accountId: profile.accountId });
-      setRestoredDeviceIds(loadedDeviceIds);
-    }
-    catch (error) {
-      console.warn(error);
-      setRestoredDeviceIds([]);
-    }
-  }
-
-  async function handleKeyBackupRestored() {
-    resetDecryptionState();
-    await loadRestoredDeviceIds();
-
-    if (selectedChatId) {
-      try {
-        const loadedMessages = await getChatMessages(selectedChatId);
-        setMessages(selectedChatId, loadedMessages);
-      }
-      catch (error) {
-        console.error(error);
-        setErrorMessage('Ключи восстановлены, но не удалось сразу обновить историю чата. Перезагрузите чат вручную.');
-      }
-    }
-  }
-
-  useEffect(() => {
-    void loadRestoredDeviceIds();
-  }, [profile?.accountId, deviceId]);
-
   useRealtimeConnection();
   useCryptoBootstrap();
 
@@ -149,96 +112,9 @@ export function MessengerPage() {
     }
   }, [profile, upsertProfile]);
 
-  const knownProfileAccountIds = useMemo(() => {
-    const accountIds = new Set<string>();
-
-    if (profile?.accountId) {
-      accountIds.add(profile.accountId);
-    }
-
-    chats.forEach((chat) => {
-      chat.participantAccountIds.forEach((accountId) => accountIds.add(accountId));
-      chat.participants?.forEach((participant) => accountIds.add(participant.accountId));
-    });
-
-    Object.values(messagesByChatId).forEach((messages) => {
-      messages.forEach((message) => {
-        accountIds.add(message.senderAccountId);
-        message.deliveryStates.forEach((deliveryState) => accountIds.add(deliveryState.accountId));
-      });
-    });
-
-    return Array.from(accountIds);
-  }, [chats, messagesByChatId, profile?.accountId]);
-
-  useEffect(() => {
-    let isCancelled = false;
-
-    async function refreshKnownProfiles() {
-      if (knownProfileAccountIds.length === 0) {
-        return;
-      }
-
-      try {
-        const profiles = await getProfilesByAccountIds(knownProfileAccountIds);
-
-        if (!isCancelled) {
-          upsertProfiles(profiles);
-
-          if (profile?.accountId) {
-            const currentProfile = profiles.find((loadedProfile) => loadedProfile.accountId === profile.accountId);
-
-            if (currentProfile) {
-              setProfile(currentProfile);
-            }
-          }
-        }
-      }
-      catch (error) {
-        console.warn('Failed to refresh known profiles.', error);
-      }
-    }
-
-    void refreshKnownProfiles();
-    const intervalId = window.setInterval(refreshKnownProfiles, 10000);
-
-    return () => {
-      isCancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, [knownProfileAccountIds, profile?.accountId, setProfile, upsertProfiles]);
-
-
-  const openMiniProfileByAccountId = useCallback(async (accountId: string | null | undefined) => {
-    if (!accountId) {
-      return;
-    }
-
-    const cachedProfile = accountId === profile?.accountId ? profile : profilesById[accountId] ?? null;
-
-    if (cachedProfile) {
-      setMiniProfile(cachedProfile);
-      return;
-    }
-
-    try {
-      const loadedProfiles = await getProfilesByAccountIds([accountId]);
-      const loadedProfile = loadedProfiles.find((candidateProfile) => candidateProfile.accountId === accountId) ?? null;
-
-      if (loadedProfile) {
-        upsertProfile(loadedProfile);
-        setMiniProfile(loadedProfile);
-      }
-    }
-    catch (error) {
-      console.warn('Failed to open profile.', error);
-      setErrorMessage('Не удалось загрузить профиль пользователя.');
-    }
-  }, [profile, profilesById, upsertProfile]);
-
   useEffect(() => {
     setLocalAvatarDataUrl(profile?.avatarDataUrl ?? localStorage.getItem(getLocalAvatarStorageKey(profile?.accountId)));
-  }, [profile?.accountId, profile?.avatarDataUrl]);
+  }, [profile?.accountId]);
 
   useEffect(() => {
     function handleKeyboardShortcut(event: globalThis.KeyboardEvent) {
@@ -274,8 +150,8 @@ export function MessengerPage() {
   } = useMessageDecryptionController({
     accountId: profile?.accountId,
     deviceId,
-    restoredDeviceIds,
     loadedMessages,
+    isCryptoReady: cryptoStatus === 'ready',
   });
   const lastActivityByAccountId = useMemo(
     () => buildAccountLastActivityMap(messagesByChatId),
@@ -443,24 +319,6 @@ export function MessengerPage() {
     setIsDeleteChatConfirmOpen,
   });
 
-  const {
-    timelineScrollContainerRef,
-    unreadIncomingCount,
-    isJumpToBottomVisible,
-    handleTimelineScroll,
-    handleJumpToBottom,
-  } = useChatViewportController({
-    selectedChatId,
-    currentAccountId: profile?.accountId,
-    visibleSelectedMessages,
-    localChatState,
-    isSelectedChatWritable,
-    updateLocalChatState,
-    messagesEndRef,
-    messageElementRefs,
-    readMarkersRef,
-  });
-
   const { refreshSelectedChat } = useChatDataController({
     selectedChatId,
     selectedChat,
@@ -479,6 +337,25 @@ export function MessengerPage() {
     setErrorMessage,
     setReadDetailsMessageId,
     deliveredMarkersRef,
+  });
+
+
+  const {
+    timelineScrollContainerRef,
+    unreadIncomingCount,
+    isJumpToBottomVisible,
+    handleTimelineScroll,
+    handleJumpToBottom,
+  } = useChatViewportController({
+    selectedChatId,
+    currentAccountId: profile?.accountId,
+    visibleSelectedMessages,
+    localChatState,
+    isSelectedChatWritable,
+    updateLocalChatState,
+    messagesEndRef,
+    messageElementRefs,
+    readMarkersRef,
   });
 
   const {
@@ -515,12 +392,12 @@ export function MessengerPage() {
     setIsDocumentsPanelOpen,
     chatDocuments,
     isLoadingDocuments,
-    openDocumentsWorkspace,
-    loadWorkspaceDocuments,
     documentNotificationCount,
     includeHiddenDocuments,
     setIncludeHiddenDocuments,
     pendingDocumentFile,
+    openDocumentsWorkspace,
+    loadWorkspaceDocuments,
     handleStartDocumentCreation,
     cancelPendingDocumentCreation,
     confirmDocumentCreation,
@@ -542,49 +419,82 @@ export function MessengerPage() {
     setErrorMessage,
   });
 
-  const documentProfileAccountIds = useMemo(() => {
+  useEffect(() => {
+    if (!profile?.accountId) {
+      return;
+    }
+
     const accountIds = new Set<string>();
+    accountIds.add(profile.accountId);
+
+    chats.forEach((chat) => {
+      chat.participantAccountIds.forEach((accountId) => accountIds.add(accountId));
+      chat.participants.forEach((participant) => accountIds.add(participant.accountId));
+    });
+
+    Object.values(messagesByChatId).forEach((messages) => {
+      messages.forEach((message) => {
+        accountIds.add(message.senderAccountId);
+        message.deliveryStates.forEach((deliveryState) => accountIds.add(deliveryState.accountId));
+        message.devicePayloads.forEach((devicePayload) => accountIds.add(devicePayload.targetAccountId));
+      });
+    });
 
     chatDocuments.forEach((documentItem) => {
       accountIds.add(documentItem.ownerAccountId);
-      documentItem.rejectedByAccountId && accountIds.add(documentItem.rejectedByAccountId);
-      documentItem.cancelledByAccountId && accountIds.add(documentItem.cancelledByAccountId);
-      documentItem.signers?.forEach((signer) => accountIds.add(signer.signerAccountId));
-      documentItem.observers?.forEach((observer) => accountIds.add(observer.observerAccountId));
+      if (documentItem.rejectedByAccountId) {
+        accountIds.add(documentItem.rejectedByAccountId);
+      }
       documentItem.signatures?.forEach((signature) => accountIds.add(signature.signerAccountId));
     });
 
-    return Array.from(accountIds);
-  }, [chatDocuments]);
-
-  useEffect(() => {
-    const missingAccountIds = documentProfileAccountIds.filter((accountId) => !profilesById[accountId]);
+    const missingAccountIds = Array.from(accountIds).filter((accountId) => !profilesById[accountId]);
 
     if (missingAccountIds.length === 0) {
       return;
     }
 
-    let isCancelled = false;
+    let cancelled = false;
 
-    async function loadDocumentProfiles() {
+    async function loadMissingProfiles() {
       try {
-        const profiles = await getProfilesByAccountIds(missingAccountIds);
+        const loadedProfiles = await getProfilesByAccountIds(missingAccountIds);
 
-        if (!isCancelled) {
-          upsertProfiles(profiles);
+        if (!cancelled && loadedProfiles.length > 0) {
+          upsertProfiles(loadedProfiles);
         }
       }
       catch (error) {
-        console.warn('Failed to load document profiles.', error);
+        console.warn('Unable to load account profiles.', error);
       }
     }
 
-    void loadDocumentProfiles();
+    void loadMissingProfiles();
 
     return () => {
-      isCancelled = true;
+      cancelled = true;
     };
-  }, [documentProfileAccountIds, profilesById, upsertProfiles]);
+  }, [chatDocuments, chats, messagesByChatId, profile?.accountId, profilesById, upsertProfiles]);
+
+
+  const documentContactAccountIds = useMemo(() => {
+    if (!profile?.accountId) {
+      return [];
+    }
+
+    return chats
+      .filter((chat) => chat.type === 'DIRECT')
+      .map((chat) => getDirectCompanionAccountId(chat, profile.accountId))
+      .filter((accountId): accountId is string => Boolean(accountId && profilesById[accountId]));
+  }, [chats, profile?.accountId, profilesById]);
+
+  function openMiniProfileByAccountId(accountId: string) {
+    const foundProfile = profilesById[accountId];
+
+    if (foundProfile) {
+      setMiniProfile(foundProfile);
+    }
+  }
 
   async function handleLogout() {
     try {
@@ -596,16 +506,18 @@ export function MessengerPage() {
       console.warn(error);
     }
     finally {
+      if (profile?.accountId && window.vectorCrypto) {
+        try {
+          await window.vectorCrypto.clearAccountBackupPassword({ accountId: profile.accountId });
+        }
+        catch (backupKeyError) {
+          console.warn('Unable to clear backup session key.', backupKeyError);
+        }
+      }
+
       clearAuthentication();
       navigate('/login');
     }
-  }
-
-  async function handleUpdateGroupAvatar(chatId: string, file: File | null) {
-    setErrorMessage(null);
-    const avatarDataUrl = file ? await createLocalAvatarDataUrl(file) : null;
-    const updatedChat = await updateGroupChatAvatar(chatId, { avatarDataUrl });
-    upsertChat(updatedChat);
   }
 
   const {
@@ -628,27 +540,20 @@ export function MessengerPage() {
     buildEncryptedDevicePayloadsForAccounts,
   });
 
-  const contactAccountIds = useMemo(() => {
-    if (!profile?.accountId) {
-      return [];
+  const handleUpdateGroupAvatar = useCallback(async (chatId: string, file: File | null) => {
+    setErrorMessage(null);
+
+    try {
+      const avatarDataUrl = file ? await createLocalAvatarDataUrl(file) : null;
+      const updatedChat = await updateGroupChatAvatar(chatId, { avatarDataUrl });
+      upsertChat(updatedChat);
     }
-
-    const accountIds = new Set<string>();
-
-    chats.forEach((chat) => {
-      if (chat.type !== 'DIRECT') {
-        return;
-      }
-
-      const companionAccountId = getDirectCompanionAccountId(chat, profile.accountId);
-
-      if (companionAccountId) {
-        accountIds.add(companionAccountId);
-      }
-    });
-
-    return Array.from(accountIds);
-  }, [chats, profile?.accountId]);
+    catch (error) {
+      console.error(error);
+      setErrorMessage('Не удалось обновить аватар группы.');
+      throw error;
+    }
+  }, [upsertChat]);
 
   const selectedChatPresentation = selectedChat ? getChatPresentation(selectedChat, profile, profilesById) : null;
   const selectedTypingText = isSelectedChatWritable && selectedTypingStates.length > 0
@@ -691,7 +596,6 @@ export function MessengerPage() {
         realtimeStatus={realtimeStatus}
         onClose={() => setIsSettingsOpen(false)}
         onLogout={handleLogout}
-        onBackupRestored={handleKeyBackupRestored}
         onProfileUpdated={(updatedProfile) => {
           setProfile(updatedProfile);
           upsertProfile(updatedProfile);
@@ -722,16 +626,7 @@ export function MessengerPage() {
         onAddParticipant={handleAddGroupParticipant}
         onRemoveParticipant={handleRemoveGroupParticipant}
         onUpdateGroupAvatar={handleUpdateGroupAvatar}
-        onOpenProfile={(accountId) => void openMiniProfileByAccountId(accountId)}
-      />
-
-      <DocumentCreationModal
-        file={pendingDocumentFile}
-        currentAccountId={profile?.accountId}
-        profilesById={profilesById}
-        contactAccountIds={contactAccountIds}
-        onClose={cancelPendingDocumentCreation}
-        onConfirm={confirmDocumentCreation}
+        onOpenProfile={(accountId) => setMiniProfile(profilesById[accountId] ?? null)}
       />
 
       <DocumentsPanel
@@ -740,8 +635,10 @@ export function MessengerPage() {
         isLoading={isLoadingDocuments}
         activeAccountId={profile?.accountId}
         profilesById={profilesById}
+        contactAccountIds={documentContactAccountIds}
         onClose={() => setIsDocumentsPanelOpen(false)}
         onRefresh={loadWorkspaceDocuments}
+        onCreateDocument={handleStartDocumentCreation}
         onDownload={handleDownloadDocument}
         onSign={handleSignDocument}
         onReject={handleRejectDocument}
@@ -749,12 +646,20 @@ export function MessengerPage() {
         onHide={handleHideDocument}
         onRestore={handleRestoreDocument}
         onVerifyFile={verifyLocalDocumentFile}
-        onCreateDocument={handleStartDocumentCreation}
         onAddObservers={handleAddDocumentObservers}
         showHiddenDocuments={includeHiddenDocuments}
         onShowHiddenDocumentsChange={setIncludeHiddenDocuments}
-        onOpenProfile={(accountId) => void openMiniProfileByAccountId(accountId)}
-        contactAccountIds={contactAccountIds}
+        onOpenProfile={openMiniProfileByAccountId}
+      />
+
+
+      <DocumentCreationModal
+        file={pendingDocumentFile}
+        profilesById={profilesById}
+        contactAccountIds={documentContactAccountIds}
+        currentAccountId={profile?.accountId}
+        onClose={cancelPendingDocumentCreation}
+        onConfirm={confirmDocumentCreation}
       />
 
       <MessengerOverlays
@@ -793,11 +698,11 @@ export function MessengerPage() {
         onCloseOpenedChatMenu={() => setOpenedChatMenuId(null)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenDevTools={() => setIsDevToolsOpen(true)}
-        onOpenDocumentsWorkspace={openDocumentsWorkspace}
+        onOpenDocumentsWorkspace={() => void openDocumentsWorkspace()}
         pendingDocumentCount={documentNotificationCount}
       />
 
-      <main className="vector-chat-wallpaper relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden bg-[#0c0e14]/84 backdrop-blur-sm">
+      <main className="relative z-10 flex min-w-0 flex-1 flex-col bg-[#101116]/74 backdrop-blur-sm">
         {!selectedChat || !selectedChatPresentation ? (
           <EmptyChatState />
         ) : (
@@ -808,7 +713,7 @@ export function MessengerPage() {
               selectedChatSubtitle={selectedChatSubtitle}
               isChatActionsMenuOpen={isChatActionsMenuOpen}
               onOpenGroupManagement={() => setIsGroupManagementOpen(true)}
-              onOpenDirectProfile={() => void openMiniProfileByAccountId(selectedDirectCompanionAccountId)}
+              onOpenDirectProfile={() => selectedChatPresentation.companionProfile && setMiniProfile(selectedChatPresentation.companionProfile)}
               onToggleChatActionsMenu={() => setIsChatActionsMenuOpen((previousValue) => !previousValue)}
               onClearSelectedChatHistory={handleClearSelectedChatHistory}
               onOpenDeleteChatConfirm={() => {
@@ -838,13 +743,13 @@ export function MessengerPage() {
               timelineScrollContainerRef={timelineScrollContainerRef}
               unreadIncomingCount={unreadIncomingCount}
               isJumpToBottomVisible={isJumpToBottomVisible}
-              onToggleForwardSelectedMessage={toggleForwardSelectedMessage}
               onTimelineScroll={handleTimelineScroll}
               onJumpToBottom={handleJumpToBottom}
+              onToggleForwardSelectedMessage={toggleForwardSelectedMessage}
               onOpenMessageContextMenu={openMessageContextMenu}
               onScrollToMessage={scrollToMessage}
               onDownloadAttachment={handleDownloadAttachment}
-              onOpenProfile={(accountId) => void openMiniProfileByAccountId(accountId)}
+              onOpenProfile={openMiniProfileByAccountId}
               onSetReadDetailsMessageId={setReadDetailsMessageId}
               onSetLocalMessageReaction={setLocalMessageReaction}
             />

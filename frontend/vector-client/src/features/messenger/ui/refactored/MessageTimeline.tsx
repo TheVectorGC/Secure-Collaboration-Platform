@@ -73,7 +73,7 @@ export function MessageTimeline({
   onSetReadDetailsMessageId,
   onSetLocalMessageReaction,
 }: MessageTimelineProps) {
-  const renderedMessages = visibleSelectedMessages.filter((message) => message.messageType !== 'GROUP_KEY_DISTRIBUTION');
+  const renderedMessages = visibleSelectedMessages;
 
   return (
     <div className="relative min-h-0 flex-1">

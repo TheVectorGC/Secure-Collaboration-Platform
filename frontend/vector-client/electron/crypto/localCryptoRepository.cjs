@@ -136,109 +136,31 @@ function signDocumentHash(accountId, deviceId, documentHashBase64) {
   };
 }
 
-function getCachedDecryptedMessage(accountId, deviceId, messageId) {
-  if (!accountId || !messageId) {
-    return null;
+function clearAccountCryptoState(accountId) {
+  if (!accountId || typeof accountId !== 'string') {
+    throw new Error('accountId is required to clear account crypto state.');
   }
 
   const database = encryptedDatabase.openDatabase();
 
   try {
-    if (deviceId) {
-      const exactCachedMessage = database
-        .prepare(`
-          SELECT plain_text
-          FROM decrypted_message_cache
-          WHERE account_id = ? AND device_id = ? AND message_id = ?
-        `)
-        .get(accountId, deviceId, messageId);
+    database.transaction(() => {
+      const tableNames = [
+        'group_keys',
+        'document_signing_keys',
+        'trusted_identities',
+        'signal_sessions',
+        'kyber_prekeys',
+        'one_time_prekeys',
+        'signed_prekeys',
+        'identity_keys',
+        'local_devices',
+      ];
 
-      if (exactCachedMessage?.plain_text) {
-        return exactCachedMessage.plain_text;
+      for (const tableName of tableNames) {
+        database.prepare(`DELETE FROM ${tableName} WHERE account_id = ?`).run(accountId);
       }
-    }
-
-    const anyDeviceCachedMessage = database
-      .prepare(`
-        SELECT plain_text
-        FROM decrypted_message_cache
-        WHERE account_id = ? AND message_id = ?
-        ORDER BY updated_at DESC
-        LIMIT 1
-      `)
-      .get(accountId, messageId);
-
-    return anyDeviceCachedMessage?.plain_text ?? null;
-  }
-  finally {
-    database.close();
-  }
-}
-
-function saveCachedDecryptedMessage(accountId, deviceId, messageId, plainText) {
-  if (!accountId || !deviceId || !messageId || typeof plainText !== 'string') {
-    return;
-  }
-
-  const database = encryptedDatabase.openDatabase();
-  const timestamp = nowIso();
-
-  try {
-    database
-      .prepare(`
-        INSERT INTO decrypted_message_cache(account_id, device_id, message_id, plain_text, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-        ON CONFLICT(account_id, device_id, message_id)
-        DO UPDATE SET plain_text = excluded.plain_text, updated_at = excluded.updated_at
-      `)
-      .run(accountId, deviceId, messageId, plainText, timestamp, timestamp);
-  }
-  finally {
-    database.close();
-  }
-}
-
-
-function saveRestoredLocalMessageKey(accountId, deviceId, keyBase64) {
-  if (!accountId || !deviceId || !keyBase64) {
-    return;
-  }
-
-  const database = encryptedDatabase.openDatabase();
-  const timestamp = nowIso();
-
-  try {
-    database
-      .prepare(`
-        INSERT INTO restored_local_message_keys(account_id, device_id, key_base64, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(account_id, device_id)
-        DO UPDATE SET key_base64 = excluded.key_base64, updated_at = excluded.updated_at
-      `)
-      .run(accountId, deviceId, keyBase64, timestamp, timestamp);
-  }
-  finally {
-    database.close();
-  }
-}
-
-function getRestoredLocalMessageKey(accountId, deviceId) {
-  if (!accountId || !deviceId) {
-    return null;
-  }
-
-  const database = encryptedDatabase.openDatabase();
-
-  try {
-    const row = database
-      .prepare(`
-        SELECT key_base64
-        FROM restored_local_message_keys
-        WHERE account_id = ? AND device_id = ?
-      `)
-      .get(accountId, deviceId);
-
-    return row?.key_base64 ?? null;
+    })();
   }
   finally {
     database.close();
@@ -249,8 +171,5 @@ module.exports = {
   initializeLocalDevice,
   getOrCreateDocumentSigningKey,
   signDocumentHash,
-  getCachedDecryptedMessage,
-  saveCachedDecryptedMessage,
-  saveRestoredLocalMessageKey,
-  getRestoredLocalMessageKey,
+  clearAccountCryptoState,
 };

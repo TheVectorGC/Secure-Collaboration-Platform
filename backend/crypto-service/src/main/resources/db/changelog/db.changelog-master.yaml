@@ -8,4 +8,4 @@ databaseChangeLog:
   - include:
       file: db/changelog/changes/004-add-registration-id-and-kyber-prekeys.yaml
   - include:
-      file: db/changelog/changes/005-create-encrypted-key-backups-table.yaml
+      file: db/changelog/changes/009-create-account-backup-profiles-table.yaml

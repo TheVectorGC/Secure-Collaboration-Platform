@@ -1,7 +1,37 @@
 import { useEffect } from 'react';
+import { updateCurrentDeviceMetadata } from '../auth/api/authApi';
 import { useAuthStore } from '../auth/model/authStore';
 import { ensureCryptoDeviceKeysRegistered } from './api/cryptoKeysApi';
+import { ensureAccountBackupProfileUnlocked } from './lib/accountBackupProfileOperations';
 import { useCryptoStore } from './model/cryptoStore';
+
+function decodeBase64(value: string): Uint8Array {
+  const binaryValue = window.atob(value);
+  const bytes = new Uint8Array(binaryValue.length);
+
+  for (let index = 0; index < binaryValue.length; index += 1) {
+    bytes[index] = binaryValue.charCodeAt(index);
+  }
+
+  return bytes;
+}
+
+function toHex(buffer: ArrayBuffer): string {
+  return [...new Uint8Array(buffer)]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('')
+    .toUpperCase();
+}
+
+async function calculateIdentityKeyFingerprint(publicKeyBase64: string): Promise<string> {
+  const publicKeyBytes = decodeBase64(publicKeyBase64);
+  const publicKeyBuffer = publicKeyBytes.buffer.slice(
+    publicKeyBytes.byteOffset,
+    publicKeyBytes.byteOffset + publicKeyBytes.byteLength,
+  ) as ArrayBuffer;
+  const digest = await window.crypto.subtle.digest('SHA-256', publicKeyBuffer);
+  return toHex(digest);
+}
 
 export function useCryptoBootstrap() {
   const profile = useAuthStore((state) => state.profile);
@@ -50,8 +80,24 @@ export function useCryptoBootstrap() {
           return;
         }
 
+        await ensureAccountBackupProfileUnlocked(activeAccountId);
+
         setStatus('registering');
         await ensureCryptoDeviceKeysRegistered(activeDeviceId, result.signalKeyBundle);
+
+        const deviceEnvironment = await window.vectorCrypto!.getDeviceEnvironment();
+        const deviceFingerprint = await calculateIdentityKeyFingerprint(result.signalKeyBundle.identityKey.publicKey);
+
+        await updateCurrentDeviceMetadata(activeDeviceId, {
+          deviceName: deviceEnvironment.deviceName,
+          platform: deviceEnvironment.platform,
+          clientVersion: deviceEnvironment.clientVersion,
+          osName: deviceEnvironment.osName,
+          osVersion: deviceEnvironment.osVersion,
+          architecture: deviceEnvironment.architecture,
+          hostname: deviceEnvironment.hostname,
+          deviceFingerprint,
+        });
 
         if (!cancelled) {
           setReady(result.registrationId, result.databasePath);
