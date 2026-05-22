@@ -322,6 +322,7 @@ export type DocumentResponseDto = {
   signers: DocumentSignerResponseDto[];
   observers: DocumentObserverResponseDto[];
   signatures: DocumentSignatureResponseDto[];
+  hiddenForCurrentAccount?: boolean;
   fileEncryption?: FileEncryptionMetadata | null;
 };
 

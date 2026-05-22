@@ -40,6 +40,16 @@ public class DeviceServiceImpl implements DeviceService {
             return resolveExistingDevice(accountEntity, loginRequestDto);
         }
 
+        if (loginRequestDto.clientInstallationId() != null && !loginRequestDto.clientInstallationId().trim().isEmpty()) {
+            return deviceRepository.findByAccountIdAndClientInstallationIdAndStatus(
+                    accountEntity.getId(),
+                    loginRequestDto.clientInstallationId().trim(),
+                    DeviceStatus.ACTIVE
+            )
+                    .map(deviceEntity -> refreshExistingInstallationDevice(deviceEntity, loginRequestDto))
+                    .orElseGet(() -> createDevice(accountEntity, loginRequestDto));
+        }
+
         return createDevice(accountEntity, loginRequestDto);
     }
 
@@ -128,6 +138,22 @@ public class DeviceServiceImpl implements DeviceService {
         return deviceRepository.save(deviceEntity);
     }
 
+    private DeviceEntity refreshExistingInstallationDevice(DeviceEntity deviceEntity, LoginRequestDto loginRequestDto) {
+        OffsetDateTime now = OffsetDateTime.now();
+
+        deviceEntity.setLastSeenAt(now);
+
+        if (loginRequestDto.deviceName() != null && !loginRequestDto.deviceName().trim().isEmpty()) {
+            deviceEntity.setDeviceName(loginRequestDto.deviceName().trim());
+        }
+
+        if (loginRequestDto.clientVersion() != null && !loginRequestDto.clientVersion().trim().isEmpty()) {
+            deviceEntity.setClientVersion(loginRequestDto.clientVersion().trim());
+        }
+
+        return deviceRepository.save(deviceEntity);
+    }
+
     private DeviceEntity createDevice(AccountEntity accountEntity, LoginRequestDto loginRequestDto) {
         validateNewDeviceRequest(loginRequestDto);
 
@@ -138,6 +164,7 @@ public class DeviceServiceImpl implements DeviceService {
             .deviceName(loginRequestDto.deviceName().trim())
             .platform(loginRequestDto.platform())
             .status(DeviceStatus.ACTIVE)
+            .clientInstallationId(trimToNull(loginRequestDto.clientInstallationId()))
             .clientVersion(trimToNull(loginRequestDto.clientVersion()))
             .lastSeenAt(now)
             .createdAt(now)

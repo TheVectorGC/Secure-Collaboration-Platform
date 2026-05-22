@@ -13,7 +13,7 @@ public interface DocumentService {
 
     DocumentResponseDto getDocument(UUID currentAccountId, UUID documentId);
 
-    List<DocumentResponseDto> getCurrentAccountDocuments(UUID currentAccountId);
+    List<DocumentResponseDto> getCurrentAccountDocuments(UUID currentAccountId, boolean includeHidden);
 
     List<DocumentResponseDto> getChatDocuments(UUID currentAccountId, UUID chatId);
 
@@ -26,4 +26,6 @@ public interface DocumentService {
     DocumentResponseDto addObservers(UUID currentAccountId, UUID documentId, AddDocumentObserversRequestDto requestDto);
 
     void hideDocument(UUID currentAccountId, UUID documentId);
+
+    void restoreDocument(UUID currentAccountId, UUID documentId);
 }

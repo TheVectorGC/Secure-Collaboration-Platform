@@ -15,4 +15,6 @@ public interface DocumentHiddenRepository extends JpaRepository<DocumentHiddenEn
     Optional<DocumentHiddenEntity> findByDocumentIdAndAccountId(UUID documentId, UUID accountId);
 
     List<DocumentHiddenEntity> findByAccountIdAndDocumentIdIn(UUID accountId, Collection<UUID> documentIds);
+
+    void deleteByDocumentIdAndAccountId(UUID documentId, UUID accountId);
 }

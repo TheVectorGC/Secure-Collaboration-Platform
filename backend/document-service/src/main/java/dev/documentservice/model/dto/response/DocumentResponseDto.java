@@ -29,4 +29,5 @@ public record DocumentResponseDto(
     List<DocumentSignerResponseDto> signers,
     List<DocumentObserverResponseDto> observers,
     List<DocumentSignatureResponseDto> signatures,
+    boolean hiddenForCurrentAccount,
     DocumentFileEncryptionResponseDto fileEncryption) {}

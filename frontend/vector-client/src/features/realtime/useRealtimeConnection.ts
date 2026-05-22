@@ -249,7 +249,7 @@ export function useRealtimeConnection() {
       }
 
       if (isDocumentEventType(realtimeEvent.type) && isDocumentChangedPayload(realtimeEvent.payload)) {
-        window.dispatchEvent(new CustomEvent('vector:documentChanged', { detail: { documentId: realtimeEvent.payload.documentId } }));
+        window.dispatchEvent(new CustomEvent('vector:documentChanged', { detail: { documentId: realtimeEvent.payload.documentId, eventType: realtimeEvent.type } }));
         return;
       }
 

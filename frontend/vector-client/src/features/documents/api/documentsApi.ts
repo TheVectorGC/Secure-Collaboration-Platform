@@ -14,8 +14,10 @@ export async function createDocument(request: CreateDocumentRequestDto): Promise
   return response.data;
 }
 
-export async function getDocuments(): Promise<DocumentResponseDto[]> {
-  const response = await documentHttpClient.get<DocumentResponseDto[]>('/api/v1/documents');
+export async function getDocuments(includeHidden = false): Promise<DocumentResponseDto[]> {
+  const response = await documentHttpClient.get<DocumentResponseDto[]>('/api/v1/documents', {
+    params: { includeHidden },
+  });
   return response.data;
 }
 
@@ -44,6 +46,10 @@ export async function rejectDocument(documentId: string, request: RejectDocument
 
 export async function hideDocument(documentId: string): Promise<void> {
   await documentHttpClient.patch(`/api/v1/documents/${documentId}/hide`);
+}
+
+export async function restoreDocument(documentId: string): Promise<void> {
+  await documentHttpClient.patch(`/api/v1/documents/${documentId}/restore`);
 }
 
 export async function addDocumentObservers(documentId: string, request: AddDocumentObserversRequestDto): Promise<DocumentResponseDto> {

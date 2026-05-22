@@ -7,6 +7,7 @@ const DEVICE_ID_STORAGE_KEY = 'vector.deviceId';
 const SESSION_ID_STORAGE_KEY = 'vector.sessionId';
 const ACCESS_TOKEN_EXPIRES_AT_STORAGE_KEY = 'vector.accessTokenExpiresAt';
 const PROFILE_STORAGE_KEY = 'vector.profile';
+const REMEMBERED_DEVICE_ID_STORAGE_PREFIX = 'vector.rememberedDeviceId.';
 
 type AuthState = {
   accessToken: string | null;
@@ -20,6 +21,51 @@ type AuthState = {
   setProfile: (profile: ProfileResponseDto) => void;
   clearAuthentication: () => void;
 };
+
+
+function normalizeAuthIdentifier(value: string | null | undefined): string | null {
+  const normalizedValue = value?.trim().toLowerCase();
+
+  if (!normalizedValue) {
+    return null;
+  }
+
+  return normalizedValue;
+}
+
+function getRememberedDeviceStorageKey(identifier: string): string {
+  return `${REMEMBERED_DEVICE_ID_STORAGE_PREFIX}${identifier}`;
+}
+
+export function getRememberedDeviceIdForLogin(login: string | null | undefined): string | null {
+  const normalizedLogin = normalizeAuthIdentifier(login);
+
+  if (!normalizedLogin) {
+    return null;
+  }
+
+  return localStorage.getItem(getRememberedDeviceStorageKey(normalizedLogin));
+}
+
+export function rememberDeviceIdForLogin(login: string | null | undefined, deviceId: string | null | undefined) {
+  const normalizedLogin = normalizeAuthIdentifier(login);
+
+  if (!normalizedLogin || !deviceId) {
+    return;
+  }
+
+  localStorage.setItem(getRememberedDeviceStorageKey(normalizedLogin), deviceId);
+}
+
+export function rememberDeviceIdForProfile(profile: ProfileResponseDto | null | undefined, deviceId: string | null | undefined) {
+  if (!profile || !deviceId) {
+    return;
+  }
+
+  rememberDeviceIdForLogin(profile.accountId, deviceId);
+  rememberDeviceIdForLogin(profile.username, deviceId);
+  rememberDeviceIdForLogin(profile.email, deviceId);
+}
 
 function readProfileFromStorage(): ProfileResponseDto | null {
   const serializedProfile = localStorage.getItem(PROFILE_STORAGE_KEY);
@@ -37,6 +83,8 @@ function readProfileFromStorage(): ProfileResponseDto | null {
 }
 
 function clearAuthenticationStorage() {
+  rememberDeviceIdForProfile(readProfileFromStorage(), localStorage.getItem(DEVICE_ID_STORAGE_KEY));
+
   localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
   localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
   localStorage.removeItem(DEVICE_ID_STORAGE_KEY);
@@ -81,6 +129,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   setProfile: (profile) => {
     localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
+    rememberDeviceIdForProfile(profile, localStorage.getItem(DEVICE_ID_STORAGE_KEY));
     set({ profile });
   },
 

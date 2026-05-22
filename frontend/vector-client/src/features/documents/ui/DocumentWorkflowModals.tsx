@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Download, FileText, LoaderCircle, Plus, RefreshCw, Search, ShieldCheck, UserPlus, X } from 'lucide-react';
+import { Download, FileCheck2, FileText, LoaderCircle, Plus, RefreshCw, Search, UserPlus, X } from 'lucide-react';
 import { searchProfiles } from '../../directory/api/profilesApi';
 import { formatFileSize } from '../../media/lib/fileCrypto';
 import { formatMessageTime } from '../../../shared/lib/dateFormat';
@@ -341,8 +341,12 @@ export function DocumentsPanel({
   onReject,
   onCancel,
   onHide,
+  onRestore,
   onVerifyFile,
   onAddObservers,
+  showHiddenDocuments,
+  onShowHiddenDocumentsChange,
+  onOpenProfile,
 }: {
   isOpen: boolean;
   documents: DocumentResponseDto[];
@@ -358,14 +362,20 @@ export function DocumentsPanel({
   onReject: (document: DocumentResponseDto, reason: string | null) => Promise<void>;
   onCancel: (document: DocumentResponseDto, reason: string | null) => Promise<void>;
   onHide?: (document: DocumentResponseDto) => Promise<void>;
+  onRestore?: (document: DocumentResponseDto) => Promise<void>;
   onVerifyFile?: (file: File) => Promise<DocumentResponseDto | null>;
   onAddObservers?: (document: DocumentResponseDto, observerAccountIds: string[]) => Promise<void>;
+  showHiddenDocuments: boolean;
+  onShowHiddenDocumentsChange: (showHiddenDocuments: boolean) => void;
+  onOpenProfile?: (accountId: string) => void;
 }) {
   const [rejectingDocument, setRejectingDocument] = useState<DocumentResponseDto | null>(null);
   const [cancellingDocument, setCancellingDocument] = useState<DocumentResponseDto | null>(null);
   const [observerTargetDocument, setObserverTargetDocument] = useState<DocumentResponseDto | null>(null);
   const [selectedObserverAccountIds, setSelectedObserverAccountIds] = useState<string[]>([]);
   const [workflowReason, setWorkflowReason] = useState('');
+  const [verificationMessage, setVerificationMessage] = useState<string | null>(null);
+  const [verificationDocumentId, setVerificationDocumentId] = useState<string | null>(null);
 
   if (!isOpen) {
     return null;
@@ -406,30 +416,45 @@ export function DocumentsPanel({
       <div className="flex max-h-[86vh] w-full max-w-6xl flex-col rounded-[2rem] border border-white/10 bg-[#18191d] shadow-2xl shadow-black/50">
         <div className="flex items-center justify-between gap-4 border-b border-white/10 p-6">
           <div>
-            <div className="text-xl font-semibold text-zinc-50">Документооборот</div>
-            <div className="mt-1 text-sm text-zinc-500">Единый workspace документов, подписей, наблюдателей и проверки оригинальности файла.</div>
+            <div className="text-xl font-semibold text-zinc-50">Документы</div>
+            <div className="mt-1 text-sm text-zinc-500">Создавайте документы, назначайте подписантов и проверяйте подлинность файлов.</div>
           </div>
-          <div className="flex items-center gap-2">
-            <label className="rounded-2xl bg-violet-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-violet-400">
-              Создать документ
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <label className="inline-flex h-10 min-w-36 cursor-pointer items-center justify-center rounded-2xl bg-violet-500 px-4 text-xs font-semibold text-white transition hover:bg-violet-400">
+              Создать
               <input type="file" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) { onCreateDocument(file); } }} />
             </label>
             {onVerifyFile && (
-              <label className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-zinc-300 transition hover:text-zinc-100">
-                Проверить файл
-                <input type="file" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) { void onVerifyFile(file); } }} />
+              <label className="inline-flex h-10 min-w-36 cursor-pointer items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-xs font-semibold text-zinc-300 transition hover:border-violet-300/30 hover:text-zinc-100">
+                Проверить
+                <input type="file" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file && onVerifyFile) { void onVerifyFile(file).then((documentItem) => { if (documentItem) { setVerificationDocumentId(documentItem.documentId); setVerificationMessage(`Файл совпадает с документом: ${documentItem.title || documentItem.fileName}. Статус: ${getDocumentStatusLabel(documentItem.status)}.`); } else { setVerificationDocumentId(null); setVerificationMessage('Совпадений среди доступных документов не найдено.'); } }); } }} />
               </label>
             )}
-            <button onClick={() => void onRefresh()} className="rounded-2xl border border-white/10 bg-white/[0.04] p-2 text-zinc-400 transition hover:text-zinc-100" title="Обновить">
+            <button
+              onClick={() => onShowHiddenDocumentsChange(!showHiddenDocuments)}
+              className={`inline-flex h-10 min-w-36 items-center justify-center rounded-2xl border px-4 text-xs font-semibold transition ${showHiddenDocuments ? 'border-amber-300/25 bg-amber-500/10 text-amber-100' : 'border-white/10 bg-white/[0.04] text-zinc-300 hover:border-white/20 hover:text-zinc-100'}`}
+            >
+              {showHiddenDocuments ? 'Скрытые видны' : 'Показать скрытые'}
+            </button>
+            <button onClick={() => void onRefresh()} className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-zinc-400 transition hover:text-zinc-100" title="Обновить">
               <RefreshCw size={18} />
             </button>
-            <button onClick={onClose} className="rounded-2xl border border-white/10 bg-white/[0.04] p-2 text-zinc-400 transition hover:text-zinc-100" title="Закрыть">
+            <button onClick={onClose} className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-zinc-400 transition hover:text-zinc-100" title="Закрыть">
               <X size={18} />
             </button>
           </div>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
+          {verificationMessage && (
+            <button
+              type="button"
+              onClick={() => { if (verificationDocumentId) { const targetElement = document.querySelector(`[data-document-id=\"${verificationDocumentId}\"]`); targetElement?.scrollIntoView({ behavior: 'smooth', block: 'center' }); } }}
+              className="mb-4 w-full rounded-2xl border border-violet-300/20 bg-violet-500/10 px-4 py-3 text-left text-sm text-violet-100 transition hover:bg-violet-500/15"
+            >
+              {verificationMessage}
+            </button>
+          )}
           {isLoading ? (
             <div className="flex items-center justify-center gap-3 rounded-[1.7rem] border border-white/10 bg-white/[0.03] p-8 text-sm text-zinc-400">
               <LoaderCircle size={18} className="animate-spin" />
@@ -437,7 +462,7 @@ export function DocumentsPanel({
             </div>
           ) : documents.length === 0 ? (
             <div className="rounded-[1.7rem] border border-dashed border-white/10 bg-white/[0.02] p-8 text-center text-sm text-zinc-500">
-              В workspace пока нет документов. Создайте первый документ и назначьте подписантов.
+              Пока нет документов. Создайте первый документ и назначьте подписантов.
             </div>
           ) : (
             <div className="space-y-4">
@@ -451,18 +476,22 @@ export function DocumentsPanel({
                 const canSign = Boolean(currentSigner && currentSigner.status === 'PENDING' && !['REJECTED', 'CANCELLED', 'FULLY_SIGNED'].includes(documentItem.status));
                 const canReject = canSign;
                 const canCancel = Boolean(activeAccountId && activeAccountId === documentItem.ownerAccountId && !['FULLY_SIGNED', 'REJECTED', 'CANCELLED'].includes(documentItem.status));
-                const canAddObservers = Boolean(activeAccountId && activeAccountId === documentItem.ownerAccountId && !['CANCELLED'].includes(documentItem.status));
+                const isDocumentCompleted = ['FULLY_SIGNED', 'REJECTED', 'CANCELLED'].includes(documentItem.status);
+                const canAddObservers = Boolean(activeAccountId && activeAccountId === documentItem.ownerAccountId && !isDocumentCompleted);
 
                 return (
-                  <div key={documentItem.documentId} className="rounded-[1.7rem] border border-white/10 bg-white/[0.035] p-5">
+                  <div key={documentItem.documentId} data-document-id={documentItem.documentId} className={`rounded-[1.7rem] border p-5 ${documentItem.hiddenForCurrentAccount ? 'border-amber-300/20 bg-amber-500/[0.04]' : 'border-white/10 bg-white/[0.035]'}`}>
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
                         <div className="truncate text-base font-semibold text-zinc-100">{documentItem.title || documentItem.fileName}</div>
                         <div className="mt-1 text-xs text-zinc-500">
                           Файл: {documentItem.fileName} • {formatFileSize(documentItem.sizeBytes)} • {documentItem.mimeType}
                         </div>
+                        {documentItem.hiddenForCurrentAccount && <div className="mt-2 inline-flex rounded-full bg-amber-500/10 px-3 py-1 text-xs text-amber-100">Скрыт из основного списка</div>}
                         {documentItem.description && <div className="mt-3 text-sm leading-6 text-zinc-400">{documentItem.description}</div>}
-                        <div className="mt-3 flex items-center gap-2 text-xs text-zinc-600"><ShieldCheck size={14} /> SHA-256: {documentItem.plaintextSha256Base64.slice(0, 24)}…</div>
+                        <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/15 px-3 py-1 text-xs text-zinc-500" title={`SHA-256: ${documentItem.plaintextSha256Base64}`}>
+                          <FileCheck2 size={14} /> Отпечаток файла: {documentItem.plaintextSha256Base64.slice(0, 16)}…
+                        </div>
                       </div>
                       <div className={`shrink-0 rounded-full px-3 py-1 text-xs ${getDocumentStatusClassName(documentItem.status)}`}>
                         {getDocumentStatusLabel(documentItem.status)} · {signedCount}/{totalSignerCount || '—'}
@@ -476,11 +505,13 @@ export function DocumentsPanel({
                         return (
                           <div key={signer.signerId} className="rounded-2xl border border-white/10 bg-black/12 p-3">
                             <div className="flex items-center gap-3">
-                              <UserAvatar label={getAccountDisplayName(signer.signerAccountId, profilesById)} imageUrl={getAccountAvatarUrl(profile)} size="sm" />
-                              <div className="min-w-0 flex-1">
-                                <div className="truncate text-sm font-medium text-zinc-100">{getAccountDisplayName(signer.signerAccountId, profilesById)}</div>
-                                <div className="truncate text-xs text-zinc-500">{getSignerStatusLabel(signer.status)}{signer.signedAt ? ` · ${formatMessageTime(signer.signedAt)}` : ''}</div>
-                              </div>
+                              <button type="button" onClick={() => onOpenProfile?.(signer.signerAccountId)} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left transition hover:bg-white/[0.04]">
+                                <UserAvatar label={getAccountDisplayName(signer.signerAccountId, profilesById)} imageUrl={getAccountAvatarUrl(profile)} size="sm" />
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-sm font-medium text-zinc-100">{getAccountDisplayName(signer.signerAccountId, profilesById)}</span>
+                                  <span className="block truncate text-xs text-zinc-500">{getSignerStatusLabel(signer.status)}{signer.signedAt ? ` · ${formatMessageTime(signer.signedAt)}` : ''}</span>
+                                </span>
+                              </button>
                               <div className={`rounded-full px-2 py-1 text-[11px] ${signer.status === 'SIGNED' ? 'bg-emerald-500/15 text-emerald-200' : signer.status === 'REJECTED' ? 'bg-red-500/15 text-red-200' : 'bg-amber-500/15 text-amber-100'}`}>
                                 {signer.status === 'SIGNED' ? 'Подписан' : signer.status === 'REJECTED' ? 'Отказ' : 'Ждём'}
                               </div>
@@ -498,10 +529,10 @@ export function DocumentsPanel({
                           {observers.map((observer) => {
                             const profile = profilesById[observer.observerAccountId];
                             return (
-                              <div key={observer.observerId} className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] py-1 pl-1 pr-3 text-xs text-zinc-300">
+                              <button key={observer.observerId} type="button" onClick={() => onOpenProfile?.(observer.observerAccountId)} className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] py-1 pl-1 pr-3 text-xs text-zinc-300 transition hover:bg-white/[0.08] hover:text-zinc-100">
                                 <UserAvatar label={getAccountDisplayName(observer.observerAccountId, profilesById)} imageUrl={getAccountAvatarUrl(profile)} size="sm" />
                                 {getAccountDisplayName(observer.observerAccountId, profilesById)}
-                              </div>
+                              </button>
                             );
                           })}
                         </div>
@@ -515,27 +546,35 @@ export function DocumentsPanel({
                     )}
 
                     <div className="mt-4 flex flex-wrap gap-2">
-                      <button onClick={() => void onDownload(documentItem)} className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-2 text-xs text-zinc-200 transition hover:bg-white/[0.08]">
+                      <button onClick={() => void onDownload(documentItem)} className="inline-flex h-9 min-w-28 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 text-xs font-semibold text-zinc-200 transition hover:bg-white/[0.08]">
                         <Download size={14} /> Скачать
                       </button>
-                      <button onClick={() => void onSign(documentItem)} disabled={!canSign} className="rounded-2xl border border-emerald-300/20 bg-emerald-500/10 px-4 py-2 text-xs text-emerald-100 transition hover:bg-emerald-500/15 disabled:cursor-not-allowed disabled:opacity-45">
+                      <button onClick={() => void onSign(documentItem)} disabled={!canSign} className="inline-flex h-9 min-w-28 items-center justify-center rounded-2xl border border-emerald-300/20 bg-emerald-500/10 px-4 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-500/15 disabled:cursor-not-allowed disabled:opacity-45">
                         {currentSigner?.status === 'SIGNED' ? 'Подписано' : 'Подписать'}
                       </button>
-                      <button onClick={() => { setRejectingDocument(documentItem); setWorkflowReason(''); }} disabled={!canReject} className="rounded-2xl border border-red-300/20 bg-red-500/10 px-4 py-2 text-xs text-red-100 transition hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-45">
+                      <button onClick={() => { setRejectingDocument(documentItem); setWorkflowReason(''); }} disabled={!canReject} className="inline-flex h-9 min-w-28 items-center justify-center rounded-2xl border border-red-300/20 bg-red-500/10 px-4 text-xs font-semibold text-red-100 transition hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-45">
                         Отклонить
                       </button>
-                      <button onClick={() => { setCancellingDocument(documentItem); setWorkflowReason(''); }} disabled={!canCancel} className="rounded-2xl border border-zinc-300/15 bg-white/[0.04] px-4 py-2 text-xs text-zinc-300 transition hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:opacity-45">
+                      <button onClick={() => { setCancellingDocument(documentItem); setWorkflowReason(''); }} disabled={!canCancel} className="inline-flex h-9 min-w-32 items-center justify-center rounded-2xl border border-zinc-300/15 bg-white/[0.04] px-4 text-xs font-semibold text-zinc-300 transition hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:opacity-45">
                         Отменить процесс
                       </button>
                       {onAddObservers && (
-                        <button onClick={() => { setObserverTargetDocument(documentItem); setSelectedObserverAccountIds([]); }} disabled={!canAddObservers} className="inline-flex items-center gap-2 rounded-2xl border border-sky-300/15 bg-sky-500/10 px-4 py-2 text-xs text-sky-100 transition hover:bg-sky-500/15 disabled:cursor-not-allowed disabled:opacity-45">
+                        <button onClick={() => { setObserverTargetDocument(documentItem); setSelectedObserverAccountIds([]); }} disabled={!canAddObservers} className="inline-flex h-9 min-w-44 items-center justify-center gap-2 rounded-2xl border border-sky-300/15 bg-sky-500/10 px-4 text-xs font-semibold text-sky-100 transition hover:bg-sky-500/15 disabled:cursor-not-allowed disabled:opacity-45">
                           <UserPlus size={14} /> Добавить наблюдателей
                         </button>
                       )}
-                      {onHide && (
-                        <button onClick={() => void onHide(documentItem)} disabled={canSign} className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2 text-xs text-zinc-300 transition hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:opacity-45">
-                          Скрыть
-                        </button>
+                      {documentItem.hiddenForCurrentAccount ? (
+                        onRestore && (
+                          <button onClick={() => void onRestore(documentItem)} className="inline-flex h-9 min-w-28 items-center justify-center rounded-2xl border border-amber-300/20 bg-amber-500/10 px-4 text-xs font-semibold text-amber-100 transition hover:bg-amber-500/15">
+                            Вернуть
+                          </button>
+                        )
+                      ) : (
+                        onHide && (
+                          <button onClick={() => void onHide(documentItem)} disabled={canSign} className="inline-flex h-9 min-w-28 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-xs font-semibold text-zinc-300 transition hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:opacity-45">
+                            Скрыть
+                          </button>
+                        )
                       )}
                     </div>
                   </div>

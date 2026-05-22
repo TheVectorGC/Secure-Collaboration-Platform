@@ -131,7 +131,7 @@ public class DocumentServiceImpl implements DocumentService {
         documentObserverRepository.saveAll(observerEntities);
         HashSet<UUID> accessAccountIds = collectAccessAccountIds(savedDocumentEntity, signerEntities, observerEntities);
         mediaAccessClient.grantMediaAccess(savedDocumentEntity.getMediaFileId(), accessAccountIds);
-        DocumentResponseDto responseDto = toResponseDto(savedDocumentEntity, signerEntities, observerEntities, List.of());
+        DocumentResponseDto responseDto = toResponseDto(savedDocumentEntity, signerEntities, observerEntities, List.of(), false);
         publishDocumentEvent(DocumentEventType.DOCUMENT_CREATED, savedDocumentEntity, responseDto, accessAccountIds);
         return responseDto;
     }
@@ -145,13 +145,14 @@ public class DocumentServiceImpl implements DocumentService {
             documentEntity,
             documentSignerRepository.findByDocumentId(documentId),
             documentObserverRepository.findByDocumentId(documentId),
-            documentSignatureRepository.findByDocumentId(documentId)
+            documentSignatureRepository.findByDocumentId(documentId),
+            documentHiddenRepository.existsByDocumentIdAndAccountId(documentId, currentAccountId)
         );
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<DocumentResponseDto> getCurrentAccountDocuments(UUID currentAccountId) {
+    public List<DocumentResponseDto> getCurrentAccountDocuments(UUID currentAccountId, boolean includeHidden) {
         List<DocumentEntity> ownedDocuments = documentRepository.findByOwnerAccountIdOrderByCreatedAtDesc(currentAccountId);
         List<UUID> signerDocumentIds = documentSignerRepository.findBySignerAccountIdOrderByCreatedAtDesc(currentAccountId)
             .stream()
@@ -170,7 +171,8 @@ public class DocumentServiceImpl implements DocumentService {
             ? List.of()
             : documentRepository.findByIdInOrderByCreatedAtDesc(observerDocumentIds);
         List<DocumentEntity> documents = mergeDocuments(mergeDocuments(ownedDocuments, signerDocuments), observerDocuments);
-        return toResponseDtos(filterHiddenDocuments(currentAccountId, documents));
+        List<DocumentEntity> visibleDocuments = includeHidden ? documents : filterHiddenDocuments(currentAccountId, documents);
+        return toResponseDtos(currentAccountId, visibleDocuments);
     }
 
     @Override
@@ -181,7 +183,7 @@ public class DocumentServiceImpl implements DocumentService {
             .stream()
             .filter(documentEntity -> isDocumentVisibleToAccount(documentEntity, chatResponseDto, currentAccountId))
             .toList();
-        return toResponseDtos(filterHiddenDocuments(currentAccountId, documents));
+        return toResponseDtos(currentAccountId, filterHiddenDocuments(currentAccountId, documents));
     }
 
     @Override
@@ -229,7 +231,7 @@ public class DocumentServiceImpl implements DocumentService {
             signatureEntities.add(savedSignatureEntity);
         }
         List<DocumentObserverEntity> observerEntities = documentObserverRepository.findByDocumentId(documentId);
-        DocumentResponseDto responseDto = toResponseDto(savedDocumentEntity, signerEntities, observerEntities, signatureEntities);
+        DocumentResponseDto responseDto = toResponseDto(savedDocumentEntity, signerEntities, observerEntities, signatureEntities, false);
         publishDocumentEvent(DocumentEventType.DOCUMENT_SIGNED, savedDocumentEntity, responseDto, collectAccessAccountIds(savedDocumentEntity, signerEntities, observerEntities));
         return responseDto;
     }
@@ -254,7 +256,7 @@ public class DocumentServiceImpl implements DocumentService {
         DocumentEntity savedDocumentEntity = documentRepository.save(documentEntity);
         List<DocumentSignerEntity> signerEntities = documentSignerRepository.findByDocumentId(documentId);
         List<DocumentObserverEntity> observerEntities = documentObserverRepository.findByDocumentId(documentId);
-        DocumentResponseDto responseDto = toResponseDto(savedDocumentEntity, signerEntities, observerEntities, documentSignatureRepository.findByDocumentId(documentId));
+        DocumentResponseDto responseDto = toResponseDto(savedDocumentEntity, signerEntities, observerEntities, documentSignatureRepository.findByDocumentId(documentId), false);
         publishDocumentEvent(DocumentEventType.DOCUMENT_REJECTED, savedDocumentEntity, responseDto, collectAccessAccountIds(savedDocumentEntity, signerEntities, observerEntities));
         return responseDto;
     }
@@ -278,7 +280,7 @@ public class DocumentServiceImpl implements DocumentService {
         DocumentEntity savedDocumentEntity = documentRepository.save(documentEntity);
         List<DocumentSignerEntity> signerEntities = documentSignerRepository.findByDocumentId(documentId);
         List<DocumentObserverEntity> observerEntities = documentObserverRepository.findByDocumentId(documentId);
-        DocumentResponseDto responseDto = toResponseDto(savedDocumentEntity, signerEntities, observerEntities, documentSignatureRepository.findByDocumentId(documentId));
+        DocumentResponseDto responseDto = toResponseDto(savedDocumentEntity, signerEntities, observerEntities, documentSignatureRepository.findByDocumentId(documentId), false);
         publishDocumentEvent(DocumentEventType.DOCUMENT_CANCELLED, savedDocumentEntity, responseDto, collectAccessAccountIds(savedDocumentEntity, signerEntities, observerEntities));
         return responseDto;
     }
@@ -316,7 +318,7 @@ public class DocumentServiceImpl implements DocumentService {
             mediaAccessClient.grantMediaAccess(documentEntity.getMediaFileId(), newObserverEntities.stream().map(DocumentObserverEntity::getObserverAccountId).toList());
         }
         List<DocumentObserverEntity> observerEntities = documentObserverRepository.findByDocumentId(documentId);
-        DocumentResponseDto responseDto = toResponseDto(documentEntity, signerEntities, observerEntities, documentSignatureRepository.findByDocumentId(documentId));
+        DocumentResponseDto responseDto = toResponseDto(documentEntity, signerEntities, observerEntities, documentSignatureRepository.findByDocumentId(documentId), false);
         publishDocumentEvent(DocumentEventType.DOCUMENT_OBSERVERS_ADDED, documentEntity, responseDto, collectAccessAccountIds(documentEntity, signerEntities, observerEntities));
         return responseDto;
     }
@@ -337,6 +339,23 @@ public class DocumentServiceImpl implements DocumentService {
             .build();
         documentHiddenRepository.save(hiddenEntity);
         publishDocumentEvent(DocumentEventType.DOCUMENT_HIDDEN, documentEntity, null, List.of(currentAccountId));
+    }
+
+
+    @Override
+    @Transactional
+    public void restoreDocument(UUID currentAccountId, UUID documentId) {
+        DocumentEntity documentEntity = getDocumentEntity(documentId);
+        validateDocumentWorkflowAccess(documentEntity, currentAccountId);
+        documentHiddenRepository.deleteByDocumentIdAndAccountId(documentId, currentAccountId);
+        DocumentResponseDto responseDto = toResponseDto(
+                documentEntity,
+                documentSignerRepository.findByDocumentId(documentId),
+                documentObserverRepository.findByDocumentId(documentId),
+                documentSignatureRepository.findByDocumentId(documentId),
+                false
+        );
+        publishDocumentEvent(DocumentEventType.DOCUMENT_UPDATED, documentEntity, responseDto, List.of(currentAccountId));
     }
 
     private DocumentEntity getDocumentEntity(UUID documentId) {
@@ -448,17 +467,30 @@ public class DocumentServiceImpl implements DocumentService {
         return documents.stream().filter(documentEntity -> !hiddenDocumentIds.contains(documentEntity.getId())).toList();
     }
 
-    private List<DocumentResponseDto> toResponseDtos(List<DocumentEntity> documents) {
+    private List<DocumentResponseDto> toResponseDtos(UUID currentAccountId, List<DocumentEntity> documents) {
         List<UUID> documentIds = documents.stream().map(DocumentEntity::getId).toList();
         Map<UUID, List<DocumentSignatureEntity>> signaturesByDocumentId = loadSignaturesByDocumentId(documentIds);
         Map<UUID, List<DocumentSignerEntity>> signersByDocumentId = loadSignersByDocumentId(documentIds);
         Map<UUID, List<DocumentObserverEntity>> observersByDocumentId = loadObserversByDocumentId(documentIds);
+        HashSet<UUID> hiddenDocumentIds = loadHiddenDocumentIds(currentAccountId, documentIds);
         return documents.stream().map(documentEntity -> toResponseDto(
             documentEntity,
             signersByDocumentId.getOrDefault(documentEntity.getId(), List.of()),
             observersByDocumentId.getOrDefault(documentEntity.getId(), List.of()),
-            signaturesByDocumentId.getOrDefault(documentEntity.getId(), List.of())
+            signaturesByDocumentId.getOrDefault(documentEntity.getId(), List.of()),
+            hiddenDocumentIds.contains(documentEntity.getId())
         )).toList();
+    }
+
+
+    private HashSet<UUID> loadHiddenDocumentIds(UUID currentAccountId, List<UUID> documentIds) {
+        if (currentAccountId == null || documentIds.isEmpty()) {
+            return new HashSet<>();
+        }
+        return documentHiddenRepository.findByAccountIdAndDocumentIdIn(currentAccountId, documentIds)
+                .stream()
+                .map(DocumentHiddenEntity::getDocumentId)
+                .collect(Collectors.toCollection(HashSet::new));
     }
 
     private Map<UUID, List<DocumentSignatureEntity>> loadSignaturesByDocumentId(List<UUID> documentIds) {
@@ -582,7 +614,7 @@ public class DocumentServiceImpl implements DocumentService {
         }
     }
 
-    private DocumentResponseDto toResponseDto(DocumentEntity documentEntity, List<DocumentSignerEntity> signerEntities, List<DocumentObserverEntity> observerEntities, List<DocumentSignatureEntity> signatureEntities) {
+    private DocumentResponseDto toResponseDto(DocumentEntity documentEntity, List<DocumentSignerEntity> signerEntities, List<DocumentObserverEntity> observerEntities, List<DocumentSignatureEntity> signatureEntities, boolean hiddenForCurrentAccount) {
         List<DocumentSignerResponseDto> signerResponseDtos = signerEntities.stream().sorted(Comparator.comparing(DocumentSignerEntity::getCreatedAt)).map(this::toSignerResponseDto).toList();
         List<DocumentObserverResponseDto> observerResponseDtos = observerEntities.stream().sorted(Comparator.comparing(DocumentObserverEntity::getCreatedAt)).map(this::toObserverResponseDto).toList();
         List<DocumentSignatureResponseDto> signatureResponseDtos = signatureEntities.stream().sorted(Comparator.comparing(DocumentSignatureEntity::getSignedAt)).map(this::toSignatureResponseDto).toList();
@@ -610,6 +642,7 @@ public class DocumentServiceImpl implements DocumentService {
             signerResponseDtos,
             observerResponseDtos,
             signatureResponseDtos,
+            hiddenForCurrentAccount,
             new DocumentFileEncryptionResponseDto(documentEntity.getFileEncryptionAlgorithm(), documentEntity.getFileEncryptionKeyBase64(), documentEntity.getFileInitializationVectorBase64())
         );
     }

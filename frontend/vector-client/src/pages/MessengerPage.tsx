@@ -518,6 +518,8 @@ export function MessengerPage() {
     openDocumentsWorkspace,
     loadWorkspaceDocuments,
     documentNotificationCount,
+    includeHiddenDocuments,
+    setIncludeHiddenDocuments,
     pendingDocumentFile,
     handleStartDocumentCreation,
     cancelPendingDocumentCreation,
@@ -529,6 +531,7 @@ export function MessengerPage() {
     handleCancelDocument,
     handleAddDocumentObservers,
     handleHideDocument,
+    handleRestoreDocument,
     verifyLocalDocumentFile,
   } = useChatDocumentsController({
     currentAccountId: profile?.accountId,
@@ -538,6 +541,50 @@ export function MessengerPage() {
     setIsUploadingFile,
     setErrorMessage,
   });
+
+  const documentProfileAccountIds = useMemo(() => {
+    const accountIds = new Set<string>();
+
+    chatDocuments.forEach((documentItem) => {
+      accountIds.add(documentItem.ownerAccountId);
+      documentItem.rejectedByAccountId && accountIds.add(documentItem.rejectedByAccountId);
+      documentItem.cancelledByAccountId && accountIds.add(documentItem.cancelledByAccountId);
+      documentItem.signers?.forEach((signer) => accountIds.add(signer.signerAccountId));
+      documentItem.observers?.forEach((observer) => accountIds.add(observer.observerAccountId));
+      documentItem.signatures?.forEach((signature) => accountIds.add(signature.signerAccountId));
+    });
+
+    return Array.from(accountIds);
+  }, [chatDocuments]);
+
+  useEffect(() => {
+    const missingAccountIds = documentProfileAccountIds.filter((accountId) => !profilesById[accountId]);
+
+    if (missingAccountIds.length === 0) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    async function loadDocumentProfiles() {
+      try {
+        const profiles = await getProfilesByAccountIds(missingAccountIds);
+
+        if (!isCancelled) {
+          upsertProfiles(profiles);
+        }
+      }
+      catch (error) {
+        console.warn('Failed to load document profiles.', error);
+      }
+    }
+
+    void loadDocumentProfiles();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [documentProfileAccountIds, profilesById, upsertProfiles]);
 
   async function handleLogout() {
     try {
@@ -700,9 +747,13 @@ export function MessengerPage() {
         onReject={handleRejectDocument}
         onCancel={handleCancelDocument}
         onHide={handleHideDocument}
+        onRestore={handleRestoreDocument}
         onVerifyFile={verifyLocalDocumentFile}
         onCreateDocument={handleStartDocumentCreation}
         onAddObservers={handleAddDocumentObservers}
+        showHiddenDocuments={includeHiddenDocuments}
+        onShowHiddenDocumentsChange={setIncludeHiddenDocuments}
+        onOpenProfile={(accountId) => void openMiniProfileByAccountId(accountId)}
         contactAccountIds={contactAccountIds}
       />
 

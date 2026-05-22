@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -35,8 +36,10 @@ public class DocumentController {
     }
 
     @GetMapping
-    public ResponseEntity<List<DocumentResponseDto>> getCurrentAccountDocuments() {
-        return ResponseEntity.ok(documentService.getCurrentAccountDocuments(currentAccountService.getCurrentAccountId()));
+    public ResponseEntity<List<DocumentResponseDto>> getCurrentAccountDocuments(
+            @RequestParam(name = "includeHidden", defaultValue = "false") boolean includeHidden
+    ) {
+        return ResponseEntity.ok(documentService.getCurrentAccountDocuments(currentAccountService.getCurrentAccountId(), includeHidden));
     }
 
     @GetMapping("/{documentId}")
@@ -79,6 +82,12 @@ public class DocumentController {
     @PatchMapping("/{documentId}/hide")
     public ResponseEntity<Void> hideDocument(@PathVariable UUID documentId) {
         documentService.hideDocument(currentAccountService.getCurrentAccountId(), documentId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/{documentId}/restore")
+    public ResponseEntity<Void> restoreDocument(@PathVariable UUID documentId) {
+        documentService.restoreDocument(currentAccountService.getCurrentAccountId(), documentId);
         return ResponseEntity.noContent().build();
     }
 }

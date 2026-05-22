@@ -2,7 +2,7 @@ import { FormEvent, useState } from 'react';
 import { ArrowRight, LockKeyhole, MessageCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { login, getCurrentProfile } from '../features/auth/api/authApi';
-import { useAuthStore } from '../features/auth/model/authStore';
+import { getRememberedDeviceIdForLogin, rememberDeviceIdForLogin, rememberDeviceIdForProfile, useAuthStore } from '../features/auth/model/authStore';
 import { useDirectoryStore } from '../features/directory/model/directoryStore';
 import { GlowButton } from '../shared/ui/GlowButton';
 import { TextInput } from '../shared/ui/TextInput';
@@ -34,26 +34,33 @@ export function LoginPage() {
         throw new Error('Vector desktop crypto bridge is unavailable.');
       }
 
-      const clientInstallationId = await window.vectorCrypto.getOrCreateClientInstallationId(loginValue.trim().toLowerCase());
+      const normalizedLogin = loginValue.trim().toLowerCase();
+      const clientInstallationId = await window.vectorCrypto.getOrCreateClientInstallationId(normalizedLogin);
 
       if (!clientInstallationId) {
         throw new Error('Client installation ID was not generated.');
       }
 
+      const rememberedDeviceId = getRememberedDeviceIdForLogin(normalizedLogin);
+
       const authenticationResponse = await login({
         login: loginValue,
         password,
-        deviceId: null,
+        deviceId: rememberedDeviceId,
         clientInstallationId,
         deviceName: 'Vector Desktop',
         platform: 'WINDOWS',
         clientVersion: '0.2.0',
       });
 
-      setAuthentication(authenticationResponse);
+      setAuthentication(authenticationResponse, rememberedDeviceId);
+
+      const resolvedDeviceId = authenticationResponse.deviceId ?? rememberedDeviceId;
+      rememberDeviceIdForLogin(normalizedLogin, resolvedDeviceId);
 
       const profile = await getCurrentProfile();
       setProfile(profile);
+      rememberDeviceIdForProfile(profile, resolvedDeviceId);
       upsertProfile(profile);
 
       navigate('/messenger');
