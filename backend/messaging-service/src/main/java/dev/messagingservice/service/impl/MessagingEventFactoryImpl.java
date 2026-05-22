@@ -152,6 +152,7 @@ public class MessagingEventFactoryImpl implements MessagingEventFactory {
     private Map<String, Object> createGroupEpochKeyEnvelope(GroupEpochKeyEnvelopeEntity envelopeEntity) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("targetAccountId", envelopeEntity.getTargetAccountId());
+        payload.put("senderDeviceId", envelopeEntity.getSenderDeviceId());
         payload.put("algorithm", envelopeEntity.getAlgorithm());
         payload.put("encryptedKeyBase64", envelopeEntity.getEncryptedKeyBase64());
         return payload;

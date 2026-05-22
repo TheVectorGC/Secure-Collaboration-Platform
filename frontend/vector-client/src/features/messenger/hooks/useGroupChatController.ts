@@ -1,5 +1,5 @@
 import { type Dispatch, type SetStateAction } from 'react';
-import { addGroupParticipant, createDirectChat, createGroupChat, removeGroupParticipant, upsertGroupEpochKeyEnvelope } from '../../chats/api/chatsApi';
+import { addGroupParticipant, createDirectChat, createGroupChat, getCurrentAccountGroupEpochKeyEnvelope, removeGroupParticipant, upsertGroupEpochKeyEnvelope } from '../../chats/api/chatsApi';
 import { getAccountBackupPublicKey } from '../../crypto/api/accountBackupProfileApi';
 import type { ChatResponseDto, DeviceMessagePayloadRequestDto, ProfileResponseDto } from '../../../shared/types/api';
 import type { GroupHistoryAccessMode } from '../lib/messengerCore';
@@ -56,18 +56,64 @@ export function useGroupChatController(params: UseGroupChatControllerParams) {
     await shareCurrentGroupEpochKeyWithAccounts(chat, getActiveGroupParticipantAccountIds(chat));
   }
 
+  async function getAuthoritativeCurrentGroupEpochKey(chat: ChatResponseDto) {
+    if (!currentAccountId || !deviceId || !window.vectorCrypto) {
+      throw new Error('Current account, local device or cryptography is not available.');
+    }
+
+    const epoch = chat.currentKeyEpoch ?? 1;
+
+    try {
+      const envelope = await getCurrentAccountGroupEpochKeyEnvelope(chat.chatId, epoch);
+      const decryptResponse = await window.vectorCrypto.decryptAccountKeyEnvelope({
+        accountId: currentAccountId,
+        encryptedKeyBase64: envelope.encryptedKeyBase64,
+      });
+      await window.vectorCrypto.importGroupKeyFromBackupEnvelope({
+        accountId: currentAccountId,
+        chatId: chat.chatId,
+        epoch,
+        senderDeviceId: envelope.senderDeviceId || deviceId,
+        groupEpochKeyBase64: decryptResponse.keyBase64,
+      });
+
+      return {
+        chatId: chat.chatId,
+        epoch,
+        senderDeviceId: envelope.senderDeviceId || deviceId,
+        groupEpochKeyBase64: decryptResponse.keyBase64,
+      };
+    }
+    catch (error) {
+      const status = (error as { response?: { status?: number } })?.response?.status;
+
+      if (status !== 404) {
+        console.warn('Unable to restore authoritative group epoch key before sharing. Local key will not be trusted silently.', {
+          chatId: chat.chatId,
+          epoch,
+          currentAccountId,
+          deviceId,
+          error,
+        });
+        throw error;
+      }
+    }
+
+    return window.vectorCrypto.getOrCreateGroupEpochKey({
+      accountId: currentAccountId,
+      deviceId,
+      chatId: chat.chatId,
+      epoch,
+    });
+  }
+
   async function shareCurrentGroupEpochKeyWithAccounts(chat: ChatResponseDto, targetAccountIds: string[]) {
     if (!currentAccountId || !deviceId || !window.vectorCrypto || targetAccountIds.length === 0) {
       return;
     }
 
     const epoch = chat.currentKeyEpoch ?? 1;
-    const groupEpochKey = await window.vectorCrypto.getOrCreateGroupEpochKey({
-      accountId: currentAccountId,
-      deviceId,
-      chatId: chat.chatId,
-      epoch,
-    });
+    const groupEpochKey = await getAuthoritativeCurrentGroupEpochKey(chat);
 
     await Promise.all(Array.from(new Set(targetAccountIds)).map(async (targetAccountId) => {
       const publicKey = await getAccountBackupPublicKey(targetAccountId);

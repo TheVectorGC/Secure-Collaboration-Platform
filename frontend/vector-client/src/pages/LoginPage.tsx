@@ -3,7 +3,7 @@ import { KeyRound, Lock, MessageCircle, Sparkles, WandSparkles } from 'lucide-re
 import { useNavigate } from 'react-router-dom';
 import { login, getCurrentProfile } from '../features/auth/api/authApi';
 import { getCurrentAccountBackupProfile } from '../features/crypto/api/accountBackupProfileApi';
-import { useAuthStore } from '../features/auth/model/authStore';
+import { getRememberedDeviceIdForLogin, useAuthStore } from '../features/auth/model/authStore';
 import { useDirectoryStore } from '../features/directory/model/directoryStore';
 import { GlowButton } from '../shared/ui/GlowButton';
 import { TextInput } from '../shared/ui/TextInput';
@@ -74,10 +74,11 @@ export function LoginPage() {
         throw new Error('Client installation ID was not generated.');
       }
 
-      const authenticationResponse = await login({
+      const rememberedDeviceId = getRememberedDeviceIdForLogin(loginValue);
+      const loginRequest = {
         login: loginValue,
         password,
-        deviceId: null,
+        deviceId: rememberedDeviceId,
         clientInstallationId,
         deviceName: deviceEnvironment.deviceName,
         platform: deviceEnvironment.platform,
@@ -86,9 +87,29 @@ export function LoginPage() {
         osVersion: deviceEnvironment.osVersion,
         architecture: deviceEnvironment.architecture,
         hostname: deviceEnvironment.hostname,
-      });
+      };
+      let authenticationResponse: Awaited<ReturnType<typeof login>>;
 
-      setAuthentication(authenticationResponse);
+      try {
+        authenticationResponse = await login(loginRequest);
+      }
+      catch (error) {
+        if (!rememberedDeviceId) {
+          throw error;
+        }
+
+        console.warn('Remembered device login failed. Creating or resolving device by client installation instead.', {
+          login: loginValue,
+          rememberedDeviceId,
+          error,
+        });
+        authenticationResponse = await login({
+          ...loginRequest,
+          deviceId: null,
+        });
+      }
+
+      setAuthentication(authenticationResponse, rememberedDeviceId);
 
       const profile = await getCurrentProfile();
       await prepareBackupUnlockKey(profile.accountId, password);

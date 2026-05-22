@@ -1,6 +1,7 @@
 package dev.cryptoservice.service.impl;
 
 import dev.cryptoservice.exception.AccountBackupProfileNotFoundException;
+import dev.cryptoservice.exception.AccountBackupProfileConflictException;
 import dev.cryptoservice.model.dto.request.UpsertAccountBackupProfileRequestDto;
 import dev.cryptoservice.model.dto.response.AccountBackupProfileResponseDto;
 import dev.cryptoservice.model.dto.response.AccountBackupPublicKeyResponseDto;
@@ -29,21 +30,40 @@ public class AccountBackupProfileServiceImpl implements AccountBackupProfileServ
     @Transactional
     public AccountBackupProfileResponseDto upsertCurrentProfile(UUID accountId, UpsertAccountBackupProfileRequestDto requestDto) {
         OffsetDateTime now = OffsetDateTime.now();
-        AccountBackupProfileEntity entity = accountBackupProfileRepository.findById(accountId)
-                .orElseGet(() -> AccountBackupProfileEntity.builder()
-                        .accountId(accountId)
-                        .createdAt(now)
-                        .build());
+        AccountBackupProfileEntity existingEntity = accountBackupProfileRepository.findById(accountId).orElse(null);
 
-        entity.setBackupPublicKeyBase64(requestDto.backupPublicKeyBase64().trim());
-        entity.setEncryptedBackupPrivateKeyBase64(requestDto.encryptedBackupPrivateKeyBase64().trim());
-        entity.setKdfAlgorithm(requestDto.kdfAlgorithm().trim());
-        entity.setKdfSaltBase64(requestDto.kdfSaltBase64().trim());
-        entity.setKdfParametersJson(requestDto.kdfParametersJson().trim());
-        entity.setPrivateKeyEncryptionAlgorithm(requestDto.privateKeyEncryptionAlgorithm().trim());
-        entity.setPrivateKeyInitializationVectorBase64(requestDto.privateKeyInitializationVectorBase64().trim());
-        entity.setPrivateKeyAuthenticationTagBase64(requestDto.privateKeyAuthenticationTagBase64().trim());
-        entity.setUpdatedAt(now);
+        if (existingEntity != null) {
+            String incomingPublicKey = requestDto.backupPublicKeyBase64().trim();
+
+            if (!existingEntity.getBackupPublicKeyBase64().equals(incomingPublicKey)) {
+                throw new AccountBackupProfileConflictException("Account backup public key is immutable for an existing profile.");
+            }
+
+            existingEntity.setEncryptedBackupPrivateKeyBase64(requestDto.encryptedBackupPrivateKeyBase64().trim());
+            existingEntity.setKdfAlgorithm(requestDto.kdfAlgorithm().trim());
+            existingEntity.setKdfSaltBase64(requestDto.kdfSaltBase64().trim());
+            existingEntity.setKdfParametersJson(requestDto.kdfParametersJson().trim());
+            existingEntity.setPrivateKeyEncryptionAlgorithm(requestDto.privateKeyEncryptionAlgorithm().trim());
+            existingEntity.setPrivateKeyInitializationVectorBase64(requestDto.privateKeyInitializationVectorBase64().trim());
+            existingEntity.setPrivateKeyAuthenticationTagBase64(requestDto.privateKeyAuthenticationTagBase64().trim());
+            existingEntity.setUpdatedAt(now);
+
+            return mapToProfileResponseDto(accountBackupProfileRepository.save(existingEntity));
+        }
+
+        AccountBackupProfileEntity entity = AccountBackupProfileEntity.builder()
+                .accountId(accountId)
+                .backupPublicKeyBase64(requestDto.backupPublicKeyBase64().trim())
+                .encryptedBackupPrivateKeyBase64(requestDto.encryptedBackupPrivateKeyBase64().trim())
+                .kdfAlgorithm(requestDto.kdfAlgorithm().trim())
+                .kdfSaltBase64(requestDto.kdfSaltBase64().trim())
+                .kdfParametersJson(requestDto.kdfParametersJson().trim())
+                .privateKeyEncryptionAlgorithm(requestDto.privateKeyEncryptionAlgorithm().trim())
+                .privateKeyInitializationVectorBase64(requestDto.privateKeyInitializationVectorBase64().trim())
+                .privateKeyAuthenticationTagBase64(requestDto.privateKeyAuthenticationTagBase64().trim())
+                .createdAt(now)
+                .updatedAt(now)
+                .build();
 
         return mapToProfileResponseDto(accountBackupProfileRepository.save(entity));
     }

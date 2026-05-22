@@ -6,6 +6,7 @@ import java.util.UUID;
 @Schema(description = "Encrypted content key envelope for the current account.")
 public record AccountKeyEnvelopeResponseDto(
     UUID targetAccountId,
+    UUID senderDeviceId,
     String algorithm,
     String encryptedKeyBase64
 ) {}

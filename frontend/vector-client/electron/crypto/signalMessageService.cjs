@@ -306,11 +306,13 @@ async function decryptMessage(request) {
   }
 }
 
-function buildGroupAssociatedData(chatId, epoch, senderDeviceId) {
-  return Buffer.from(`vector-group-message:${chatId}:${epoch}:${senderDeviceId}`, 'utf8');
-}
+function normalizeGroupKeySenderDeviceId(senderDeviceId) {
+  if (!senderDeviceId || typeof senderDeviceId !== 'string') {
+    return 'account-backup';
+  }
 
-const CANONICAL_GROUP_EPOCH_SENDER_DEVICE_ID = '00000000-0000-0000-0000-000000000000';
+  return senderDeviceId;
+}
 
 function saveGroupKey(database, accountId, chatId, epoch, senderDeviceId, keyBase64) {
   const normalizedEpoch = Number(epoch ?? 1);
@@ -324,7 +326,22 @@ function saveGroupKey(database, accountId, chatId, epoch, senderDeviceId, keyBas
         key_base64 = excluded.key_base64,
         updated_at = excluded.updated_at
     `)
-    .run(accountId, chatId, normalizedEpoch, CANONICAL_GROUP_EPOCH_SENDER_DEVICE_ID, keyBase64, timestamp, timestamp);
+    .run(accountId, chatId, normalizedEpoch, normalizeGroupKeySenderDeviceId(senderDeviceId), keyBase64, timestamp, timestamp);
+}
+
+function getExistingGroupKey(database, accountId, chatId, epoch, preferredSenderDeviceId) {
+  const normalizedEpoch = Number(epoch ?? 1);
+  const existingKey = database
+    .prepare(`
+      SELECT key_base64
+      FROM group_keys
+      WHERE account_id = ? AND chat_id = ? AND epoch = ?
+      ORDER BY CASE WHEN sender_device_id = ? THEN 0 ELSE 1 END, updated_at DESC
+      LIMIT 1
+    `)
+    .get(accountId, chatId, normalizedEpoch, normalizeGroupKeySenderDeviceId(preferredSenderDeviceId));
+
+  return existingKey?.key_base64 ? Buffer.from(existingKey.key_base64, 'base64') : null;
 }
 
 function getOrCreateGroupKey(database, accountId, chatId, epoch, senderDeviceId) {
@@ -337,7 +354,7 @@ function getOrCreateGroupKey(database, accountId, chatId, epoch, senderDeviceId)
       ORDER BY CASE WHEN sender_device_id = ? THEN 0 ELSE 1 END, updated_at DESC
       LIMIT 1
     `)
-    .get(accountId, chatId, normalizedEpoch, CANONICAL_GROUP_EPOCH_SENDER_DEVICE_ID);
+    .get(accountId, chatId, normalizedEpoch, normalizeGroupKeySenderDeviceId(senderDeviceId));
 
   if (existingKey?.key_base64) {
     return Buffer.from(existingKey.key_base64, 'base64');
@@ -399,7 +416,7 @@ async function exportGroupKeyPackagesForChat(request) {
         SELECT epoch, sender_device_id, key_base64
         FROM group_keys
         WHERE account_id = ? AND chat_id = ?
-        ORDER BY epoch ASC, CASE WHEN sender_device_id = '${CANONICAL_GROUP_EPOCH_SENDER_DEVICE_ID}' THEN 0 ELSE 1 END, updated_at DESC
+        ORDER BY epoch ASC, updated_at DESC
       `)
       .all(request.accountId, request.chatId);
 
@@ -418,7 +435,7 @@ async function exportGroupKeyPackagesForChat(request) {
         request.accountId,
         request.chatId,
         epoch,
-        CANONICAL_GROUP_EPOCH_SENDER_DEVICE_ID,
+        row.sender_device_id,
         Buffer.from(row.key_base64, 'base64')
       ));
     });
@@ -531,6 +548,7 @@ function importGroupKeyFromBackupEnvelope(request) {
     saveGroupKey(database, request.accountId, request.chatId, Number(request.epoch ?? 1), request.senderDeviceId, request.groupEpochKeyBase64);
     return {
       imported: true,
+      senderDeviceId: normalizeGroupKeySenderDeviceId(request.senderDeviceId),
     };
   }
   finally {
@@ -548,7 +566,11 @@ function encryptGroupMessageV2(request) {
   const database = encryptedDatabase.openDatabase();
 
   try {
-    const groupKey = getOrCreateGroupKey(database, request.accountId, request.chatId, request.epoch, request.deviceId);
+    const groupKey = getExistingGroupKey(database, request.accountId, request.chatId, request.epoch, request.deviceId);
+
+    if (!groupKey) {
+      throw new Error('Group epoch key is not available locally. Restore the group epoch envelope before sending.');
+    }
     const messageKey = deriveGroupMessageKey(groupKey, request.chatId, request.epoch, request.messageId);
     const initializationVector = crypto.randomBytes(12);
     const cipher = crypto.createCipheriv('aes-256-gcm', messageKey, initializationVector);
@@ -585,7 +607,7 @@ function decryptGroupMessageV2(request) {
   try {
     const rows = database
       .prepare(`
-        SELECT key_base64
+        SELECT key_base64, sender_device_id
         FROM group_keys
         WHERE account_id = ? AND chat_id = ? AND epoch = ?
         ORDER BY updated_at DESC
@@ -611,7 +633,7 @@ function decryptGroupMessageV2(request) {
       }
     }
 
-    throw new Error('Group key is not available on this device. Restore group epoch envelope.');
+    throw new Error(`Group key is not available or did not decrypt this message. chatId=${request.chatId}; epoch=${Number(request.epoch ?? 1)}; localKeyCount=${rows.length}. Restore the group epoch envelope.`);
   }
   finally {
     database.close();

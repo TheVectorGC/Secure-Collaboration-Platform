@@ -226,6 +226,7 @@ export type MessageDevicePayloadResponseDto = {
 
 export type AccountKeyEnvelopeResponseDto = {
   targetAccountId: string;
+  senderDeviceId?: string | null;
   algorithm: string;
   encryptedKeyBase64: string;
 };

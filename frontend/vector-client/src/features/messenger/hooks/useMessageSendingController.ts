@@ -161,7 +161,7 @@ export function useMessageSendingController(params: UseMessageSendingControllerP
         accountId: currentAccountId,
         chatId,
         epoch,
-        senderDeviceId: deviceId,
+        senderDeviceId: envelope.senderDeviceId || deviceId,
         groupEpochKeyBase64: decryptResponse.keyBase64,
       });
       return true;
@@ -199,7 +199,12 @@ export function useMessageSendingController(params: UseMessageSendingControllerP
 
     if (currentChatState?.type === 'GROUP') {
       const groupEpoch = currentChatState.currentKeyEpoch ?? 1;
-      await importCurrentGroupEpochKeyFromEnvelope(selectedChatId, groupEpoch);
+      const groupEpochImported = await importCurrentGroupEpochKeyFromEnvelope(selectedChatId, groupEpoch);
+
+      if (!groupEpochImported) {
+        throw new Error('Group epoch key is not available. The group owner must share the current epoch key before messages can be sent.');
+      }
+
       const groupEncryptedMessage = await window.vectorCrypto.encryptGroupMessageV2({
         accountId: currentAccountId ?? '',
         deviceId,
@@ -208,8 +213,6 @@ export function useMessageSendingController(params: UseMessageSendingControllerP
         messageId: clientMessageId,
         plainText,
       });
-      const devicePayloads = await buildEncryptedDevicePayloadsForAccounts(groupEncryptedMessage.groupKeyPackagePlainText, targetAccountIds);
-      const accountKeyEnvelopes = await buildAccountKeyEnvelopesForAccounts(groupEncryptedMessage.groupEpochKeyBase64, targetAccountIds);
 
       const savedMessage = await sendMessage(selectedChatId, {
         senderDeviceId: deviceId,
@@ -221,8 +224,8 @@ export function useMessageSendingController(params: UseMessageSendingControllerP
         contentInitializationVectorBase64: groupEncryptedMessage.initializationVectorBase64,
         contentAuthenticationTagBase64: groupEncryptedMessage.authenticationTagBase64,
         groupKeyEpoch: groupEpoch,
-        devicePayloads,
-        accountKeyEnvelopes,
+        devicePayloads: [],
+        accountKeyEnvelopes: [],
       });
 
       upsertMessage(savedMessage);

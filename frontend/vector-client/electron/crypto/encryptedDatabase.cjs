@@ -52,21 +52,6 @@ function migrateLegacySchema(database) {
   if (tableExists(database, 'trusted_identities') && !columnExists(database, 'trusted_identities', 'remote_address')) {
     database.exec('DROP TABLE trusted_identities');
   }
-
-  if (tableExists(database, 'recovery_envelopes')) {
-    database.exec('DROP INDEX IF EXISTS idx_recovery_envelopes_account_type');
-    database.exec('DROP TABLE recovery_envelopes');
-  }
-
-  if (tableExists(database, 'account_recovery_keys')) {
-    database.exec('DROP TABLE account_recovery_keys');
-  }
-
-  if (tableExists(database, 'crypto_state_tombstones')) {
-    database.exec('DROP INDEX IF EXISTS idx_crypto_state_tombstones_account_resource');
-    database.exec('DROP TABLE crypto_state_tombstones');
-  }
-
 }
 
 function applySchema(database) {
@@ -76,6 +61,8 @@ function applySchema(database) {
       value TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+
     CREATE TABLE IF NOT EXISTS local_devices (
       account_id TEXT NOT NULL,
       device_id TEXT NOT NULL,
@@ -201,6 +188,11 @@ function applySchema(database) {
       updated_at TEXT NOT NULL,
       PRIMARY KEY (account_id, chat_id, epoch, sender_device_id)
     );
+
+
+
+
+
     CREATE INDEX IF NOT EXISTS idx_group_keys_account_chat
       ON group_keys(account_id, chat_id);
 

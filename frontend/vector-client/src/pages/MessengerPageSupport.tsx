@@ -1986,46 +1986,27 @@ export function SettingsModal({
             {activeTab === 'security' && (
               <div className="space-y-4">
                 <div className="rounded-[2rem] border border-white/10 bg-white/[0.035] p-6">
-                  <div className="mb-4 flex items-center justify-between gap-4">
-                    <div>
-                      <div className="text-base font-semibold text-zinc-50">End-to-end encryption</div>
-                      <div className="mt-1 text-sm text-zinc-500">Ключи хранятся локально в зашифрованном vault этого устройства.</div>
-                    </div>
-                    <CryptoStatusBadge status={cryptoStatus} />
+                  <div className="flex items-center gap-3 text-base font-semibold text-zinc-50">
+                    <ShieldCheck size={18} />
+                    Сквозное шифрование
                   </div>
-
-                  <div className="grid gap-3 text-sm sm:grid-cols-2">
-                    <div className="rounded-2xl border border-white/8 bg-black/15 p-4">
-                      <div className="mb-2 flex items-center gap-2 text-zinc-300"><KeyRound size={15} /> Локальный device</div>
-                      <div className="break-all text-xs text-zinc-500">{deviceId ?? 'неизвестно'}</div>
+                  <div className="mt-3 text-sm leading-6 text-zinc-400">
+                    История сообщений восстанавливается через ключи аккаунта и encrypted envelopes. Старый ручной backup ключей удалён из интерфейса: сообщения, direct/self-ключи и групповые epoch-ключи восстанавливаются автоматически после входа по паролю.
+                  </div>
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-2xl border border-white/10 bg-black/10 p-4">
+                      <div className="text-xs uppercase tracking-[0.18em] text-zinc-500">Crypto status</div>
+                      <div className="mt-2 text-sm text-zinc-200">{cryptoStatus}</div>
                     </div>
-                    <div className="rounded-2xl border border-white/8 bg-black/15 p-4">
-                      <div className="mb-2 flex items-center gap-2 text-zinc-300"><Wifi size={15} /> Realtime</div>
-                      <div className="text-xs text-zinc-500">{realtimeStatus}</div>
-                    </div>
-                    <div className="rounded-2xl border border-white/8 bg-black/15 p-4 sm:col-span-2">
-                      <div className="mb-2 flex items-center gap-2 text-zinc-300"><LockKeyhole size={15} /> Локальное хранилище ключей</div>
-                      <div className="break-all text-xs text-zinc-500">{cryptoDatabasePath ?? 'путь недоступен'}</div>
+                    <div className="rounded-2xl border border-white/10 bg-black/10 p-4">
+                      <div className="text-xs uppercase tracking-[0.18em] text-zinc-500">Realtime</div>
+                      <div className="mt-2 text-sm text-zinc-200">{realtimeStatus}</div>
                     </div>
                   </div>
                 </div>
 
-                <div className="rounded-[2rem] border border-white/10 bg-white/[0.035] p-6">
-                  <div className="text-base font-semibold text-zinc-50">Восстановление истории</div>
-                  <div className="mt-2 text-sm leading-6 text-zinc-500">
-                    История восстанавливается не через старый backup архива ключей, а через защищённые envelopes рядом с сообщениями и групповыми эпохами. Пароль аккаунта локально открывает приватный ключ восстановления; сервер хранит только ciphertext и зашифрованные ключи.
-                  </div>
-
-                  <div className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
-                    <div className="rounded-2xl border border-white/8 bg-black/15 p-4">
-                      <div className="mb-2 text-zinc-300">Direct / self</div>
-                      <div className="text-xs leading-5 text-zinc-500">Каждое сообщение имеет отдельный AES-ключ. Активные устройства получают его через Signal, новые устройства — через account envelope.</div>
-                    </div>
-                    <div className="rounded-2xl border border-white/8 bg-black/15 p-4">
-                      <div className="mb-2 text-zinc-300">Группы</div>
-                      <div className="text-xs leading-5 text-zinc-500">Сообщения группы открываются ключом текущей эпохи. При добавлении участника ему передаются только ключи истории, доступной добавляющему администратору.</div>
-                    </div>
-                  </div>
+                <div className="rounded-[2rem] border border-white/10 bg-white/[0.025] p-5 text-sm leading-6 text-zinc-500">
+                  Локальное хранилище ключей: <span className="text-zinc-300">{cryptoDatabasePath ?? 'недоступно'}</span>
                 </div>
               </div>
             )}

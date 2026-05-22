@@ -82,6 +82,14 @@ export function useCryptoBootstrap() {
 
         await ensureAccountBackupProfileUnlocked(activeAccountId);
 
+        const accountBackupPrivateKeyUnlocked = await window.vectorCrypto!.hasUnlockedAccountBackupPrivateKey({
+          accountId: activeAccountId,
+        });
+
+        if (!accountBackupPrivateKeyUnlocked) {
+          throw new Error('Account backup private key is not unlocked. Sign in again.');
+        }
+
         setStatus('registering');
         await ensureCryptoDeviceKeysRegistered(activeDeviceId, result.signalKeyBundle);
 

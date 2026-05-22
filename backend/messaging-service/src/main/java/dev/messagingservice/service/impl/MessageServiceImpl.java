@@ -119,15 +119,6 @@ public class MessageServiceImpl implements MessageService {
                 sendMessageRequestDto.accountKeyEnvelopes() == null ? List.of() : sendMessageRequestDto.accountKeyEnvelopes(),
                 now
         );
-        if (savedMessageEntity.getEncryptionType() == MessageEncryptionType.GROUP) {
-            saveGroupEpochKeyEnvelopes(
-                    savedMessageEntity.getChatId(),
-                    savedMessageEntity.getGroupKeyEpoch(),
-                    savedMessageEntity.getSenderDeviceId(),
-                    sendMessageRequestDto.accountKeyEnvelopes() == null ? List.of() : sendMessageRequestDto.accountKeyEnvelopes(),
-                    now
-            );
-        }
         List<UUID> recipientAccountIds = createDeliveryStates(savedMessageEntity, currentAccountId, activeParticipants);
         ChatEntity updatedChatEntity = updateChatTimestamp(chatId, now);
 
@@ -346,21 +337,53 @@ public class MessageServiceImpl implements MessageService {
             throw new MessagePayloadValidationException("Content encryption metadata is required.");
         }
 
-        List<DeviceMessagePayloadRequestDto> devicePayloads = sendMessageRequestDto.devicePayloads();
+        List<DeviceMessagePayloadRequestDto> devicePayloads = sendMessageRequestDto.devicePayloads() == null ? List.of() : sendMessageRequestDto.devicePayloads();
 
-        if (devicePayloads == null || devicePayloads.isEmpty()) {
-            throw new MessagePayloadValidationException("Device payloads can't be empty for encrypted messages.");
+        if (sendMessageRequestDto.encryptionType() == MessageEncryptionType.CONTENT) {
+            validateDevicePayloads(devicePayloads, activeDeviceIdsByAccountId);
+            validateAccountKeyEnvelopes(sendMessageRequestDto.accountKeyEnvelopes(), activeDeviceIdsByAccountId.keySet());
+
+            if (sendMessageRequestDto.groupKeyEpoch() != null) {
+                throw new MessagePayloadValidationException("Direct content messages can't contain group key epoch.");
+            }
+
+            return;
         }
 
-        validateDevicePayloads(devicePayloads, activeDeviceIdsByAccountId);
-        validateAccountKeyEnvelopes(sendMessageRequestDto.accountKeyEnvelopes(), activeDeviceIdsByAccountId.keySet());
+        if (sendMessageRequestDto.encryptionType() == MessageEncryptionType.GROUP) {
+            if (sendMessageRequestDto.groupKeyEpoch() == null) {
+                throw new MessagePayloadValidationException("Group key epoch is required for GROUP encryption.");
+            }
 
-        if (sendMessageRequestDto.encryptionType() == MessageEncryptionType.GROUP && sendMessageRequestDto.groupKeyEpoch() == null) {
-            throw new MessagePayloadValidationException("Group key epoch is required for GROUP encryption.");
+            if (sendMessageRequestDto.accountKeyEnvelopes() != null && !sendMessageRequestDto.accountKeyEnvelopes().isEmpty()) {
+                throw new MessagePayloadValidationException("Group messages can't contain per-message account key envelopes. Share group epoch envelopes separately.");
+            }
+
+            validateExistingGroupEpochEnvelopeCoverage(activeParticipants, sendMessageRequestDto.groupKeyEpoch());
+            return;
+        }
+    }
+
+    private void validateExistingGroupEpochEnvelopeCoverage(List<ChatParticipantEntity> activeParticipants, Integer groupKeyEpoch) {
+        if (activeParticipants.isEmpty()) {
+            throw new MessagePayloadValidationException("Group message requires active participants.");
         }
 
-        if (sendMessageRequestDto.encryptionType() == MessageEncryptionType.CONTENT && sendMessageRequestDto.groupKeyEpoch() != null) {
-            throw new MessagePayloadValidationException("Direct content messages can't contain group key epoch.");
+        UUID chatId = activeParticipants.get(0).getChatId();
+        Set<UUID> activeAccountIds = activeParticipants.stream()
+                .map(ChatParticipantEntity::getAccountId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        Set<UUID> accountIdsWithEnvelope = groupEpochKeyEnvelopeRepository
+                .findByChatIdAndEpochAndTargetAccountIdIn(chatId, groupKeyEpoch, activeAccountIds)
+                .stream()
+                .map(GroupEpochKeyEnvelopeEntity::getTargetAccountId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        if (!accountIdsWithEnvelope.equals(activeAccountIds)) {
+            Set<UUID> missingAccountIds = activeAccountIds.stream()
+                    .filter(accountId -> !accountIdsWithEnvelope.contains(accountId))
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+            throw new MessagePayloadValidationException("Group epoch key envelopes are missing for active participants: " + missingAccountIds + ".");
         }
     }
 
@@ -485,30 +508,6 @@ public class MessageServiceImpl implements MessageService {
                 .toList();
 
         return messageAccountKeyEnvelopeRepository.saveAll(envelopeEntities);
-    }
-
-    private void saveGroupEpochKeyEnvelopes(
-            UUID chatId,
-            Integer epoch,
-            UUID senderDeviceId,
-            List<AccountKeyEnvelopeRequestDto> accountKeyEnvelopes,
-            OffsetDateTime now
-    ) {
-        for (AccountKeyEnvelopeRequestDto accountKeyEnvelope : accountKeyEnvelopes) {
-            GroupEpochKeyEnvelopeEntity envelopeEntity = groupEpochKeyEnvelopeRepository
-                    .findByChatIdAndEpochAndTargetAccountId(chatId, epoch, accountKeyEnvelope.targetAccountId())
-                    .orElseGet(() -> GroupEpochKeyEnvelopeEntity.builder()
-                            .chatId(chatId)
-                            .epoch(epoch)
-                            .targetAccountId(accountKeyEnvelope.targetAccountId())
-                            .createdAt(now)
-                            .build());
-            envelopeEntity.setSenderDeviceId(senderDeviceId);
-            envelopeEntity.setAlgorithm(accountKeyEnvelope.algorithm().trim());
-            envelopeEntity.setEncryptedKeyBase64(accountKeyEnvelope.encryptedKeyBase64().trim());
-            envelopeEntity.setUpdatedAt(now);
-            groupEpochKeyEnvelopeRepository.save(envelopeEntity);
-        }
     }
 
     private List<MessageDevicePayloadEntity> saveDevicePayloads(
@@ -675,6 +674,7 @@ public class MessageServiceImpl implements MessageService {
     private AccountKeyEnvelopeResponseDto mapToAccountKeyEnvelopeResponseDto(MessageAccountKeyEnvelopeEntity envelopeEntity) {
         return new AccountKeyEnvelopeResponseDto(
                 envelopeEntity.getTargetAccountId(),
+                null,
                 envelopeEntity.getAlgorithm(),
                 envelopeEntity.getEncryptedKeyBase64()
         );
@@ -683,6 +683,7 @@ public class MessageServiceImpl implements MessageService {
     private AccountKeyEnvelopeResponseDto mapToGroupEpochKeyEnvelopeResponseDto(GroupEpochKeyEnvelopeEntity envelopeEntity) {
         return new AccountKeyEnvelopeResponseDto(
                 envelopeEntity.getTargetAccountId(),
+                envelopeEntity.getSenderDeviceId(),
                 envelopeEntity.getAlgorithm(),
                 envelopeEntity.getEncryptedKeyBase64()
         );

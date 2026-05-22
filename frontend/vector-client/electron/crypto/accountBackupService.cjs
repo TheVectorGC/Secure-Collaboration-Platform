@@ -12,6 +12,14 @@ const BACKUP_KDF_PARAMETERS = {
 const accountBackupUnlockKeyByAccountId = new Map();
 const accountBackupPrivateKeyByAccountId = new Map();
 
+function toBase64(buffer) {
+  return Buffer.from(buffer).toString('base64');
+}
+
+function fromBase64(value) {
+  return Buffer.from(value, 'base64');
+}
+
 function validateAccountId(accountId) {
   if (!accountId || typeof accountId !== 'string') {
     throw new Error('accountId is required.');
@@ -26,18 +34,10 @@ function parseKdfParameters(kdfParametersJson) {
   return JSON.parse(kdfParametersJson);
 }
 
-function toBase64(buffer) {
-  return Buffer.from(buffer).toString('base64');
-}
-
-function fromBase64(value) {
-  return Buffer.from(value, 'base64');
-}
-
 function buildBackupKdfSalt(accountId, salt) {
   return crypto
     .createHash('sha256')
-    .update('vector-account-backup-profile-v1')
+    .update('vector-account-backup-v1')
     .update(':')
     .update(accountId)
     .update(':')
@@ -102,15 +102,20 @@ function hasAccountBackupPassword(accountId) {
   return accountBackupUnlockKeyByAccountId.has(accountId);
 }
 
-function resolveAccountBackupUnlockKey(accountId, profile) {
+function hasUnlockedAccountBackupPrivateKey(accountId) {
+  validateAccountId(accountId);
+  return accountBackupPrivateKeyByAccountId.has(accountId);
+}
+
+function resolveAccountBackupUnlockKey(accountId, backup) {
   const sessionKey = accountBackupUnlockKeyByAccountId.get(accountId);
 
   if (!sessionKey?.key) {
-    throw new Error('Account backup unlock key is not available in this session. Sign in again.');
+    throw new Error('Backup unlock key is not available in this session. Sign in again or confirm your password.');
   }
 
-  if (profile?.kdfSaltBase64 && sessionKey.kdfSaltBase64 !== profile.kdfSaltBase64) {
-    throw new Error('Account backup unlock key belongs to another profile salt. Sign in again to refresh the session key.');
+  if (backup?.kdfSaltBase64 && sessionKey.kdfSaltBase64 !== backup.kdfSaltBase64) {
+    throw new Error('Backup unlock key belongs to another backup salt. Sign in again to refresh the session key.');
   }
 
   return sessionKey;
@@ -150,8 +155,7 @@ function createAccountBackupProfile(request) {
     },
   });
   const encryptedPrivateKey = encryptWithAesGcm(sessionKey.key, keyPair.privateKey);
-  const privateKeyBase64 = toBase64(keyPair.privateKey);
-  accountBackupPrivateKeyByAccountId.set(request.accountId, privateKeyBase64);
+  accountBackupPrivateKeyByAccountId.set(request.accountId, toBase64(keyPair.privateKey));
 
   return {
     backupPublicKeyBase64: toBase64(keyPair.publicKey),
@@ -235,11 +239,12 @@ function decryptAccountKeyEnvelope(request) {
 }
 
 module.exports = {
-  decryptAccountKeyEnvelope,
-  encryptAccountKeyEnvelope,
-  unlockAccountBackupProfile,
-  createAccountBackupProfile,
   setAccountBackupPassword,
   clearAccountBackupPassword,
   hasAccountBackupPassword,
+  hasUnlockedAccountBackupPrivateKey,
+  createAccountBackupProfile,
+  unlockAccountBackupProfile,
+  encryptAccountKeyEnvelope,
+  decryptAccountKeyEnvelope,
 };

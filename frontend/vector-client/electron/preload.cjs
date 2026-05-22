@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('vectorCrypto', {
   setAccountBackupPassword: (request) => ipcRenderer.invoke('vectorCrypto:setAccountBackupPassword', request),
   clearAccountBackupPassword: (request) => ipcRenderer.invoke('vectorCrypto:clearAccountBackupPassword', request),
   hasAccountBackupPassword: (request) => ipcRenderer.invoke('vectorCrypto:hasAccountBackupPassword', request),
+  hasUnlockedAccountBackupPrivateKey: (request) => ipcRenderer.invoke('vectorCrypto:hasUnlockedAccountBackupPrivateKey', request),
   createAccountBackupProfile: (request) => ipcRenderer.invoke('vectorCrypto:createAccountBackupProfile', request),
   unlockAccountBackupProfile: (request) => ipcRenderer.invoke('vectorCrypto:unlockAccountBackupProfile', request),
   encryptAccountKeyEnvelope: (request) => ipcRenderer.invoke('vectorCrypto:encryptAccountKeyEnvelope', request),

@@ -151,6 +151,10 @@ function registerVectorCryptoIpc() {
     return accountBackupService.hasAccountBackupPassword(request?.accountId);
   });
 
+  ipcMain.handle('vectorCrypto:hasUnlockedAccountBackupPrivateKey', async (_event, request) => {
+    return accountBackupService.hasUnlockedAccountBackupPrivateKey(request?.accountId);
+  });
+
 
   ipcMain.handle('vectorCrypto:createAccountBackupProfile', async (_event, request) => {
     return accountBackupService.createAccountBackupProfile(request);
@@ -167,6 +171,7 @@ function registerVectorCryptoIpc() {
   ipcMain.handle('vectorCrypto:decryptAccountKeyEnvelope', async (_event, request) => {
     return accountBackupService.decryptAccountKeyEnvelope(request);
   });
+
 
   ipcMain.handle('vectorCrypto:clearAccountLocalVault', async (_event, request) => {
     localCryptoRepository.clearAccountCryptoState(request?.accountId);

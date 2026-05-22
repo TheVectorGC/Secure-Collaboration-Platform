@@ -1,6 +1,7 @@
 package dev.cryptoservice.controller.exceptionHandler;
 
 import dev.cryptoservice.exception.AccountBackupProfileNotFoundException;
+import dev.cryptoservice.exception.AccountBackupProfileConflictException;
 import dev.cryptoservice.exception.CryptoKeyValidationException;
 import dev.cryptoservice.exception.DeviceAccessDeniedException;
 import dev.cryptoservice.exception.DeviceIdentityKeyAlreadyExistsException;
@@ -82,7 +83,7 @@ public class AppExceptionHandler {
         return buildStandardErrorResponse(exception.getClass().getSimpleName(), exception.getMessage(), HttpStatus.NOT_FOUND);
     }
 
-    @ExceptionHandler({DeviceIdentityKeyAlreadyExistsException.class, SignedPreKeyAlreadyExistsException.class, KyberPreKeyAlreadyExistsException.class, OneTimePreKeyAlreadyExistsException.class})
+    @ExceptionHandler({DeviceIdentityKeyAlreadyExistsException.class, SignedPreKeyAlreadyExistsException.class, KyberPreKeyAlreadyExistsException.class, OneTimePreKeyAlreadyExistsException.class, AccountBackupProfileConflictException.class})
     public ResponseEntity<StandardErrorResponse> handleConflictException(RuntimeException exception) {
         log.warn("{}: {}.", exception.getClass().getSimpleName(), exception.getMessage());
 

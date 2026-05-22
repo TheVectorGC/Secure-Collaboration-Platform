@@ -200,6 +200,7 @@ export type ExportGroupKeyPackagesForChatResponse = {
 };
 
 
+
 export type SetAccountBackupPasswordRequest = {
   accountId: string;
   password: string;
@@ -214,6 +215,11 @@ export type ClearAccountBackupPasswordRequest = {
 export type HasAccountBackupPasswordRequest = {
   accountId: string;
 };
+
+
+
+
+
 
 export type ClearAccountLocalVaultRequest = {
   accountId: string;
@@ -334,7 +340,7 @@ export type VectorCryptoApi = {
   encryptAccountKeyEnvelope: (request: EncryptAccountKeyEnvelopeRequest) => Promise<EncryptAccountKeyEnvelopeResponse>;
   decryptAccountKeyEnvelope: (request: DecryptAccountKeyEnvelopeRequest) => Promise<DecryptAccountKeyEnvelopeResponse>;
   getOrCreateGroupEpochKey: (request: GetOrCreateGroupEpochKeyRequest) => Promise<{ chatId: string; epoch: number; senderDeviceId: string; groupEpochKeyBase64: string; groupKeyPackagePlainText: string }>;
-  importGroupKeyFromBackupEnvelope: (request: ImportGroupKeyFromBackupEnvelopeRequest) => Promise<{ imported: boolean }>;
+  importGroupKeyFromBackupEnvelope: (request: ImportGroupKeyFromBackupEnvelopeRequest) => Promise<{ imported: boolean; senderDeviceId?: string }>;
   encryptGroupMessageV2: (request: EncryptGroupMessageV2Request) => Promise<EncryptGroupMessageV2Response>;
   decryptGroupMessageV2: (request: DecryptGroupMessageV2Request) => Promise<DecryptGroupMessageResponse>;
   encryptMessage: (request: EncryptMessageRequest) => Promise<EncryptMessageResponse>;
@@ -344,6 +350,7 @@ export type VectorCryptoApi = {
   setAccountBackupPassword: (request: SetAccountBackupPasswordRequest) => Promise<{ stored: boolean; kdfSaltBase64: string }>;
   clearAccountBackupPassword: (request: ClearAccountBackupPasswordRequest) => Promise<{ cleared: boolean }>;
   hasAccountBackupPassword: (request: HasAccountBackupPasswordRequest) => Promise<boolean>;
+  hasUnlockedAccountBackupPrivateKey: (request: HasAccountBackupPasswordRequest) => Promise<boolean>;
   clearAccountLocalVault: (request: ClearAccountLocalVaultRequest) => Promise<ClearLocalVaultResponse>;
   clearLocalVault: () => Promise<ClearLocalVaultResponse>;
 };

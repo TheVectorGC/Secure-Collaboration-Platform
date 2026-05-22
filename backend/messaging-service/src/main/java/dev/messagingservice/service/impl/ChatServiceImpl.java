@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.messagingservice.exception.ChatAccessDeniedException;
 import dev.messagingservice.exception.ChatNotFoundException;
+import dev.messagingservice.exception.MessagePayloadValidationException;
 import dev.messagingservice.model.dto.request.AddGroupParticipantRequestDto;
 import dev.messagingservice.model.dto.request.CreateDirectChatRequestDto;
 import dev.messagingservice.model.dto.request.CreateGroupChatRequestDto;
@@ -274,18 +275,14 @@ public class ChatServiceImpl implements ChatService {
     @Override
     @Transactional
     public void upsertGroupEpochKeyEnvelope(UUID currentAccountId, UUID chatId, UpsertGroupEpochKeyEnvelopeRequestDto requestDto) {
-        ChatEntity chatEntity = chatRepository.findById(chatId)
-            .orElseThrow(() -> new ChatNotFoundException("Chat with ID '" + chatId + "' not found."));
+        ChatEntity chatEntity = getGroupChatForAdministration(currentAccountId, chatId);
 
-        if (chatEntity.getType() != ChatType.GROUP) {
-            throw new ChatAccessDeniedException("Group key envelopes are available only for group chats.");
+        if (requestDto.epoch() > (chatEntity.getCurrentKeyEpoch() == null ? 1 : chatEntity.getCurrentKeyEpoch())) {
+            throw new MessagePayloadValidationException("Group epoch envelope can't target a future epoch.");
         }
 
-        ChatParticipantEntity currentParticipant = chatParticipantRepository.findByChatIdAndAccountId(chatId, currentAccountId)
-            .orElseThrow(() -> new ChatAccessDeniedException("Current account is not a group participant."));
-
-        if (currentParticipant.getStatus() != ChatParticipantStatus.ACTIVE) {
-            throw new ChatAccessDeniedException("Current account is not an active group participant.");
+        if (!"RSA-OAEP-SHA256".equals(requestDto.algorithm().trim())) {
+            throw new MessagePayloadValidationException("Group epoch key envelope algorithm must be RSA-OAEP-SHA256.");
         }
 
         ChatParticipantEntity targetParticipant = chatParticipantRepository.findByChatIdAndAccountId(chatId, requestDto.targetAccountId())
@@ -295,19 +292,32 @@ public class ChatServiceImpl implements ChatService {
             throw new ChatAccessDeniedException("Target account is not an active group participant.");
         }
 
-        OffsetDateTime now = OffsetDateTime.now();
-        GroupEpochKeyEnvelopeEntity envelopeEntity = groupEpochKeyEnvelopeRepository
+        GroupEpochKeyEnvelopeEntity existingEnvelopeEntity = groupEpochKeyEnvelopeRepository
             .findByChatIdAndEpochAndTargetAccountId(chatId, requestDto.epoch(), requestDto.targetAccountId())
-            .orElseGet(() -> GroupEpochKeyEnvelopeEntity.builder()
-                .chatId(chatId)
-                .epoch(requestDto.epoch())
-                .targetAccountId(requestDto.targetAccountId())
-                .createdAt(now)
-                .build());
-        envelopeEntity.setSenderDeviceId(requestDto.senderDeviceId());
-        envelopeEntity.setAlgorithm(requestDto.algorithm().trim());
-        envelopeEntity.setEncryptedKeyBase64(requestDto.encryptedKeyBase64().trim());
-        envelopeEntity.setUpdatedAt(now);
+            .orElse(null);
+
+        if (existingEnvelopeEntity != null) {
+            boolean sameEnvelope = existingEnvelopeEntity.getAlgorithm().equals(requestDto.algorithm().trim())
+                && existingEnvelopeEntity.getEncryptedKeyBase64().equals(requestDto.encryptedKeyBase64().trim());
+
+            if (!sameEnvelope) {
+                throw new MessagePayloadValidationException("Existing group epoch key envelope can't be overwritten.");
+            }
+
+            return;
+        }
+
+        OffsetDateTime now = OffsetDateTime.now();
+        GroupEpochKeyEnvelopeEntity envelopeEntity = GroupEpochKeyEnvelopeEntity.builder()
+            .chatId(chatId)
+            .epoch(requestDto.epoch())
+            .targetAccountId(requestDto.targetAccountId())
+            .senderDeviceId(requestDto.senderDeviceId())
+            .algorithm(requestDto.algorithm().trim())
+            .encryptedKeyBase64(requestDto.encryptedKeyBase64().trim())
+            .createdAt(now)
+            .updatedAt(now)
+            .build();
         groupEpochKeyEnvelopeRepository.save(envelopeEntity);
     }
 
@@ -335,6 +345,7 @@ public class ChatServiceImpl implements ChatService {
 
         return new AccountKeyEnvelopeResponseDto(
             envelopeEntity.getTargetAccountId(),
+            envelopeEntity.getSenderDeviceId(),
             envelopeEntity.getAlgorithm(),
             envelopeEntity.getEncryptedKeyBase64()
         );
