@@ -1,18 +1,30 @@
 package dev.mediaservice.config;
 
+import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.security.SecurityRequirement;
+import io.swagger.v3.oas.models.security.SecurityScheme;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class OpenApiConfig {
+    private static final String BEARER_AUTH_SCHEME = "bearerAuth";
+
     @Bean
     public OpenAPI mediaServiceOpenApi() {
         return new OpenAPI()
-                .info(new Info()
-                        .title("Vector Media Service API")
-                        .version("0.1.0")
-                        .description("Encrypted media object storage service for Vector Messenger"));
+            .info(new Info()
+                .title("Vector Media Service API")
+                .version("0.1.0")
+                .description("Stores encrypted media objects and validates access through Vector chat membership."))
+            .components(new Components()
+                .addSecuritySchemes(BEARER_AUTH_SCHEME, new SecurityScheme()
+                    .name(BEARER_AUTH_SCHEME)
+                    .type(SecurityScheme.Type.HTTP)
+                    .scheme("bearer")
+                    .bearerFormat("JWT")))
+            .addSecurityItem(new SecurityRequirement().addList(BEARER_AUTH_SCHEME));
     }
 }

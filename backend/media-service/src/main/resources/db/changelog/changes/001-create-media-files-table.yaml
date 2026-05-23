@@ -20,8 +20,6 @@ databaseChangeLog:
               - column:
                   name: chat_id
                   type: uuid
-                  constraints:
-                    nullable: false
               - column:
                   name: storage_object_key
                   type: varchar(512)

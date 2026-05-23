@@ -13,11 +13,8 @@ import dev.identityservice.repository.ProfileRepository;
 import dev.identityservice.service.MappingService;
 import dev.identityservice.service.ProfileService;
 import java.time.OffsetDateTime;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -116,7 +113,7 @@ public class ProfileServiceImpl implements ProfileService {
         }
 
         List<UUID> uniqueAccountIds = accountIds.stream()
-                .filter(accountId -> accountId != null)
+                .filter(Objects::nonNull)
                 .distinct()
                 .limit(500)
                 .toList();
@@ -144,7 +141,7 @@ public class ProfileServiceImpl implements ProfileService {
 
                     return mappingService.mapToAccountProfileResponseDto(accountEntity, profileEntity);
                 })
-                .filter(profileResponseDto -> profileResponseDto != null)
+                .filter(Objects::nonNull)
                 .toList();
     }
 

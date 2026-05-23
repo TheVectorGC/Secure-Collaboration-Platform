@@ -2,11 +2,6 @@ databaseChangeLog:
   - changeSet:
       id: 001-create-chats-table
       author: messaging-service
-      preConditions:
-        - onFail: MARK_RAN
-        - not:
-            tableExists:
-              tableName: chats
       changes:
         - createTable:
             tableName: chats
@@ -23,6 +18,12 @@ databaseChangeLog:
                   constraints:
                     nullable: false
               - column:
+                  name: name
+                  type: VARCHAR(120)
+              - column:
+                  name: avatar_data_url
+                  type: TEXT
+              - column:
                   name: direct_chat_key
                   type: VARCHAR(80)
                   constraints:
@@ -32,6 +33,12 @@ databaseChangeLog:
                   type: UUID
                   constraints:
                     unique: true
+              - column:
+                  name: current_key_epoch
+                  type: INTEGER
+                  defaultValueNumeric: 1
+                  constraints:
+                    nullable: false
               - column:
                   name: created_by_account_id
                   type: UUID
@@ -53,3 +60,9 @@ databaseChangeLog:
             columns:
               - column:
                   name: type
+        - createIndex:
+            tableName: chats
+            indexName: idx_chats_updated_at
+            columns:
+              - column:
+                  name: updated_at

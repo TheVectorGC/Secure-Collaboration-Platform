@@ -14,11 +14,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.vault.core.VaultOperations;
 import org.springframework.vault.support.Plaintext;
 import org.springframework.vault.support.Signature;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class VaultJwtTokenServiceImpl implements JwtTokenService {
@@ -48,12 +50,17 @@ public class VaultJwtTokenServiceImpl implements JwtTokenService {
     }
 
     private boolean verifySignature(String signingInput, String signaturePart) {
-        byte[] signatureBytes = Base64UrlUtils.decode(signaturePart);
-        String vaultSignatureValue = "vault:v1:" + Base64.getEncoder().encodeToString(signatureBytes);
-        Plaintext plaintext = Plaintext.of(signingInput.getBytes(StandardCharsets.UTF_8));
-        Signature signature = Signature.of(vaultSignatureValue);
-
-        return vaultOperations.opsForTransit().verify(jwtProperties.keyName(), plaintext, signature);
+        try {
+            byte[] signatureBytes = Base64UrlUtils.decode(signaturePart);
+            String vaultSignatureValue = "vault:v1:" + Base64.getEncoder().encodeToString(signatureBytes);
+            Plaintext plaintext = Plaintext.of(signingInput.getBytes(StandardCharsets.UTF_8));
+            Signature signature = Signature.of(vaultSignatureValue);
+            return vaultOperations.opsForTransit().verify(jwtProperties.keyName(), plaintext, signature);
+        }
+        catch (Exception exception) {
+            log.debug("JWT signature verification failed in Vault.", exception);
+            return false;
+        }
     }
 
     private Map<String, Object> parsePayload(String encodedPayload) {
@@ -90,7 +97,6 @@ public class VaultJwtTokenServiceImpl implements JwtTokenService {
         String username = String.valueOf(payload.get("sub"));
         UUID accountId = UUID.fromString(String.valueOf(payload.get("accountId")));
         List<String> roles = extractRoles(payload);
-
         return new AccountPrincipal(accountId, username, roles);
     }
 
@@ -102,7 +108,7 @@ public class VaultJwtTokenServiceImpl implements JwtTokenService {
         }
 
         return roleValues.stream()
-            .map(String::valueOf)
-            .toList();
+                .map(String::valueOf)
+                .toList();
     }
 }

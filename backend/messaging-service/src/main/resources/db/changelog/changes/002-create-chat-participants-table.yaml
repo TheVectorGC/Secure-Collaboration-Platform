@@ -2,11 +2,6 @@ databaseChangeLog:
   - changeSet:
       id: 002-create-chat-participants-table
       author: messaging-service
-      preConditions:
-        - onFail: MARK_RAN
-        - not:
-            tableExists:
-              tableName: chat_participants
       changes:
         - createTable:
             tableName: chat_participants
@@ -43,6 +38,15 @@ databaseChangeLog:
                   constraints:
                     nullable: false
               - column:
+                  name: history_visible_from_message_id
+                  type: UUID
+              - column:
+                  name: history_visible_from_created_at
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: removed_at
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
                   name: last_read_message_id
                   type: UUID
               - column:
@@ -75,3 +79,11 @@ databaseChangeLog:
                   name: chat_id
               - column:
                   name: status
+        - createIndex:
+            tableName: chat_participants
+            indexName: idx_chat_participants_history_boundary
+            columns:
+              - column:
+                  name: chat_id
+              - column:
+                  name: history_visible_from_created_at

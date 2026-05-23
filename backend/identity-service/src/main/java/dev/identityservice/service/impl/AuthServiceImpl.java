@@ -2,6 +2,7 @@ package dev.identityservice.service.impl;
 
 import dev.identityservice.config.JwtProperties;
 import dev.identityservice.config.RefreshTokenProperties;
+import dev.identityservice.common.util.StringNormalizer;
 import dev.identityservice.exception.AccountBlockedException;
 import dev.identityservice.exception.AccountNotFoundException;
 import dev.identityservice.exception.DeviceNotFoundException;
@@ -87,8 +88,8 @@ public class AuthServiceImpl implements AuthService {
         OffsetDateTime now = OffsetDateTime.now();
 
         AccountEntity accountEntity = AccountEntity.builder()
-                .username(accountRegistrationEntity.getUsername())
-                .email(accountRegistrationEntity.getEmail())
+                .username(StringNormalizer.trimToNull(accountRegistrationEntity.getUsername()))
+                .email(StringNormalizer.normalizeEmail(accountRegistrationEntity.getEmail()))
                 .passwordHash(passwordEncoder.encode(completeRegistrationRequestDto.password()))
                 .status(AccountStatus.ACTIVE)
                 .role(AccountRole.USER)
@@ -100,9 +101,9 @@ public class AuthServiceImpl implements AuthService {
 
         ProfileEntity profileEntity = ProfileEntity.builder()
                 .accountId(savedAccountEntity.getId())
-                .firstName(accountRegistrationEntity.getFirstName())
-                .lastName(accountRegistrationEntity.getLastName())
-                .middleName(accountRegistrationEntity.getMiddleName())
+                .firstName(StringNormalizer.trimToNull(accountRegistrationEntity.getFirstName()))
+                .lastName(StringNormalizer.trimToNull(accountRegistrationEntity.getLastName()))
+                .middleName(StringNormalizer.trimToNull(accountRegistrationEntity.getMiddleName()))
                 .avatarType(AvatarType.AUTO)
                 .createdAt(now)
                 .updatedAt(now)
@@ -121,16 +122,16 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public AuthenticationResponseDto login(LoginRequestDto loginRequestDto) {
-        log.info("Login attempt for: {}.", loginRequestDto.login());
+        log.info("Login attempt for: {}.", StringNormalizer.trimToNull(loginRequestDto.login()));
 
         authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
-                        loginRequestDto.login(),
+                        StringNormalizer.trimToNull(loginRequestDto.login()),
                         loginRequestDto.password()
                 )
         );
 
-        AccountEntity accountEntity = findAccountByLogin(loginRequestDto.login());
+        AccountEntity accountEntity = findAccountByLogin(StringNormalizer.trimToNull(loginRequestDto.login()));
         validateAccountIsActive(accountEntity);
 
         OffsetDateTime now = OffsetDateTime.now();
@@ -177,7 +178,6 @@ public class AuthServiceImpl implements AuthService {
         log.info("Logout request received.");
 
         String refreshTokenHash = refreshTokenService.hashRefreshToken(logoutRequestDto.refreshToken());
-
         authSessionRepository.findByRefreshTokenHash(refreshTokenHash)
                 .ifPresent(authSessionEntity -> {
                     if (authSessionEntity.getStatus() == AuthSessionStatus.ACTIVE) {

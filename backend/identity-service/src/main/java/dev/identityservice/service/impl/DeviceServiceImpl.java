@@ -1,5 +1,6 @@
 package dev.identityservice.service.impl;
 
+import dev.identityservice.common.util.StringNormalizer;
 import dev.identityservice.exception.AccountNotFoundException;
 import dev.identityservice.exception.DeviceNotFoundException;
 import dev.identityservice.exception.DeviceRegistrationException;
@@ -13,14 +14,18 @@ import dev.identityservice.model.entity.AccountEntity;
 import dev.identityservice.model.entity.AuthSessionEntity;
 import dev.identityservice.model.entity.DeviceEntity;
 import dev.identityservice.model.enumeration.AuthSessionStatus;
+import dev.identityservice.model.enumeration.DevicePlatform;
 import dev.identityservice.model.enumeration.DeviceStatus;
 import dev.identityservice.repository.AccountRepository;
 import dev.identityservice.repository.AuthSessionRepository;
 import dev.identityservice.repository.DeviceRepository;
 import dev.identityservice.service.DeviceService;
+import dev.identityservice.service.event.IdentityOutboxService;
+import dev.identityservice.service.mapper.DeviceMapper;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Consumer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -33,11 +38,13 @@ public class DeviceServiceImpl implements DeviceService {
     private final AccountRepository accountRepository;
     private final DeviceRepository deviceRepository;
     private final AuthSessionRepository authSessionRepository;
+    private final DeviceMapper deviceMapper;
+    private final IdentityOutboxService identityOutboxService;
 
     @Override
     @Transactional
     public DeviceEntity resolveLoginDevice(AccountEntity accountEntity, LoginRequestDto loginRequestDto) {
-        String clientInstallationId = trimToNull(loginRequestDto.clientInstallationId());
+        String clientInstallationId = StringNormalizer.trimToNull(loginRequestDto.clientInstallationId());
 
         if (loginRequestDto.deviceId() != null) {
             return resolveExistingDevice(accountEntity, loginRequestDto, clientInstallationId);
@@ -53,11 +60,9 @@ public class DeviceServiceImpl implements DeviceService {
     @Override
     @Transactional(readOnly = true)
     public List<DeviceResponseDto> getCurrentAccountDevices(String username) {
-        AccountEntity accountEntity = accountRepository.findByUsername(username)
-                .orElseThrow(() -> new AccountNotFoundException("Account with username '" + username + "' not found."));
-
+        AccountEntity accountEntity = findAccountByUsername(username);
         return deviceRepository.findByAccountId(accountEntity.getId()).stream()
-                .map(this::mapToDeviceResponseDto)
+                .map(deviceMapper::toDeviceResponseDto)
                 .toList();
     }
 
@@ -65,7 +70,7 @@ public class DeviceServiceImpl implements DeviceService {
     @Transactional(readOnly = true)
     public List<ActiveDeviceResponseDto> getActiveAccountDevices(UUID accountId) {
         return deviceRepository.findByAccountIdAndStatus(accountId, DeviceStatus.ACTIVE).stream()
-                .map(this::mapToActiveDeviceResponseDto)
+                .map(deviceMapper::toActiveDeviceResponseDto)
                 .toList();
     }
 
@@ -75,7 +80,7 @@ public class DeviceServiceImpl implements DeviceService {
         DeviceEntity deviceEntity = deviceRepository.findById(deviceId)
                 .orElseThrow(() -> new DeviceNotFoundException("Device with ID '" + deviceId + "' not found."));
 
-        return mapToInternalDeviceResponseDto(deviceEntity);
+        return deviceMapper.toInternalDeviceResponseDto(deviceEntity);
     }
 
     @Override
@@ -87,16 +92,13 @@ public class DeviceServiceImpl implements DeviceService {
     ) {
         AccountEntity accountEntity = findAccountByUsername(username);
         DeviceEntity deviceEntity = findCurrentAccountDevice(accountEntity, deviceId);
+        validateDeviceIsActive(deviceEntity);
+        applyDeviceMetadata(deviceEntity, DeviceMetadataUpdate.fromRequest(requestDto));
+        touchDevice(deviceEntity);
 
-        if (deviceEntity.getStatus() == DeviceStatus.REVOKED) {
-            throw new DeviceRevokedException("Device has been revoked.");
-        }
-
-        applyMetadataUpdate(deviceEntity, requestDto);
-        deviceEntity.setLastSeenAt(OffsetDateTime.now());
-        deviceEntity.setUpdatedAt(OffsetDateTime.now());
-
-        return mapToDeviceResponseDto(deviceRepository.save(deviceEntity));
+        DeviceEntity savedDeviceEntity = deviceRepository.save(deviceEntity);
+        log.debug("Device metadata updated. Device ID: {}, account ID: {}.", savedDeviceEntity.getId(), savedDeviceEntity.getAccountId());
+        return deviceMapper.toDeviceResponseDto(savedDeviceEntity);
     }
 
     @Override
@@ -110,24 +112,9 @@ public class DeviceServiceImpl implements DeviceService {
             return;
         }
 
-        OffsetDateTime now = OffsetDateTime.now();
-        deviceEntity.setStatus(DeviceStatus.REVOKED);
-        deviceEntity.setUpdatedAt(now);
-        deviceRepository.save(deviceEntity);
-        revokeDeviceSessions(deviceId);
-        log.info("Device revoked successfully. Device ID: {}, account ID: {}.", deviceId, accountEntity.getId());
-    }
-
-    @Override
-    @Transactional
-    public void revokeDeviceSessions(UUID deviceId) {
-        List<AuthSessionEntity> activeSessions = authSessionRepository.findByDeviceIdAndStatus(
-                deviceId,
-                AuthSessionStatus.ACTIVE
-        );
-
-        activeSessions.forEach(authSessionEntity -> authSessionEntity.setStatus(AuthSessionStatus.REVOKED));
-        authSessionRepository.saveAll(activeSessions);
+        revokeDevice(deviceEntity);
+        identityOutboxService.enqueueDeviceRevoked(accountEntity.getId(), deviceId);
+        log.info("Device revoked. Device ID: {}, account ID: {}.", deviceId, accountEntity.getId());
     }
 
     private DeviceEntity resolveDeviceByClientInstallation(
@@ -136,7 +123,7 @@ public class DeviceServiceImpl implements DeviceService {
             String clientInstallationId
     ) {
         return deviceRepository.findByAccountIdAndClientInstallationId(accountEntity.getId(), clientInstallationId)
-                .map(deviceEntity -> refreshInstallationBoundDevice(deviceEntity, loginRequestDto))
+                .map(deviceEntity -> refreshExistingDevice(deviceEntity, loginRequestDto))
                 .orElseGet(() -> createDevice(accountEntity, loginRequestDto, clientInstallationId));
     }
 
@@ -145,38 +132,22 @@ public class DeviceServiceImpl implements DeviceService {
             LoginRequestDto loginRequestDto,
             String clientInstallationId
     ) {
-        DeviceEntity deviceEntity = deviceRepository.findByIdAndAccountId(
-                        loginRequestDto.deviceId(),
-                        accountEntity.getId()
-                )
+        DeviceEntity deviceEntity = deviceRepository.findByIdAndAccountId(loginRequestDto.deviceId(), accountEntity.getId())
                 .orElseThrow(() -> new DeviceNotFoundException("Device with ID '" + loginRequestDto.deviceId() + "' not found."));
 
-        if (deviceEntity.getStatus() == DeviceStatus.REVOKED) {
-            throw new DeviceRevokedException("Device has been revoked.");
-        }
+        validateDeviceIsActive(deviceEntity);
 
         if (clientInstallationId != null) {
             bindDeviceToClientInstallation(accountEntity.getId(), deviceEntity, clientInstallationId);
         }
 
-        OffsetDateTime now = OffsetDateTime.now();
-        deviceEntity.setLastSeenAt(now);
-        deviceEntity.setUpdatedAt(now);
-        applyMutableLoginDeviceMetadata(deviceEntity, loginRequestDto);
-
-        return deviceRepository.save(deviceEntity);
+        return refreshExistingDevice(deviceEntity, loginRequestDto);
     }
 
-    private DeviceEntity refreshInstallationBoundDevice(DeviceEntity deviceEntity, LoginRequestDto loginRequestDto) {
-        if (deviceEntity.getStatus() == DeviceStatus.REVOKED) {
-            throw new DeviceRevokedException("Device has been revoked.");
-        }
-
-        OffsetDateTime now = OffsetDateTime.now();
-        deviceEntity.setLastSeenAt(now);
-        deviceEntity.setUpdatedAt(now);
-        applyMutableLoginDeviceMetadata(deviceEntity, loginRequestDto);
-
+    private DeviceEntity refreshExistingDevice(DeviceEntity deviceEntity, LoginRequestDto loginRequestDto) {
+        validateDeviceIsActive(deviceEntity);
+        applyDeviceMetadata(deviceEntity, DeviceMetadataUpdate.fromLogin(loginRequestDto));
+        touchDevice(deviceEntity);
         return deviceRepository.save(deviceEntity);
     }
 
@@ -194,18 +165,14 @@ public class DeviceServiceImpl implements DeviceService {
 
     private void detachClientInstallationFromConflictingDevice(DeviceEntity conflictingDeviceEntity) {
         if (conflictingDeviceEntity.getStatus() == DeviceStatus.ACTIVE) {
-            conflictingDeviceEntity.setStatus(DeviceStatus.REVOKED);
-            revokeDeviceSessions(conflictingDeviceEntity.getId());
+            revokeDevice(conflictingDeviceEntity);
         }
 
         conflictingDeviceEntity.setClientInstallationId(null);
         conflictingDeviceEntity.setUpdatedAt(OffsetDateTime.now());
         deviceRepository.save(conflictingDeviceEntity);
-        log.warn(
-                "Detached duplicate client installation binding from device. Device ID: {}, account ID: {}.",
-                conflictingDeviceEntity.getId(),
-                conflictingDeviceEntity.getAccountId()
-        );
+        identityOutboxService.enqueueDeviceRevoked(conflictingDeviceEntity.getAccountId(), conflictingDeviceEntity.getId());
+        log.warn("Duplicate client installation binding detached. Device ID: {}, account ID: {}.", conflictingDeviceEntity.getId(), conflictingDeviceEntity.getAccountId());
     }
 
     private DeviceEntity createDevice(
@@ -222,28 +189,36 @@ public class DeviceServiceImpl implements DeviceService {
                 .platform(loginRequestDto.platform())
                 .status(DeviceStatus.ACTIVE)
                 .clientInstallationId(clientInstallationId)
-                .clientVersion(trimToNull(loginRequestDto.clientVersion()))
-                .osName(trimToNull(loginRequestDto.osName()))
-                .osVersion(trimToNull(loginRequestDto.osVersion()))
-                .architecture(trimToNull(loginRequestDto.architecture()))
-                .hostname(trimToNull(loginRequestDto.hostname()))
+                .clientVersion(StringNormalizer.trimToNull(loginRequestDto.clientVersion()))
+                .osName(StringNormalizer.trimToNull(loginRequestDto.osName()))
+                .osVersion(StringNormalizer.trimToNull(loginRequestDto.osVersion()))
+                .architecture(StringNormalizer.trimToNull(loginRequestDto.architecture()))
+                .hostname(StringNormalizer.trimToNull(loginRequestDto.hostname()))
                 .lastSeenAt(now)
                 .createdAt(now)
                 .updatedAt(now)
                 .build();
 
         DeviceEntity savedDeviceEntity = deviceRepository.save(deviceEntity);
-        log.info(
-                "Device registered successfully. Device ID: {}, account ID: {}.",
-                savedDeviceEntity.getId(),
-                accountEntity.getId()
-        );
-
+        log.info("Device registered. Device ID: {}, account ID: {}.", savedDeviceEntity.getId(), accountEntity.getId());
         return savedDeviceEntity;
     }
 
+    private void revokeDevice(DeviceEntity deviceEntity) {
+        deviceEntity.setStatus(DeviceStatus.REVOKED);
+        deviceEntity.setUpdatedAt(OffsetDateTime.now());
+        deviceRepository.save(deviceEntity);
+        revokeActiveDeviceSessions(deviceEntity.getId());
+    }
+
+    private void revokeActiveDeviceSessions(UUID deviceId) {
+        List<AuthSessionEntity> activeSessions = authSessionRepository.findByDeviceIdAndStatus(deviceId, AuthSessionStatus.ACTIVE);
+        activeSessions.forEach(authSessionEntity -> authSessionEntity.setStatus(AuthSessionStatus.REVOKED));
+        authSessionRepository.saveAll(activeSessions);
+    }
+
     private void validateNewDeviceRequest(LoginRequestDto loginRequestDto) {
-        if (loginRequestDto.deviceName() == null || loginRequestDto.deviceName().trim().isEmpty()) {
+        if (StringNormalizer.trimToNull(loginRequestDto.deviceName()) == null) {
             throw new DeviceRegistrationException("Device name is required for new device registration.");
         }
 
@@ -252,83 +227,37 @@ public class DeviceServiceImpl implements DeviceService {
         }
     }
 
-    private void applyMutableLoginDeviceMetadata(DeviceEntity deviceEntity, LoginRequestDto loginRequestDto) {
-        String deviceName = trimToNull(loginRequestDto.deviceName());
-        String clientVersion = trimToNull(loginRequestDto.clientVersion());
-        String osName = trimToNull(loginRequestDto.osName());
-        String osVersion = trimToNull(loginRequestDto.osVersion());
-        String architecture = trimToNull(loginRequestDto.architecture());
-        String hostname = trimToNull(loginRequestDto.hostname());
-
-        if (deviceName != null) {
-            deviceEntity.setDeviceName(deviceName);
-        }
-
-        if (loginRequestDto.platform() != null) {
-            deviceEntity.setPlatform(loginRequestDto.platform());
-        }
-
-        if (clientVersion != null) {
-            deviceEntity.setClientVersion(clientVersion);
-        }
-
-        if (osName != null) {
-            deviceEntity.setOsName(osName);
-        }
-
-        if (osVersion != null) {
-            deviceEntity.setOsVersion(osVersion);
-        }
-
-        if (architecture != null) {
-            deviceEntity.setArchitecture(architecture);
-        }
-
-        if (hostname != null) {
-            deviceEntity.setHostname(hostname);
+    private void validateDeviceIsActive(DeviceEntity deviceEntity) {
+        if (deviceEntity.getStatus() == DeviceStatus.REVOKED) {
+            throw new DeviceRevokedException("Device has been revoked.");
         }
     }
 
-    private void applyMetadataUpdate(DeviceEntity deviceEntity, UpdateDeviceMetadataRequestDto requestDto) {
-        String deviceName = trimToNull(requestDto.deviceName());
-        String clientVersion = trimToNull(requestDto.clientVersion());
-        String osName = trimToNull(requestDto.osName());
-        String osVersion = trimToNull(requestDto.osVersion());
-        String architecture = trimToNull(requestDto.architecture());
-        String hostname = trimToNull(requestDto.hostname());
-        String deviceFingerprint = normalizeFingerprint(requestDto.deviceFingerprint());
+    private void applyDeviceMetadata(DeviceEntity deviceEntity, DeviceMetadataUpdate metadataUpdate) {
+        setIfPresent(metadataUpdate.deviceName(), deviceEntity::setDeviceName);
 
-        if (deviceName != null) {
-            deviceEntity.setDeviceName(deviceName);
+        if (metadataUpdate.platform() != null) {
+            deviceEntity.setPlatform(metadataUpdate.platform());
         }
 
-        if (requestDto.platform() != null) {
-            deviceEntity.setPlatform(requestDto.platform());
-        }
+        setIfPresent(metadataUpdate.clientVersion(), deviceEntity::setClientVersion);
+        setIfPresent(metadataUpdate.osName(), deviceEntity::setOsName);
+        setIfPresent(metadataUpdate.osVersion(), deviceEntity::setOsVersion);
+        setIfPresent(metadataUpdate.architecture(), deviceEntity::setArchitecture);
+        setIfPresent(metadataUpdate.hostname(), deviceEntity::setHostname);
+        setIfPresent(metadataUpdate.deviceFingerprint(), deviceEntity::setDeviceFingerprint);
+    }
 
-        if (clientVersion != null) {
-            deviceEntity.setClientVersion(clientVersion);
+    private void setIfPresent(String value, Consumer<String> setter) {
+        if (value != null) {
+            setter.accept(value);
         }
+    }
 
-        if (osName != null) {
-            deviceEntity.setOsName(osName);
-        }
-
-        if (osVersion != null) {
-            deviceEntity.setOsVersion(osVersion);
-        }
-
-        if (architecture != null) {
-            deviceEntity.setArchitecture(architecture);
-        }
-
-        if (hostname != null) {
-            deviceEntity.setHostname(hostname);
-        }
-
-        if (deviceFingerprint != null) {
-            deviceEntity.setDeviceFingerprint(deviceFingerprint);
-        }
+    private void touchDevice(DeviceEntity deviceEntity) {
+        OffsetDateTime now = OffsetDateTime.now();
+        deviceEntity.setLastSeenAt(now);
+        deviceEntity.setUpdatedAt(now);
     }
 
     private AccountEntity findAccountByUsername(String username) {
@@ -341,68 +270,40 @@ public class DeviceServiceImpl implements DeviceService {
                 .orElseThrow(() -> new DeviceNotFoundException("Device with ID '" + deviceId + "' not found."));
     }
 
-    private DeviceResponseDto mapToDeviceResponseDto(DeviceEntity deviceEntity) {
-        return new DeviceResponseDto(
-                deviceEntity.getId(),
-                deviceEntity.getDeviceName(),
-                deviceEntity.getPlatform(),
-                deviceEntity.getStatus(),
-                deviceEntity.getClientVersion(),
-                deviceEntity.getOsName(),
-                deviceEntity.getOsVersion(),
-                deviceEntity.getArchitecture(),
-                deviceEntity.getHostname(),
-                deviceEntity.getDeviceFingerprint(),
-                deviceEntity.getLastSeenAt(),
-                deviceEntity.getCreatedAt()
-        );
-    }
-
-    private ActiveDeviceResponseDto mapToActiveDeviceResponseDto(DeviceEntity deviceEntity) {
-        return new ActiveDeviceResponseDto(
-                deviceEntity.getId(),
-                deviceEntity.getAccountId(),
-                deviceEntity.getDeviceName(),
-                deviceEntity.getPlatform(),
-                deviceEntity.getClientVersion(),
-                deviceEntity.getOsName(),
-                deviceEntity.getOsVersion(),
-                deviceEntity.getArchitecture(),
-                deviceEntity.getHostname(),
-                deviceEntity.getDeviceFingerprint(),
-                deviceEntity.getLastSeenAt()
-        );
-    }
-
-    private InternalDeviceResponseDto mapToInternalDeviceResponseDto(DeviceEntity deviceEntity) {
-        return new InternalDeviceResponseDto(
-                deviceEntity.getId(),
-                deviceEntity.getAccountId(),
-                deviceEntity.getStatus()
-        );
-    }
-
-    private String normalizeFingerprint(String value) {
-        String trimmedValue = trimToNull(value);
-
-        if (trimmedValue == null) {
-            return null;
+    private record DeviceMetadataUpdate(
+            String deviceName,
+            DevicePlatform platform,
+            String clientVersion,
+            String osName,
+            String osVersion,
+            String architecture,
+            String hostname,
+            String deviceFingerprint
+    ) {
+        private static DeviceMetadataUpdate fromLogin(LoginRequestDto loginRequestDto) {
+            return new DeviceMetadataUpdate(
+                    StringNormalizer.trimToNull(loginRequestDto.deviceName()),
+                    loginRequestDto.platform(),
+                    StringNormalizer.trimToNull(loginRequestDto.clientVersion()),
+                    StringNormalizer.trimToNull(loginRequestDto.osName()),
+                    StringNormalizer.trimToNull(loginRequestDto.osVersion()),
+                    StringNormalizer.trimToNull(loginRequestDto.architecture()),
+                    StringNormalizer.trimToNull(loginRequestDto.hostname()),
+                    null
+            );
         }
 
-        return trimmedValue.replace(":", "").replace(" ", "").toUpperCase();
-    }
-
-    private String trimToNull(String value) {
-        if (value == null) {
-            return null;
+        private static DeviceMetadataUpdate fromRequest(UpdateDeviceMetadataRequestDto requestDto) {
+            return new DeviceMetadataUpdate(
+                    StringNormalizer.trimToNull(requestDto.deviceName()),
+                    requestDto.platform(),
+                    StringNormalizer.trimToNull(requestDto.clientVersion()),
+                    StringNormalizer.trimToNull(requestDto.osName()),
+                    StringNormalizer.trimToNull(requestDto.osVersion()),
+                    StringNormalizer.trimToNull(requestDto.architecture()),
+                    StringNormalizer.trimToNull(requestDto.hostname()),
+                    StringNormalizer.normalizeFingerprint(requestDto.deviceFingerprint())
+            );
         }
-
-        String trimmedValue = value.trim();
-
-        if (trimmedValue.isEmpty()) {
-            return null;
-        }
-
-        return trimmedValue;
     }
 }

@@ -59,9 +59,6 @@ public class DocumentEntity {
     @Column(name = "file_encryption_algorithm", nullable = false, length = 32)
     private String fileEncryptionAlgorithm;
 
-    @Column(name = "file_encryption_key_base64", nullable = false, length = 512)
-    private String fileEncryptionKeyBase64;
-
     @Column(name = "file_initialization_vector_base64", nullable = false, length = 512)
     private String fileInitializationVectorBase64;
 

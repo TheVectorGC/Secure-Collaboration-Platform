@@ -1,5 +1,6 @@
 package dev.identityservice.config;
 
+import dev.identityservice.common.util.StringNormalizer;
 import dev.identityservice.model.entity.AccountEntity;
 import dev.identityservice.model.entity.ProfileEntity;
 import dev.identityservice.model.enumeration.AccountRole;
@@ -28,18 +29,26 @@ public class InitialAdminInitializer implements CommandLineRunner {
     @Transactional
     public void run(String... args) {
         if (!initialAdminProperties.enabled()) {
+            log.debug("Initial admin bootstrap is disabled.");
             return;
         }
 
-        if (accountRepository.existsByUsername(initialAdminProperties.username())) {
+        String username = StringNormalizer.trimToNull(initialAdminProperties.username());
+        String email = StringNormalizer.normalizeEmail(initialAdminProperties.email());
+
+        if (username == null || email == null || StringNormalizer.trimToNull(initialAdminProperties.password()) == null) {
+            throw new IllegalStateException("Initial admin bootstrap is enabled but username, email or password is missing.");
+        }
+
+        if (accountRepository.existsByUsername(username) || accountRepository.existsByEmail(email)) {
+            log.info("Initial admin bootstrap skipped because account already exists.");
             return;
         }
 
         OffsetDateTime now = OffsetDateTime.now();
-
         AccountEntity accountEntity = AccountEntity.builder()
-                .username(initialAdminProperties.username())
-                .email(initialAdminProperties.email().trim().toLowerCase())
+                .username(username)
+                .email(email)
                 .passwordHash(passwordEncoder.encode(initialAdminProperties.password()))
                 .status(AccountStatus.ACTIVE)
                 .role(AccountRole.ADMIN)
@@ -48,18 +57,26 @@ public class InitialAdminInitializer implements CommandLineRunner {
                 .build();
 
         AccountEntity savedAccountEntity = accountRepository.save(accountEntity);
-
         ProfileEntity profileEntity = ProfileEntity.builder()
                 .accountId(savedAccountEntity.getId())
-                .firstName(initialAdminProperties.firstName())
-                .lastName(initialAdminProperties.lastName())
+                .firstName(resolveRequiredProfileName(initialAdminProperties.firstName(), "System"))
+                .lastName(resolveRequiredProfileName(initialAdminProperties.lastName(), "Administrator"))
                 .avatarType(AvatarType.AUTO)
                 .createdAt(now)
                 .updatedAt(now)
                 .build();
 
         profileRepository.save(profileEntity);
+        log.info("Initial admin account created. Account ID: {}.", savedAccountEntity.getId());
+    }
 
-        log.info("Initial admin account created with ID: {}.", savedAccountEntity.getId());
+    private String resolveRequiredProfileName(String value, String defaultValue) {
+        String normalizedValue = StringNormalizer.trimToNull(value);
+
+        if (normalizedValue == null) {
+            return defaultValue;
+        }
+
+        return normalizedValue;
     }
 }

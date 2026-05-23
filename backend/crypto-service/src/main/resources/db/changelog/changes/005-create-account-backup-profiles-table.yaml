@@ -1,0 +1,64 @@
+databaseChangeLog:
+  - changeSet:
+      id: 005-create-account-backup-profiles-table
+      author: crypto-service
+      changes:
+        - createTable:
+            tableName: account_backup_profiles
+            columns:
+              - column:
+                  name: account_id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: backup_public_key_base64
+                  type: TEXT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: encrypted_backup_private_key_base64
+                  type: TEXT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: kdf_algorithm
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: kdf_salt_base64
+                  type: VARCHAR(512)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: kdf_parameters_json
+                  type: TEXT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: private_key_encryption_algorithm
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: private_key_initialization_vector_base64
+                  type: VARCHAR(512)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: private_key_authentication_tag_base64
+                  type: VARCHAR(512)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false

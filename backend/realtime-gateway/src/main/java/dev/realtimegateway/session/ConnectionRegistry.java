@@ -2,15 +2,19 @@ package dev.realtimegateway.session;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.realtimegateway.model.dto.RealtimeEnvelopeDto;
+import dev.realtimegateway.presence.PresenceAccountStatus;
+import dev.realtimegateway.presence.PresenceService;
 import dev.realtimegateway.security.AccountPrincipal;
 import java.io.IOException;
 import java.time.OffsetDateTime;
 import java.util.Collection;
-import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -24,24 +28,27 @@ public class ConnectionRegistry {
     private static final String ACCOUNT_PRINCIPAL_ATTRIBUTE = "accountPrincipal";
 
     private final ObjectMapper objectMapper;
+    private final PresenceService presenceService;
     private final Map<UUID, Set<WebSocketSession>> sessionsByAccountId = new ConcurrentHashMap<>();
-    private final Map<UUID, OffsetDateTime> lastSeenAtByAccountId = new ConcurrentHashMap<>();
+    private final Map<String, ReentrantLock> sendLocksBySessionId = new ConcurrentHashMap<>();
 
     public boolean register(WebSocketSession webSocketSession, AccountPrincipal accountPrincipal) {
         webSocketSession.getAttributes().put(ACCOUNT_PRINCIPAL_ATTRIBUTE, accountPrincipal);
+        sendLocksBySessionId.put(webSocketSession.getId(), new ReentrantLock());
         Set<WebSocketSession> sessions = sessionsByAccountId.computeIfAbsent(
                 accountPrincipal.accountId(),
                 ignoredAccountId -> ConcurrentHashMap.newKeySet()
         );
         boolean wasOffline = sessions.stream().noneMatch(WebSocketSession::isOpen);
         sessions.add(webSocketSession);
-        lastSeenAtByAccountId.remove(accountPrincipal.accountId());
-        log.info("WebSocket session registered. Session ID: {}, account ID: {}.", webSocketSession.getId(), accountPrincipal.accountId());
+        presenceService.markOnline(accountPrincipal.accountId());
+        log.info("WebSocket session registered. sessionId={}, accountId={}.", webSocketSession.getId(), accountPrincipal.accountId());
         return wasOffline;
     }
 
     public boolean unregister(WebSocketSession webSocketSession) {
         AccountPrincipal accountPrincipal = getAccountPrincipal(webSocketSession);
+        sendLocksBySessionId.remove(webSocketSession.getId());
 
         if (accountPrincipal == null) {
             return false;
@@ -49,19 +56,21 @@ public class ConnectionRegistry {
 
         Set<WebSocketSession> sessions = sessionsByAccountId.get(accountPrincipal.accountId());
 
-        if (sessions != null) {
-            sessions.remove(webSocketSession);
-            sessions.removeIf(session -> !session.isOpen());
-
-            if (sessions.isEmpty()) {
-                sessionsByAccountId.remove(accountPrincipal.accountId());
-                lastSeenAtByAccountId.put(accountPrincipal.accountId(), OffsetDateTime.now());
-                log.info("WebSocket account went offline. Account ID: {}.", accountPrincipal.accountId());
-                return true;
-            }
+        if (sessions == null) {
+            return false;
         }
 
-        log.info("WebSocket session unregistered. Session ID: {}, account ID: {}.", webSocketSession.getId(), accountPrincipal.accountId());
+        sessions.remove(webSocketSession);
+        sessions.removeIf(session -> !session.isOpen());
+
+        if (sessions.isEmpty()) {
+            sessionsByAccountId.remove(accountPrincipal.accountId());
+            presenceService.markOffline(accountPrincipal.accountId());
+            log.info("WebSocket account went offline. accountId={}.", accountPrincipal.accountId());
+            return true;
+        }
+
+        log.info("WebSocket session unregistered. sessionId={}, accountId={}.", webSocketSession.getId(), accountPrincipal.accountId());
         return false;
     }
 
@@ -79,8 +88,12 @@ public class ConnectionRegistry {
     }
 
     public void sendToAccounts(Collection<UUID> accountIds, RealtimeEnvelopeDto realtimeEnvelopeDto) {
+        if (accountIds == null || accountIds.isEmpty()) {
+            return;
+        }
+
         accountIds.stream()
-                .filter(accountId -> accountId != null)
+                .filter(Objects::nonNull)
                 .distinct()
                 .forEach(accountId -> sendToAccount(accountId, realtimeEnvelopeDto));
     }
@@ -97,18 +110,12 @@ public class ConnectionRegistry {
         sendToAccounts(sessionsByAccountId.keySet(), realtimeEnvelopeDto);
     }
 
-    public Set<UUID> getOnlineAccountIds() {
-        Set<UUID> onlineAccountIds = new LinkedHashSet<>();
-        sessionsByAccountId.forEach((accountId, sessions) -> {
-            if (sessions.stream().anyMatch(WebSocketSession::isOpen)) {
-                onlineAccountIds.add(accountId);
-            }
-        });
-        return onlineAccountIds;
+    public List<PresenceAccountStatus> getOnlineAccounts() {
+        return presenceService.getOnlineAccounts();
     }
 
     public OffsetDateTime getLastSeenAt(UUID accountId) {
-        return lastSeenAtByAccountId.get(accountId);
+        return presenceService.getLastSeenAt(accountId);
     }
 
     public AccountPrincipal getAccountPrincipal(WebSocketSession webSocketSession) {
@@ -135,16 +142,24 @@ public class ConnectionRegistry {
             return;
         }
 
+        ReentrantLock sendLock = sendLocksBySessionId.get(webSocketSession.getId());
+
+        if (sendLock == null) {
+            return;
+        }
+
+        sendLock.lock();
         try {
-            synchronized (webSocketSession) {
-                if (webSocketSession.isOpen()) {
-                    webSocketSession.sendMessage(new TextMessage(serializedEvent));
-                }
+            if (webSocketSession.isOpen()) {
+                webSocketSession.sendMessage(new TextMessage(serializedEvent));
             }
         }
         catch (IOException | IllegalStateException exception) {
-            log.warn("Failed to send WebSocket message. Session ID: {}.", webSocketSession.getId(), exception);
+            log.warn("Failed to send WebSocket message. sessionId={}.", webSocketSession.getId(), exception);
             unregister(webSocketSession);
+        }
+        finally {
+            sendLock.unlock();
         }
     }
 }

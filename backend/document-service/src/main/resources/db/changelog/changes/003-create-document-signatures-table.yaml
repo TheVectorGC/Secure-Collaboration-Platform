@@ -1,69 +1,65 @@
 databaseChangeLog:
   - changeSet:
       id: 003-create-document-signatures-table
-      author: document-service
-      preConditions:
-        - onFail: MARK_RAN
-        - not:
-            tableExists:
-              tableName: document_signatures
+      author: vector
       changes:
         - createTable:
             tableName: document_signatures
             columns:
               - column:
                   name: id
-                  type: UUID
+                  type: uuid
                   constraints:
                     primaryKey: true
                     nullable: false
               - column:
                   name: document_id
-                  type: UUID
+                  type: uuid
                   constraints:
                     nullable: false
               - column:
                   name: signer_account_id
-                  type: UUID
+                  type: uuid
                   constraints:
                     nullable: false
               - column:
                   name: signer_device_id
-                  type: UUID
+                  type: uuid
                   constraints:
                     nullable: false
               - column:
                   name: signing_key_fingerprint
-                  type: VARCHAR(128)
+                  type: varchar(128)
                   constraints:
                     nullable: false
               - column:
                   name: algorithm
-                  type: VARCHAR(32)
+                  type: varchar(32)
                   constraints:
                     nullable: false
               - column:
                   name: document_hash_base64
-                  type: VARCHAR(64)
+                  type: varchar(64)
                   constraints:
                     nullable: false
               - column:
                   name: signature_base64
-                  type: TEXT
+                  type: text
                   constraints:
                     nullable: false
               - column:
                   name: signed_at
-                  type: TIMESTAMP WITH TIME ZONE
+                  type: timestamp with time zone
                   constraints:
                     nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: document_signatures
+            baseColumnNames: document_id
+            referencedTableName: documents
+            referencedColumnNames: id
+            constraintName: fk_document_signatures_document_id
+            onDelete: CASCADE
         - addUniqueConstraint:
             tableName: document_signatures
             columnNames: document_id, signer_account_id
-            constraintName: uk_document_signatures_document_signer
-        - createIndex:
-            tableName: document_signatures
-            indexName: idx_document_signatures_document_id
-            columns:
-              - column:
-                  name: document_id
+            constraintName: uk_document_signatures_document_account

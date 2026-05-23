@@ -1,9 +1,9 @@
 services:
   document-postgres:
-    image: postgres:17
+    image: postgres:18
     container_name: document-postgres
     ports:
-      - "5436:5432"
+      - "5437:5432"
     environment:
       POSTGRES_DB: document_db
       POSTGRES_USER: postgres

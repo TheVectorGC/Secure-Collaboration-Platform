@@ -4,25 +4,22 @@ server:
 spring:
   application:
     name: media-service
-
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5437/media_db}
+    url: ${DB_URL:jdbc:postgresql://localhost:5436/media_db}
     username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:postgres}
-
-  servlet:
-    multipart:
-      max-file-size: ${MAX_FILE_SIZE:512MB}
-      max-request-size: ${MAX_REQUEST_SIZE:512MB}
-
   jpa:
     hibernate:
       ddl-auto: validate
     open-in-view: false
-
   liquibase:
     change-log: classpath:db/changelog/db.changelog-master.yaml
-
+  servlet:
+    multipart:
+      max-file-size: ${MAX_FILE_SIZE:512MB}
+      max-request-size: ${MAX_REQUEST_SIZE:512MB}
   cloud:
     vault:
       enabled: true
@@ -32,24 +29,40 @@ spring:
         enabled: false
 
 application:
+  cors:
+    allowed-origins:
+      - ${FRONTEND_ORIGIN:http://localhost:5173}
+      - ${FRONTEND_LOOPBACK_ORIGIN:http://127.0.0.1:5173}
   security:
     jwt:
       issuer: ${JWT_ISSUER:identity-service}
       key-name: ${JWT_KEY_NAME:identity-service-jwt-ed25519}
-
   messaging-service:
     base-url: ${MESSAGING_SERVICE_BASE_URL:http://localhost:8087}
     chat-path: ${MESSAGING_SERVICE_CHAT_PATH:/api/v1/chats/{chatId}}
-
   media:
     storage:
       root-path: ${MEDIA_STORAGE_ROOT_PATH:./data/media-files}
       max-file-size-bytes: ${MEDIA_MAX_FILE_SIZE_BYTES:536870912}
 
-logging:
-  level:
-    dev.mediaservice: INFO
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
 
 springdoc:
+  api-docs:
+    enabled: true
   swagger-ui:
+    enabled: true
     path: /swagger-ui.html
+
+logging:
+  pattern:
+    level: "%5p [requestId=%X{requestId:-none}]"
+  level:
+    dev.mediaservice: INFO

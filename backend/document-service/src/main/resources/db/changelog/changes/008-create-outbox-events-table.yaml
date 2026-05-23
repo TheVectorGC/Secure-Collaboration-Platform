@@ -1,0 +1,68 @@
+databaseChangeLog:
+  - changeSet:
+      id: 008-create-outbox-events-table
+      author: vector
+      changes:
+        - createTable:
+            tableName: outbox_events
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: topic
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: event_key
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: event_type
+                  type: varchar(128)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: payload
+                  type: text
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: varchar(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: attempts
+                  type: int
+                  constraints:
+                    nullable: false
+              - column:
+                  name: last_error
+                  type: varchar(2000)
+              - column:
+                  name: created_at
+                  type: timestamp with time zone
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamp with time zone
+                  constraints:
+                    nullable: false
+              - column:
+                  name: published_at
+                  type: timestamp with time zone
+        - createIndex:
+            tableName: outbox_events
+            indexName: idx_outbox_events_status_created_at
+            columns:
+              - column:
+                  name: status
+              - column:
+                  name: created_at

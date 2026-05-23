@@ -2,11 +2,6 @@ databaseChangeLog:
   - changeSet:
       id: 004-create-devices-table
       author: identity-service
-      preConditions:
-        - onFail: MARK_RAN
-        - not:
-            tableExists:
-              tableName: devices
       changes:
         - createTable:
             tableName: devices
@@ -17,45 +12,60 @@ databaseChangeLog:
                   constraints:
                     primaryKey: true
                     nullable: false
-
               - column:
                   name: account_id
                   type: UUID
                   constraints:
                     nullable: false
-
               - column:
                   name: device_name
                   type: VARCHAR(100)
                   constraints:
                     nullable: false
-
+              - column:
+                  name: client_installation_id
+                  type: VARCHAR(64)
               - column:
                   name: platform
                   type: VARCHAR(32)
                   constraints:
                     nullable: false
-
               - column:
                   name: status
                   type: VARCHAR(32)
                   constraints:
                     nullable: false
-
               - column:
                   name: client_version
                   type: VARCHAR(50)
-
+              - column:
+                  name: os_name
+                  type: VARCHAR(120)
+              - column:
+                  name: os_version
+                  type: VARCHAR(120)
+              - column:
+                  name: architecture
+                  type: VARCHAR(64)
+              - column:
+                  name: hostname
+                  type: VARCHAR(120)
+              - column:
+                  name: device_fingerprint
+                  type: VARCHAR(128)
               - column:
                   name: last_seen_at
                   type: TIMESTAMP WITH TIME ZONE
-
               - column:
                   name: created_at
                   type: TIMESTAMP WITH TIME ZONE
                   constraints:
                     nullable: false
-
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
         - addForeignKeyConstraint:
             baseTableName: devices
             baseColumnNames: account_id
@@ -63,14 +73,12 @@ databaseChangeLog:
             referencedTableName: accounts
             referencedColumnNames: id
             onDelete: CASCADE
-
         - createIndex:
             tableName: devices
             indexName: idx_devices_account_id
             columns:
               - column:
                   name: account_id
-
         - createIndex:
             tableName: devices
             indexName: idx_devices_account_status
@@ -79,3 +87,7 @@ databaseChangeLog:
                   name: account_id
               - column:
                   name: status
+        - addUniqueConstraint:
+            tableName: devices
+            columnNames: account_id, client_installation_id
+            constraintName: uk_devices_account_client_installation

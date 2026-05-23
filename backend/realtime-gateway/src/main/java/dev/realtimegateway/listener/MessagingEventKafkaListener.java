@@ -21,22 +21,18 @@ public class MessagingEventKafkaListener {
     )
     public void handleMessagingEvent(String serializedMessagingEvent) {
         try {
-            MessagingEventDto messagingEventDto = objectMapper.readValue(
-                    serializedMessagingEvent,
-                    MessagingEventDto.class
-            );
-
+            MessagingEventDto messagingEventDto = objectMapper.readValue(serializedMessagingEvent, MessagingEventDto.class);
             log.info(
-                    "Received messaging event. Type: {}, event ID: {}, chat ID: {}.",
-                    messagingEventDto.eventType(),
+                    "Messaging event received. eventId={}, eventType={}, chatId={}.",
                     messagingEventDto.eventId(),
+                    messagingEventDto.eventType(),
                     messagingEventDto.chatId()
             );
-
             realtimeDeliveryService.deliverMessagingEvent(messagingEventDto);
         }
         catch (Exception exception) {
-            log.warn("Failed to handle messaging event: {}.", serializedMessagingEvent, exception);
+            log.warn("Failed to handle messaging event.", exception);
+            log.debug("Invalid messaging event payload: {}.", serializedMessagingEvent);
         }
     }
 }

@@ -10,8 +10,6 @@ databaseChangeLog:
   - include:
       file: db/changelog/changes/005-create-auth-sessions-table.yaml
   - include:
-      file: db/changelog/changes/006-add-client-installation-id-to-devices.yaml
+      file: db/changelog/changes/006-create-account-blocks-table.yaml
   - include:
-      file: db/changelog/changes/007-add-profile-avatar-data-url.yaml
-  - include:
-      file: db/changelog/changes/008-add-device-metadata.yaml
+      file: db/changelog/changes/007-create-outbox-events-table.yaml

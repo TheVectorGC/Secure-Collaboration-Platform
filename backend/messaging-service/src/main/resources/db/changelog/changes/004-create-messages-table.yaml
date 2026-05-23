@@ -1,0 +1,87 @@
+databaseChangeLog:
+  - changeSet:
+      id: 004-create-messages-table
+      author: messaging-service
+      changes:
+        - createTable:
+            tableName: messages
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: chat_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: sender_account_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: sender_device_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: client_message_id
+                  type: VARCHAR(100)
+              - column:
+                  name: message_type
+                  type: VARCHAR(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: encryption_type
+                  type: VARCHAR(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: encrypted_payload
+                  type: TEXT
+              - column:
+                  name: content_algorithm
+                  type: VARCHAR(64)
+              - column:
+                  name: content_initialization_vector_base64
+                  type: VARCHAR(512)
+              - column:
+                  name: content_authentication_tag_base64
+                  type: VARCHAR(512)
+              - column:
+                  name: group_key_epoch
+                  type: INTEGER
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: messages
+            baseColumnNames: chat_id
+            constraintName: fk_messages_chats
+            referencedTableName: chats
+            referencedColumnNames: id
+            onDelete: CASCADE
+        - addUniqueConstraint:
+            tableName: messages
+            columnNames: sender_account_id, client_message_id
+            constraintName: uq_messages_sender_client_message
+        - createIndex:
+            tableName: messages
+            indexName: idx_messages_chat_created_at
+            columns:
+              - column:
+                  name: chat_id
+              - column:
+                  name: created_at
+        - createIndex:
+            tableName: messages
+            indexName: idx_messages_sender_account_id
+            columns:
+              - column:
+                  name: sender_account_id

@@ -1,0 +1,59 @@
+databaseChangeLog:
+  - changeSet:
+      id: 006-create-account-blocks-table
+      author: identity-service
+      changes:
+        - createTable:
+            tableName: account_blocks
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: blocker_account_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: blocked_account_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: account_blocks
+            baseColumnNames: blocker_account_id
+            constraintName: fk_account_blocks_blocker_accounts
+            referencedTableName: accounts
+            referencedColumnNames: id
+            onDelete: CASCADE
+        - addForeignKeyConstraint:
+            baseTableName: account_blocks
+            baseColumnNames: blocked_account_id
+            constraintName: fk_account_blocks_blocked_accounts
+            referencedTableName: accounts
+            referencedColumnNames: id
+            onDelete: CASCADE
+        - addUniqueConstraint:
+            tableName: account_blocks
+            columnNames: blocker_account_id, blocked_account_id
+            constraintName: uk_account_blocks_pair
+        - createIndex:
+            tableName: account_blocks
+            indexName: idx_account_blocks_blocker
+            columns:
+              - column:
+                  name: blocker_account_id
+        - createIndex:
+            tableName: account_blocks
+            indexName: idx_account_blocks_blocked
+            columns:
+              - column:
+                  name: blocked_account_id

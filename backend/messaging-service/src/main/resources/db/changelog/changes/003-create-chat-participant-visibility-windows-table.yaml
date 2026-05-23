@@ -1,0 +1,62 @@
+databaseChangeLog:
+  - changeSet:
+      id: 003-create-chat-participant-visibility-windows-table
+      author: messaging-service
+      changes:
+        - createTable:
+            tableName: chat_participant_visibility_windows
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: chat_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: account_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: visible_from_created_at
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: visible_until_created_at
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: chat_participant_visibility_windows
+            baseColumnNames: chat_id
+            constraintName: fk_chat_participant_visibility_windows_chats
+            referencedTableName: chats
+            referencedColumnNames: id
+            onDelete: CASCADE
+        - createIndex:
+            tableName: chat_participant_visibility_windows
+            indexName: idx_chat_participant_visibility_windows_account
+            columns:
+              - column:
+                  name: account_id
+              - column:
+                  name: chat_id
+        - createIndex:
+            tableName: chat_participant_visibility_windows
+            indexName: idx_chat_participant_visibility_windows_bounds
+            columns:
+              - column:
+                  name: chat_id
+              - column:
+                  name: account_id
+              - column:
+                  name: visible_from_created_at
+              - column:
+                  name: visible_until_created_at

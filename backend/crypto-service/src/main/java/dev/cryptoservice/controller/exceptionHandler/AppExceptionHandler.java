@@ -1,7 +1,7 @@
 package dev.cryptoservice.controller.exceptionHandler;
 
-import dev.cryptoservice.exception.AccountBackupProfileNotFoundException;
 import dev.cryptoservice.exception.AccountBackupProfileConflictException;
+import dev.cryptoservice.exception.AccountBackupProfileNotFoundException;
 import dev.cryptoservice.exception.CryptoKeyValidationException;
 import dev.cryptoservice.exception.DeviceAccessDeniedException;
 import dev.cryptoservice.exception.DeviceIdentityKeyAlreadyExistsException;
@@ -18,11 +18,13 @@ import dev.cryptoservice.exception.SignedPreKeyAlreadyExistsException;
 import dev.cryptoservice.exception.SignedPreKeyNotFoundException;
 import dev.cryptoservice.exception.SignedPreKeySignatureInvalidException;
 import dev.cryptoservice.exception.TokenValidationException;
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashMap;
+import dev.cryptoservice.model.dto.error.ApiErrorResponseDto;
+import dev.cryptoservice.model.dto.error.FieldErrorResponseDto;
+import dev.cryptoservice.web.RequestIdProvider;
+import jakarta.servlet.http.HttpServletRequest;
+import java.time.OffsetDateTime;
 import java.util.List;
-import java.util.Map;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -33,98 +35,103 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @Slf4j
 @RestControllerAdvice
+@RequiredArgsConstructor
 public class AppExceptionHandler {
+    private final RequestIdProvider requestIdProvider;
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ValidationErrorResponse> handleMethodArgumentNotValidException(MethodArgumentNotValidException exception) {
-        Map<String, List<String>> validationErrors = new HashMap<>();
-        exception.getBindingResult().getFieldErrors().forEach(error -> {
-            String fieldName = error.getField();
-            String errorMessage = error.getDefaultMessage();
-            validationErrors.computeIfAbsent(fieldName, key -> new ArrayList<>()).add(errorMessage);
-        });
+    public ResponseEntity<ApiErrorResponseDto> handleMethodArgumentNotValidException(
+        MethodArgumentNotValidException exception,
+        HttpServletRequest request
+    ) {
+        List<FieldErrorResponseDto> fieldErrors = exception.getBindingResult().getFieldErrors().stream()
+            .map(fieldError -> new FieldErrorResponseDto(
+                fieldError.getField(),
+                fieldError.getCode(),
+                fieldError.getDefaultMessage()
+            ))
+            .toList();
 
-        log.warn("MethodArgumentNotValidException: {}.", exception.getMessage());
+        log.warn("Request validation failed. path={}, fieldErrorCount={}", request.getRequestURI(), fieldErrors.size());
 
-        return buildValidationErrorResponse(validationErrors);
+        return buildErrorResponse(
+            HttpStatus.BAD_REQUEST,
+            "VALIDATION_FAILED",
+            "Request validation failed.",
+            request.getRequestURI(),
+            fieldErrors
+        );
     }
 
     @ExceptionHandler(AccessDeniedException.class)
-    public ResponseEntity<StandardErrorResponse> handleAccessDeniedException(AccessDeniedException exception) {
-        log.warn("AccessDeniedException: {}.", exception.getMessage());
-
-        return buildStandardErrorResponse("AccessDeniedException", "You don't have permission to access this resource.", HttpStatus.FORBIDDEN);
+    public ResponseEntity<ApiErrorResponseDto> handleAccessDeniedException(HttpServletRequest request) {
+        log.warn("Access denied. path={}", request.getRequestURI());
+        return buildErrorResponse(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "You do not have permission to access this resource.", request.getRequestURI());
     }
 
-    @ExceptionHandler(DeviceAccessDeniedException.class)
-    public ResponseEntity<StandardErrorResponse> handleDeviceAccessDeniedException(DeviceAccessDeniedException exception) {
-        log.warn("DeviceAccessDeniedException: {}.", exception.getMessage());
-
-        return buildStandardErrorResponse("DeviceAccessDeniedException", exception.getMessage(), HttpStatus.FORBIDDEN);
+    @ExceptionHandler({DeviceAccessDeniedException.class, DeviceNotActiveException.class})
+    public ResponseEntity<ApiErrorResponseDto> handleForbiddenException(RuntimeException exception, HttpServletRequest request) {
+        log.warn("Forbidden crypto request. code={}, path={}, message={}", exception.getClass().getSimpleName(), request.getRequestURI(), exception.getMessage());
+        return buildErrorResponse(HttpStatus.FORBIDDEN, toErrorCode(exception), exception.getMessage(), request.getRequestURI());
     }
 
-    @ExceptionHandler(DeviceNotActiveException.class)
-    public ResponseEntity<StandardErrorResponse> handleDeviceNotActiveException(DeviceNotActiveException exception) {
-        log.warn("DeviceNotActiveException: {}.", exception.getMessage());
-
-        return buildStandardErrorResponse("DeviceNotActiveException", exception.getMessage(), HttpStatus.FORBIDDEN);
-    }
-
-    @ExceptionHandler(DeviceNotFoundException.class)
-    public ResponseEntity<StandardErrorResponse> handleDeviceNotFoundException(DeviceNotFoundException exception) {
-        log.warn("DeviceNotFoundException: {}.", exception.getMessage());
-
-        return buildStandardErrorResponse("DeviceNotFoundException", exception.getMessage(), HttpStatus.NOT_FOUND);
-    }
-
-    @ExceptionHandler({DeviceIdentityKeyNotFoundException.class, SignedPreKeyNotFoundException.class, KyberPreKeyNotFoundException.class, PreKeyBundleNotAvailableException.class, AccountBackupProfileNotFoundException.class})
-    public ResponseEntity<StandardErrorResponse> handleNotFoundException(RuntimeException exception) {
-        log.warn("{}: {}.", exception.getClass().getSimpleName(), exception.getMessage());
-
-        return buildStandardErrorResponse(exception.getClass().getSimpleName(), exception.getMessage(), HttpStatus.NOT_FOUND);
+    @ExceptionHandler({DeviceNotFoundException.class, DeviceIdentityKeyNotFoundException.class, SignedPreKeyNotFoundException.class, KyberPreKeyNotFoundException.class, PreKeyBundleNotAvailableException.class, AccountBackupProfileNotFoundException.class})
+    public ResponseEntity<ApiErrorResponseDto> handleNotFoundException(RuntimeException exception, HttpServletRequest request) {
+        log.warn("Crypto resource was not found. code={}, path={}, message={}", exception.getClass().getSimpleName(), request.getRequestURI(), exception.getMessage());
+        return buildErrorResponse(HttpStatus.NOT_FOUND, toErrorCode(exception), exception.getMessage(), request.getRequestURI());
     }
 
     @ExceptionHandler({DeviceIdentityKeyAlreadyExistsException.class, SignedPreKeyAlreadyExistsException.class, KyberPreKeyAlreadyExistsException.class, OneTimePreKeyAlreadyExistsException.class, AccountBackupProfileConflictException.class})
-    public ResponseEntity<StandardErrorResponse> handleConflictException(RuntimeException exception) {
-        log.warn("{}: {}.", exception.getClass().getSimpleName(), exception.getMessage());
-
-        return buildStandardErrorResponse(exception.getClass().getSimpleName(), exception.getMessage(), HttpStatus.CONFLICT);
+    public ResponseEntity<ApiErrorResponseDto> handleConflictException(RuntimeException exception, HttpServletRequest request) {
+        log.warn("Crypto resource conflict. code={}, path={}, message={}", exception.getClass().getSimpleName(), request.getRequestURI(), exception.getMessage());
+        return buildErrorResponse(HttpStatus.CONFLICT, toErrorCode(exception), exception.getMessage(), request.getRequestURI());
     }
 
     @ExceptionHandler({CryptoKeyValidationException.class, SignedPreKeySignatureInvalidException.class, KyberPreKeySignatureInvalidException.class, TokenValidationException.class})
-    public ResponseEntity<StandardErrorResponse> handleBadRequestException(RuntimeException exception) {
-        log.warn("{}: {}.", exception.getClass().getSimpleName(), exception.getMessage());
-
-        return buildStandardErrorResponse(exception.getClass().getSimpleName(), exception.getMessage(), HttpStatus.BAD_REQUEST);
+    public ResponseEntity<ApiErrorResponseDto> handleBadRequestException(RuntimeException exception, HttpServletRequest request) {
+        log.warn("Invalid crypto request. code={}, path={}, message={}", exception.getClass().getSimpleName(), request.getRequestURI(), exception.getMessage());
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, toErrorCode(exception), exception.getMessage(), request.getRequestURI());
     }
 
     @ExceptionHandler(ExternalServiceException.class)
-    public ResponseEntity<StandardErrorResponse> handleExternalServiceException(ExternalServiceException exception) {
-        log.warn("ExternalServiceException: {}.", exception.getMessage());
-
-        return buildStandardErrorResponse("ExternalServiceException", exception.getMessage(), HttpStatus.SERVICE_UNAVAILABLE);
+    public ResponseEntity<ApiErrorResponseDto> handleExternalServiceException(ExternalServiceException exception, HttpServletRequest request) {
+        log.warn("External service request failed. path={}, message={}", request.getRequestURI(), exception.getMessage());
+        return buildErrorResponse(HttpStatus.SERVICE_UNAVAILABLE, "EXTERNAL_SERVICE_UNAVAILABLE", exception.getMessage(), request.getRequestURI());
     }
 
     @ExceptionHandler(RuntimeException.class)
-    public ResponseEntity<StandardErrorResponse> handleRuntimeException(RuntimeException exception) {
-        log.error("Unexpected error occurred: {}.", exception.getMessage(), exception);
-
-        return buildStandardErrorResponse("Internal Server Error", "An unexpected error occurred. Please try again later.", HttpStatus.INTERNAL_SERVER_ERROR);
+    public ResponseEntity<ApiErrorResponseDto> handleRuntimeException(RuntimeException exception, HttpServletRequest request) {
+        log.error("Unexpected crypto-service error. path={}, message={}", request.getRequestURI(), exception.getMessage(), exception);
+        return buildErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_SERVER_ERROR", "An unexpected error occurred. Please try again later.", request.getRequestURI());
     }
 
-    private ResponseEntity<StandardErrorResponse> buildStandardErrorResponse(String error, String message, HttpStatus status) {
-        StandardErrorResponse standardErrorResponse = new StandardErrorResponse(error, message, LocalDateTime.now(), status.value());
-
-        return new ResponseEntity<>(standardErrorResponse, status);
+    private ResponseEntity<ApiErrorResponseDto> buildErrorResponse(HttpStatus httpStatus, String code, String message, String path) {
+        return buildErrorResponse(httpStatus, code, message, path, List.of());
     }
 
-    private ResponseEntity<ValidationErrorResponse> buildValidationErrorResponse(Map<String, List<String>> validationErrors) {
-        ValidationErrorResponse validationErrorResponse = new ValidationErrorResponse(
-            "Validation Error",
-            validationErrors,
-            LocalDateTime.now(),
-            HttpStatus.BAD_REQUEST.value()
+    private ResponseEntity<ApiErrorResponseDto> buildErrorResponse(
+        HttpStatus httpStatus,
+        String code,
+        String message,
+        String path,
+        List<FieldErrorResponseDto> fieldErrors
+    ) {
+        ApiErrorResponseDto errorResponse = new ApiErrorResponseDto(
+            OffsetDateTime.now(),
+            requestIdProvider.getCurrentRequestId(),
+            httpStatus.value(),
+            code,
+            message,
+            path,
+            fieldErrors
         );
 
-        return new ResponseEntity<>(validationErrorResponse, HttpStatus.BAD_REQUEST);
+        return new ResponseEntity<>(errorResponse, httpStatus);
+    }
+
+    private String toErrorCode(RuntimeException exception) {
+        String simpleName = exception.getClass().getSimpleName();
+        String withoutExceptionSuffix = simpleName.endsWith("Exception") ? simpleName.substring(0, simpleName.length() - 9) : simpleName;
+        return withoutExceptionSuffix.replaceAll("([a-z])([A-Z])", "$1_$2").toUpperCase();
     }
 }

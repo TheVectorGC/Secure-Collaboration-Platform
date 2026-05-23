@@ -2,11 +2,6 @@ databaseChangeLog:
   - changeSet:
       id: 002-create-profiles-table
       author: identity-service
-      preConditions:
-        - onFail: MARK_RAN
-        - not:
-            tableExists:
-              tableName: profiles
       changes:
         - createTable:
             tableName: profiles
@@ -17,45 +12,40 @@ databaseChangeLog:
                   constraints:
                     primaryKey: true
                     nullable: false
-
               - column:
                   name: first_name
                   type: VARCHAR(100)
                   constraints:
                     nullable: false
-
               - column:
                   name: last_name
                   type: VARCHAR(100)
                   constraints:
                     nullable: false
-
               - column:
                   name: middle_name
                   type: VARCHAR(100)
-
               - column:
                   name: avatar_type
                   type: VARCHAR(32)
                   constraints:
                     nullable: false
-
               - column:
                   name: avatar_file_id
                   type: UUID
-
+              - column:
+                  name: avatar_data_url
+                  type: TEXT
               - column:
                   name: created_at
                   type: TIMESTAMP WITH TIME ZONE
                   constraints:
                     nullable: false
-
               - column:
                   name: updated_at
                   type: TIMESTAMP WITH TIME ZONE
                   constraints:
                     nullable: false
-
         - addForeignKeyConstraint:
             baseTableName: profiles
             baseColumnNames: account_id
@@ -63,14 +53,12 @@ databaseChangeLog:
             referencedTableName: accounts
             referencedColumnNames: id
             onDelete: CASCADE
-
         - createIndex:
             tableName: profiles
             indexName: idx_profiles_first_name
             columns:
               - column:
                   name: first_name
-
         - createIndex:
             tableName: profiles
             indexName: idx_profiles_last_name

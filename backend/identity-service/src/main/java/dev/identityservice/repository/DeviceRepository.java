@@ -14,17 +14,9 @@ public interface DeviceRepository extends JpaRepository<DeviceEntity, UUID> {
 
     Optional<DeviceEntity> findByAccountIdAndClientInstallationId(UUID accountId, String clientInstallationId);
 
-    Optional<DeviceEntity> findByAccountIdAndClientInstallationIdAndStatus(
-            UUID accountId,
-            String clientInstallationId,
-            DeviceStatus status
-    );
-
     List<DeviceEntity> findByAccountId(UUID accountId);
 
     List<DeviceEntity> findByAccountIdAndStatus(UUID accountId, DeviceStatus status);
-
-    boolean existsByIdAndAccountId(UUID deviceId, UUID accountId);
 
     boolean existsByAccountIdAndStatus(UUID accountId, DeviceStatus status);
 }

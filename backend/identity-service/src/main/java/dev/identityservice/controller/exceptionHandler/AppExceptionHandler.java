@@ -1,12 +1,27 @@
 package dev.identityservice.controller.exceptionHandler;
 
-import dev.identityservice.exception.*;
-
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashMap;
+import dev.identityservice.common.error.ApiErrorResponse;
+import dev.identityservice.common.error.ErrorCode;
+import dev.identityservice.common.error.FieldErrorResponse;
+import dev.identityservice.common.request.RequestIdProvider;
+import dev.identityservice.exception.AccountAlreadyExistsException;
+import dev.identityservice.exception.AccountBlockedException;
+import dev.identityservice.exception.AccountNotFoundException;
+import dev.identityservice.exception.DeviceNotFoundException;
+import dev.identityservice.exception.DeviceRegistrationException;
+import dev.identityservice.exception.DeviceRevokedException;
+import dev.identityservice.exception.InvalidRefreshTokenException;
+import dev.identityservice.exception.InvalidRegistrationTokenException;
+import dev.identityservice.exception.PasswordConfirmationMismatchException;
+import dev.identityservice.exception.RegistrationAlreadyCompletedException;
+import dev.identityservice.exception.RegistrationExpiredException;
+import dev.identityservice.exception.RegistrationNotFoundException;
+import dev.identityservice.exception.TokenSigningException;
+import jakarta.servlet.http.HttpServletRequest;
+import java.time.OffsetDateTime;
+import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,131 +33,162 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @Slf4j
 @RestControllerAdvice
+@RequiredArgsConstructor
 public class AppExceptionHandler {
+    private final RequestIdProvider requestIdProvider;
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ValidationErrorResponse> handleMethodArgumentNotValidException(MethodArgumentNotValidException exception) {
-        Map<String, List<String>> validationErrors = new HashMap<>();
+    public ResponseEntity<ApiErrorResponse> handleMethodArgumentNotValidException(
+            MethodArgumentNotValidException exception,
+            HttpServletRequest request
+    ) {
+        List<FieldErrorResponse> fieldErrors = exception.getBindingResult().getFieldErrors().stream()
+                .map(fieldError -> new FieldErrorResponse(
+                        fieldError.getField(),
+                        resolveValidationCode(fieldError.getCode()),
+                        fieldError.getDefaultMessage()
+                ))
+                .sorted(Comparator.comparing(FieldErrorResponse::field).thenComparing(FieldErrorResponse::code))
+                .toList();
 
-        exception.getBindingResult().getFieldErrors().forEach(error -> {
-            String fieldName = error.getField();
-            String errorMessage = error.getDefaultMessage();
-
-            validationErrors.computeIfAbsent(fieldName, key -> new ArrayList<>()).add(errorMessage);
-        });
-
-        log.warn("MethodArgumentNotValidException: {}.", exception.getMessage());
-        return buildValidationErrorResponse(validationErrors);
+        log.warn("Request validation failed. Field error count: {}.", fieldErrors.size());
+        return buildErrorResponse(
+                ErrorCode.VALIDATION_FAILED,
+                "Request validation failed.",
+                HttpStatus.BAD_REQUEST,
+                request,
+                fieldErrors
+        );
     }
 
     @ExceptionHandler(AccessDeniedException.class)
-    public ResponseEntity<StandardErrorResponse> handleAccessDeniedException(AccessDeniedException exception) {
-        log.warn("AccessDeniedException: {}.", exception.getMessage());
-        return buildStandardErrorResponse("Access Denied", "You don't have permission to access this resource", HttpStatus.FORBIDDEN);
+    public ResponseEntity<ApiErrorResponse> handleAccessDeniedException(AccessDeniedException exception, HttpServletRequest request) {
+        log.warn("Access denied: {}.", exception.getMessage());
+        return buildErrorResponse(ErrorCode.ACCESS_DENIED, "Access denied.", HttpStatus.FORBIDDEN, request, List.of());
     }
 
     @ExceptionHandler(BadCredentialsException.class)
-    public ResponseEntity<StandardErrorResponse> handleBadCredentialsException(BadCredentialsException exception) {
-        log.warn("BadCredentialsException: {}.", exception.getMessage());
-        return buildStandardErrorResponse("Authentication Failed", "Invalid login or password", HttpStatus.UNAUTHORIZED);
+    public ResponseEntity<ApiErrorResponse> handleBadCredentialsException(BadCredentialsException exception, HttpServletRequest request) {
+        log.warn("Authentication failed: {}.", exception.getMessage());
+        return buildErrorResponse(ErrorCode.AUTHENTICATION_FAILED, "Invalid login or password.", HttpStatus.UNAUTHORIZED, request, List.of());
     }
 
     @ExceptionHandler(AccountAlreadyExistsException.class)
-    public ResponseEntity<StandardErrorResponse> handleAccountAlreadyExistsException(AccountAlreadyExistsException exception) {
-        log.warn("AccountAlreadyExistsException: {}.", exception.getMessage());
-        return buildStandardErrorResponse("AccountAlreadyExistsException", exception.getMessage(), HttpStatus.CONFLICT);
+    public ResponseEntity<ApiErrorResponse> handleAccountAlreadyExistsException(AccountAlreadyExistsException exception, HttpServletRequest request) {
+        log.warn("Account already exists: {}.", exception.getMessage());
+        return buildErrorResponse(ErrorCode.ACCOUNT_ALREADY_EXISTS, exception.getMessage(), HttpStatus.CONFLICT, request, List.of());
     }
 
     @ExceptionHandler(AccountBlockedException.class)
-    public ResponseEntity<StandardErrorResponse> handleAccountBlockedException(AccountBlockedException exception) {
-        log.warn("AccountBlockedException: {}.", exception.getMessage());
-        return buildStandardErrorResponse("AccountBlockedException", exception.getMessage(), HttpStatus.FORBIDDEN);
+    public ResponseEntity<ApiErrorResponse> handleAccountBlockedException(AccountBlockedException exception, HttpServletRequest request) {
+        log.warn("Blocked account request: {}.", exception.getMessage());
+        return buildErrorResponse(ErrorCode.ACCOUNT_BLOCKED, exception.getMessage(), HttpStatus.FORBIDDEN, request, List.of());
     }
 
     @ExceptionHandler(AccountNotFoundException.class)
-    public ResponseEntity<StandardErrorResponse> handleAccountNotFoundException(AccountNotFoundException exception) {
-        log.warn("AccountNotFoundException: {}.", exception.getMessage());
-        return buildStandardErrorResponse("AccountNotFoundException", exception.getMessage(), HttpStatus.NOT_FOUND);
+    public ResponseEntity<ApiErrorResponse> handleAccountNotFoundException(AccountNotFoundException exception, HttpServletRequest request) {
+        log.warn("Account not found: {}.", exception.getMessage());
+        return buildErrorResponse(ErrorCode.ACCOUNT_NOT_FOUND, exception.getMessage(), HttpStatus.NOT_FOUND, request, List.of());
     }
 
     @ExceptionHandler(InvalidRefreshTokenException.class)
-    public ResponseEntity<StandardErrorResponse> handleInvalidRefreshTokenException(InvalidRefreshTokenException exception) {
-        log.warn("InvalidRefreshTokenException: {}.", exception.getMessage());
-        return buildStandardErrorResponse("InvalidRefreshTokenException", exception.getMessage(), HttpStatus.UNAUTHORIZED);
+    public ResponseEntity<ApiErrorResponse> handleInvalidRefreshTokenException(InvalidRefreshTokenException exception, HttpServletRequest request) {
+        log.warn("Invalid refresh token: {}.", exception.getMessage());
+        return buildErrorResponse(ErrorCode.INVALID_REFRESH_TOKEN, exception.getMessage(), HttpStatus.UNAUTHORIZED, request, List.of());
     }
 
     @ExceptionHandler(InvalidRegistrationTokenException.class)
-    public ResponseEntity<StandardErrorResponse> handleInvalidRegistrationTokenException(InvalidRegistrationTokenException exception) {
-        log.warn("InvalidRegistrationTokenException: {}.", exception.getMessage());
-        return buildStandardErrorResponse("InvalidRegistrationTokenException", exception.getMessage(), HttpStatus.BAD_REQUEST);
+    public ResponseEntity<ApiErrorResponse> handleInvalidRegistrationTokenException(InvalidRegistrationTokenException exception, HttpServletRequest request) {
+        log.warn("Invalid registration token: {}.", exception.getMessage());
+        return buildErrorResponse(ErrorCode.INVALID_REGISTRATION_TOKEN, exception.getMessage(), HttpStatus.BAD_REQUEST, request, List.of());
     }
 
     @ExceptionHandler(PasswordConfirmationMismatchException.class)
-    public ResponseEntity<StandardErrorResponse> handlePasswordConfirmationMismatchException(PasswordConfirmationMismatchException exception) {
-        log.warn("PasswordConfirmationMismatchException: {}.", exception.getMessage());
-        return buildStandardErrorResponse("PasswordConfirmationMismatchException", exception.getMessage(), HttpStatus.BAD_REQUEST);
+    public ResponseEntity<ApiErrorResponse> handlePasswordConfirmationMismatchException(PasswordConfirmationMismatchException exception, HttpServletRequest request) {
+        log.warn("Password confirmation mismatch: {}.", exception.getMessage());
+        return buildErrorResponse(ErrorCode.PASSWORD_CONFIRMATION_MISMATCH, exception.getMessage(), HttpStatus.BAD_REQUEST, request, List.of());
     }
 
     @ExceptionHandler(RegistrationAlreadyCompletedException.class)
-    public ResponseEntity<StandardErrorResponse> handleRegistrationAlreadyCompletedException(RegistrationAlreadyCompletedException exception) {
-        log.warn("RegistrationAlreadyCompletedException: {}.", exception.getMessage());
-        return buildStandardErrorResponse("RegistrationAlreadyCompletedException", exception.getMessage(), HttpStatus.CONFLICT);
+    public ResponseEntity<ApiErrorResponse> handleRegistrationAlreadyCompletedException(RegistrationAlreadyCompletedException exception, HttpServletRequest request) {
+        log.warn("Registration already completed: {}.", exception.getMessage());
+        return buildErrorResponse(ErrorCode.REGISTRATION_ALREADY_COMPLETED, exception.getMessage(), HttpStatus.CONFLICT, request, List.of());
     }
 
     @ExceptionHandler(RegistrationExpiredException.class)
-    public ResponseEntity<StandardErrorResponse> handleRegistrationExpiredException(RegistrationExpiredException exception) {
-        log.warn("RegistrationExpiredException: {}.", exception.getMessage());
-        return buildStandardErrorResponse("RegistrationExpiredException", exception.getMessage(), HttpStatus.BAD_REQUEST);
+    public ResponseEntity<ApiErrorResponse> handleRegistrationExpiredException(RegistrationExpiredException exception, HttpServletRequest request) {
+        log.warn("Registration expired: {}.", exception.getMessage());
+        return buildErrorResponse(ErrorCode.REGISTRATION_EXPIRED, exception.getMessage(), HttpStatus.BAD_REQUEST, request, List.of());
     }
 
     @ExceptionHandler(RegistrationNotFoundException.class)
-    public ResponseEntity<StandardErrorResponse> handleRegistrationNotFoundException(RegistrationNotFoundException exception) {
-        log.warn("RegistrationNotFoundException: {}.", exception.getMessage());
-        return buildStandardErrorResponse("RegistrationNotFoundException", exception.getMessage(), HttpStatus.NOT_FOUND);
+    public ResponseEntity<ApiErrorResponse> handleRegistrationNotFoundException(RegistrationNotFoundException exception, HttpServletRequest request) {
+        log.warn("Registration not found: {}.", exception.getMessage());
+        return buildErrorResponse(ErrorCode.REGISTRATION_NOT_FOUND, exception.getMessage(), HttpStatus.NOT_FOUND, request, List.of());
     }
 
     @ExceptionHandler(TokenSigningException.class)
-    public ResponseEntity<StandardErrorResponse> handleTokenSigningException(TokenSigningException exception) {
-        log.error("TokenSigningException: {}.", exception.getMessage(), exception);
-        return buildStandardErrorResponse("TokenSigningException", "Unable to issue token", HttpStatus.INTERNAL_SERVER_ERROR);
+    public ResponseEntity<ApiErrorResponse> handleTokenSigningException(TokenSigningException exception, HttpServletRequest request) {
+        log.error("Token signing failed: {}.", exception.getMessage(), exception);
+        return buildErrorResponse(ErrorCode.TOKEN_SIGNING_FAILED, "Unable to issue token.", HttpStatus.INTERNAL_SERVER_ERROR, request, List.of());
     }
 
     @ExceptionHandler(DeviceNotFoundException.class)
-    public ResponseEntity<StandardErrorResponse> handleDeviceNotFoundException(DeviceNotFoundException exception) {
-        log.warn("DeviceNotFoundException: {}", exception.getMessage());
-        return buildStandardErrorResponse("DeviceNotFoundException", exception.getMessage(), HttpStatus.NOT_FOUND);
+    public ResponseEntity<ApiErrorResponse> handleDeviceNotFoundException(DeviceNotFoundException exception, HttpServletRequest request) {
+        log.warn("Device not found: {}.", exception.getMessage());
+        return buildErrorResponse(ErrorCode.DEVICE_NOT_FOUND, exception.getMessage(), HttpStatus.NOT_FOUND, request, List.of());
     }
 
     @ExceptionHandler(DeviceRevokedException.class)
-    public ResponseEntity<StandardErrorResponse> handleDeviceRevokedException(DeviceRevokedException exception) {
-        log.warn("DeviceRevokedException: {}", exception.getMessage());
-        return buildStandardErrorResponse("DeviceRevokedException", exception.getMessage(), HttpStatus.FORBIDDEN);
+    public ResponseEntity<ApiErrorResponse> handleDeviceRevokedException(DeviceRevokedException exception, HttpServletRequest request) {
+        log.warn("Revoked device request: {}.", exception.getMessage());
+        return buildErrorResponse(ErrorCode.DEVICE_REVOKED, exception.getMessage(), HttpStatus.FORBIDDEN, request, List.of());
     }
 
     @ExceptionHandler(DeviceRegistrationException.class)
-    public ResponseEntity<StandardErrorResponse> handleDeviceRegistrationException(DeviceRegistrationException exception) {
-        log.warn("DeviceRegistrationException: {}", exception.getMessage());
-        return buildStandardErrorResponse("DeviceRegistrationException", exception.getMessage(), HttpStatus.BAD_REQUEST);
+    public ResponseEntity<ApiErrorResponse> handleDeviceRegistrationException(DeviceRegistrationException exception, HttpServletRequest request) {
+        log.warn("Device registration failed: {}.", exception.getMessage());
+        return buildErrorResponse(ErrorCode.DEVICE_REGISTRATION_FAILED, exception.getMessage(), HttpStatus.BAD_REQUEST, request, List.of());
+    }
+
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiErrorResponse> handleIllegalArgumentException(IllegalArgumentException exception, HttpServletRequest request) {
+        log.warn("Invalid request argument: {}.", exception.getMessage());
+        return buildErrorResponse(ErrorCode.VALIDATION_FAILED, exception.getMessage(), HttpStatus.BAD_REQUEST, request, List.of());
     }
 
     @ExceptionHandler(RuntimeException.class)
-    public ResponseEntity<StandardErrorResponse> handleRuntimeException(RuntimeException exception) {
-        log.error("Unexpected error occurred: {}.", exception.getMessage(), exception);
-        return buildStandardErrorResponse("Internal Server Error", "An unexpected error occurred. Please try again later.", HttpStatus.INTERNAL_SERVER_ERROR);
+    public ResponseEntity<ApiErrorResponse> handleRuntimeException(RuntimeException exception, HttpServletRequest request) {
+        log.error("Unexpected identity-service error: {}.", exception.getMessage(), exception);
+        return buildErrorResponse(ErrorCode.INTERNAL_SERVER_ERROR, "An unexpected error occurred.", HttpStatus.INTERNAL_SERVER_ERROR, request, List.of());
     }
 
-    private ResponseEntity<StandardErrorResponse> buildStandardErrorResponse(String error, String message, HttpStatus status) {
-        StandardErrorResponse standardErrorResponse = new StandardErrorResponse(error, message, LocalDateTime.now(), status.value());
-        return new ResponseEntity<>(standardErrorResponse, status);
-    }
-
-    private ResponseEntity<ValidationErrorResponse> buildValidationErrorResponse(Map<String, List<String>> validationErrors) {
-        ValidationErrorResponse validationErrorResponse = new ValidationErrorResponse(
-                "Validation Error",
-                validationErrors,
-                LocalDateTime.now(),
-                HttpStatus.BAD_REQUEST.value()
+    private ResponseEntity<ApiErrorResponse> buildErrorResponse(
+            ErrorCode errorCode,
+            String message,
+            HttpStatus httpStatus,
+            HttpServletRequest request,
+            List<FieldErrorResponse> fieldErrors
+    ) {
+        ApiErrorResponse apiErrorResponse = new ApiErrorResponse(
+                OffsetDateTime.now(),
+                requestIdProvider.currentRequestId(),
+                httpStatus.value(),
+                errorCode.name(),
+                message,
+                request.getRequestURI(),
+                fieldErrors.isEmpty() ? null : fieldErrors
         );
-        return new ResponseEntity<>(validationErrorResponse, HttpStatus.BAD_REQUEST);
+
+        return new ResponseEntity<>(apiErrorResponse, httpStatus);
+    }
+
+    private String resolveValidationCode(String code) {
+        if (code == null || code.isBlank()) {
+            return "VALIDATION_ERROR";
+        }
+
+        return code;
     }
 }

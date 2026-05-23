@@ -1,0 +1,54 @@
+databaseChangeLog:
+  - changeSet:
+      id: 005-create-message-delivery-states-table
+      author: messaging-service
+      changes:
+        - createTable:
+            tableName: message_delivery_states
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: message_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: account_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: VARCHAR(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: delivered_at
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: read_at
+                  type: TIMESTAMP WITH TIME ZONE
+        - addForeignKeyConstraint:
+            baseTableName: message_delivery_states
+            baseColumnNames: message_id
+            constraintName: fk_message_delivery_states_messages
+            referencedTableName: messages
+            referencedColumnNames: id
+            onDelete: CASCADE
+        - addUniqueConstraint:
+            tableName: message_delivery_states
+            columnNames: message_id, account_id
+            constraintName: uq_message_delivery_states_message_account
+        - createIndex:
+            tableName: message_delivery_states
+            indexName: idx_message_delivery_states_account_status
+            columns:
+              - column:
+                  name: account_id
+              - column:
+                  name: status

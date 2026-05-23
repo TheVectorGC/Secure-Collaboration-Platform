@@ -1,0 +1,57 @@
+databaseChangeLog:
+  - changeSet:
+      id: 007-create-document-key-envelopes-table
+      author: vector
+      changes:
+        - createTable:
+            tableName: document_key_envelopes
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: document_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: target_account_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: target_device_id
+                  type: uuid
+              - column:
+                  name: algorithm
+                  type: varchar(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: encrypted_key_base64
+                  type: text
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamp with time zone
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: document_key_envelopes
+            baseColumnNames: document_id
+            referencedTableName: documents
+            referencedColumnNames: id
+            constraintName: fk_document_key_envelopes_document_id
+            onDelete: CASCADE
+        - createIndex:
+            tableName: document_key_envelopes
+            indexName: idx_document_key_envelopes_document_target
+            columns:
+              - column:
+                  name: document_id
+              - column:
+                  name: target_account_id

@@ -14,11 +14,9 @@ public class AuthorizationHeaderProvider {
 
     public String getAuthorizationHeader() {
         String authorizationHeader = httpServletRequest.getHeader(HttpHeaders.AUTHORIZATION);
-
         if (!StringUtils.hasText(authorizationHeader)) {
             throw new MediaAccessDeniedException("Authorization header is required for media access validation.");
         }
-
         return authorizationHeader;
     }
 }

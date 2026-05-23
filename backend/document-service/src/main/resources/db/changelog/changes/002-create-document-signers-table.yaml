@@ -1,0 +1,62 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-create-document-signers-table
+      author: vector
+      changes:
+        - createTable:
+            tableName: document_signers
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: document_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: signer_account_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: varchar(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamp with time zone
+                  constraints:
+                    nullable: false
+              - column:
+                  name: signed_at
+                  type: timestamp with time zone
+              - column:
+                  name: rejected_at
+                  type: timestamp with time zone
+              - column:
+                  name: rejection_reason
+                  type: varchar(1000)
+        - addForeignKeyConstraint:
+            baseTableName: document_signers
+            baseColumnNames: document_id
+            referencedTableName: documents
+            referencedColumnNames: id
+            constraintName: fk_document_signers_document_id
+            onDelete: CASCADE
+        - addUniqueConstraint:
+            tableName: document_signers
+            columnNames: document_id, signer_account_id
+            constraintName: uk_document_signers_document_account
+        - createIndex:
+            tableName: document_signers
+            indexName: idx_document_signers_account_created_at
+            columns:
+              - column:
+                  name: signer_account_id
+              - column:
+                  name: created_at

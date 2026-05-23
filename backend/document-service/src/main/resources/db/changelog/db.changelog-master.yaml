@@ -2,12 +2,16 @@ databaseChangeLog:
   - include:
       file: db/changelog/changes/001-create-documents-table.yaml
   - include:
-      file: db/changelog/changes/002-create-device-document-signing-keys-table.yaml
+      file: db/changelog/changes/002-create-document-signers-table.yaml
   - include:
       file: db/changelog/changes/003-create-document-signatures-table.yaml
   - include:
-      file: db/changelog/changes/004-document-workflow-upgrade.yaml
+      file: db/changelog/changes/004-create-device-document-signing-keys-table.yaml
   - include:
-      file: db/changelog/changes/005-document-observers-and-hidden-state.yaml
+      file: db/changelog/changes/005-create-document-observers-table.yaml
   - include:
-      file: db/changelog/changes/006-document-workspace-realtime.yaml
+      file: db/changelog/changes/006-create-document-hidden-accounts-table.yaml
+  - include:
+      file: db/changelog/changes/007-create-document-key-envelopes-table.yaml
+  - include:
+      file: db/changelog/changes/008-create-outbox-events-table.yaml

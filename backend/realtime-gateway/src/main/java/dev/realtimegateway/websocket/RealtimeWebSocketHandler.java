@@ -3,7 +3,8 @@ package dev.realtimegateway.websocket;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.realtimegateway.model.dto.ClientTypingEventDto;
 import dev.realtimegateway.model.dto.RealtimeEnvelopeDto;
-import dev.realtimegateway.model.enumeration.MessagingEventType;
+import dev.realtimegateway.model.enumeration.RealtimeEventType;
+import dev.realtimegateway.presence.PresenceAccountStatus;
 import dev.realtimegateway.security.AccountPrincipal;
 import dev.realtimegateway.service.WebSocketAuthenticationService;
 import dev.realtimegateway.session.ConnectionRegistry;
@@ -24,6 +25,8 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 @Component
 @RequiredArgsConstructor
 public class RealtimeWebSocketHandler extends TextWebSocketHandler {
+    private static final String PING_MESSAGE = "ping";
+    private static final String PONG_MESSAGE = "pong";
     private static final String TYPING_EVENT_TYPE = "TYPING";
 
     private final WebSocketAuthenticationService webSocketAuthenticationService;
@@ -42,7 +45,7 @@ public class RealtimeWebSocketHandler extends TextWebSocketHandler {
             }
         }
         catch (RuntimeException exception) {
-            log.warn("WebSocket authentication failed. Session ID: {}.", webSocketSession.getId(), exception);
+            log.warn("WebSocket authentication failed. sessionId={}.", webSocketSession.getId(), exception);
             webSocketSession.close(CloseStatus.POLICY_VIOLATION.withReason("Authentication failed."));
         }
     }
@@ -62,88 +65,12 @@ public class RealtimeWebSocketHandler extends TextWebSocketHandler {
 
         String payload = textMessage.getPayload();
 
-        if ("ping".equalsIgnoreCase(payload)) {
+        if (PING_MESSAGE.equalsIgnoreCase(payload)) {
             sendPongIfOpen(webSocketSession);
             return;
         }
 
         handleClientEvent(payload, accountPrincipal);
-    }
-
-    private void handleClientEvent(String payload, AccountPrincipal accountPrincipal) {
-        try {
-            ClientTypingEventDto clientTypingEventDto = objectMapper.readValue(payload, ClientTypingEventDto.class);
-
-            if (!TYPING_EVENT_TYPE.equals(clientTypingEventDto.type())) {
-                return;
-            }
-
-            if (clientTypingEventDto.chatId() == null || clientTypingEventDto.recipientAccountIds() == null) {
-                return;
-            }
-
-            Boolean typing = clientTypingEventDto.isTyping();
-            RealtimeEnvelopeDto realtimeEnvelopeDto = new RealtimeEnvelopeDto(
-                    UUID.randomUUID(),
-                    MessagingEventType.TYPING,
-                    OffsetDateTime.now(),
-                    objectMapper.valueToTree(Map.of(
-                            "chatId", clientTypingEventDto.chatId(),
-                            "typingAccountId", accountPrincipal.accountId(),
-                            "username", accountPrincipal.username(),
-                            "isTyping", typing != null && typing
-                    ))
-            );
-            connectionRegistry.sendToAccounts(clientTypingEventDto.recipientAccountIds(), realtimeEnvelopeDto);
-        }
-        catch (Exception exception) {
-            log.debug("Ignoring unsupported WebSocket client event.", exception);
-        }
-    }
-
-    private void sendPresenceSnapshot(WebSocketSession webSocketSession) {
-        List<Map<String, Object>> accounts = connectionRegistry.getOnlineAccountIds().stream()
-                .map(accountId -> {
-                    Map<String, Object> accountPresence = new LinkedHashMap<>();
-                    accountPresence.put("accountId", accountId);
-                    accountPresence.put("online", true);
-                    accountPresence.put("lastSeenAt", null);
-                    return accountPresence;
-                })
-                .toList();
-        RealtimeEnvelopeDto realtimeEnvelopeDto = new RealtimeEnvelopeDto(
-                UUID.randomUUID(),
-                MessagingEventType.PRESENCE_SNAPSHOT,
-                OffsetDateTime.now(),
-                objectMapper.valueToTree(Map.of("accounts", accounts))
-        );
-        connectionRegistry.sendToSession(webSocketSession, realtimeEnvelopeDto);
-    }
-
-    private void broadcastPresence(UUID accountId, boolean online, OffsetDateTime lastSeenAt) {
-        Map<String, Object> presencePayload = new LinkedHashMap<>();
-        presencePayload.put("accountId", accountId);
-        presencePayload.put("online", online);
-        presencePayload.put("lastSeenAt", lastSeenAt);
-        RealtimeEnvelopeDto realtimeEnvelopeDto = new RealtimeEnvelopeDto(
-                UUID.randomUUID(),
-                MessagingEventType.PRESENCE_UPDATED,
-                OffsetDateTime.now(),
-                objectMapper.valueToTree(presencePayload)
-        );
-        connectionRegistry.sendToAllAccounts(realtimeEnvelopeDto);
-    }
-
-    private void sendPongIfOpen(WebSocketSession webSocketSession) throws Exception {
-        if (webSocketSession.isOpen()) {
-            webSocketSession.sendMessage(new TextMessage("pong"));
-        }
-    }
-
-    private void closeUnauthenticatedSession(WebSocketSession webSocketSession) throws Exception {
-        if (webSocketSession.isOpen()) {
-            webSocketSession.close(CloseStatus.POLICY_VIOLATION.withReason("Authentication required."));
-        }
     }
 
     @Override
@@ -159,11 +86,88 @@ public class RealtimeWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void handleTransportError(WebSocketSession webSocketSession, Throwable exception) throws Exception {
-        log.warn("WebSocket transport error. Session ID: {}.", webSocketSession.getId(), exception);
+        log.warn("WebSocket transport error. sessionId={}.", webSocketSession.getId(), exception);
         afterConnectionClosed(webSocketSession, CloseStatus.SERVER_ERROR);
 
         if (webSocketSession.isOpen()) {
             webSocketSession.close(CloseStatus.SERVER_ERROR);
+        }
+    }
+
+    private void handleClientEvent(String payload, AccountPrincipal accountPrincipal) {
+        try {
+            ClientTypingEventDto clientTypingEventDto = objectMapper.readValue(payload, ClientTypingEventDto.class);
+
+            if (!TYPING_EVENT_TYPE.equals(clientTypingEventDto.type())) {
+                return;
+            }
+
+            if (clientTypingEventDto.chatId() == null || clientTypingEventDto.recipientAccountIds() == null) {
+                return;
+            }
+
+            RealtimeEnvelopeDto realtimeEnvelopeDto = new RealtimeEnvelopeDto(
+                    UUID.randomUUID(),
+                    RealtimeEventType.TYPING,
+                    OffsetDateTime.now(),
+                    objectMapper.valueToTree(Map.of(
+                            "chatId", clientTypingEventDto.chatId(),
+                            "typingAccountId", accountPrincipal.accountId(),
+                            "username", accountPrincipal.username(),
+                            "isTyping", Boolean.TRUE.equals(clientTypingEventDto.isTyping())
+                    ))
+            );
+            connectionRegistry.sendToAccounts(clientTypingEventDto.recipientAccountIds(), realtimeEnvelopeDto);
+        }
+        catch (Exception exception) {
+            log.debug("Ignoring unsupported WebSocket client event.", exception);
+        }
+    }
+
+    private void sendPresenceSnapshot(WebSocketSession webSocketSession) {
+        List<Map<String, Object>> accounts = connectionRegistry.getOnlineAccounts().stream()
+                .map(this::toPresencePayload)
+                .toList();
+        RealtimeEnvelopeDto realtimeEnvelopeDto = new RealtimeEnvelopeDto(
+                UUID.randomUUID(),
+                RealtimeEventType.PRESENCE_SNAPSHOT,
+                OffsetDateTime.now(),
+                objectMapper.valueToTree(Map.of("accounts", accounts))
+        );
+        connectionRegistry.sendToSession(webSocketSession, realtimeEnvelopeDto);
+    }
+
+    private Map<String, Object> toPresencePayload(PresenceAccountStatus presenceAccountStatus) {
+        Map<String, Object> accountPresence = new LinkedHashMap<>();
+        accountPresence.put("accountId", presenceAccountStatus.accountId());
+        accountPresence.put("online", presenceAccountStatus.online());
+        accountPresence.put("lastSeenAt", presenceAccountStatus.lastSeenAt());
+        return accountPresence;
+    }
+
+    private void broadcastPresence(UUID accountId, boolean online, OffsetDateTime lastSeenAt) {
+        Map<String, Object> presencePayload = new LinkedHashMap<>();
+        presencePayload.put("accountId", accountId);
+        presencePayload.put("online", online);
+        presencePayload.put("lastSeenAt", lastSeenAt);
+        RealtimeEnvelopeDto realtimeEnvelopeDto = new RealtimeEnvelopeDto(
+                UUID.randomUUID(),
+                RealtimeEventType.PRESENCE_UPDATED,
+                OffsetDateTime.now(),
+                objectMapper.valueToTree(presencePayload)
+        );
+        connectionRegistry.sendToAllAccounts(realtimeEnvelopeDto);
+    }
+
+    private void sendPongIfOpen(WebSocketSession webSocketSession) throws Exception {
+        if (webSocketSession.isOpen()) {
+            webSocketSession.sendMessage(new TextMessage(PONG_MESSAGE));
+        }
+    }
+
+    private void closeUnauthenticatedSession(WebSocketSession webSocketSession) throws Exception {
+        if (webSocketSession.isOpen()) {
+            webSocketSession.close(CloseStatus.POLICY_VIOLATION.withReason("Authentication required."));
         }
     }
 }

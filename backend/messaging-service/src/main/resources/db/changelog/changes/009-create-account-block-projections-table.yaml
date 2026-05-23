@@ -1,0 +1,46 @@
+databaseChangeLog:
+  - changeSet:
+      id: 009-create-account-block-projections-table
+      author: messaging-service
+      changes:
+        - createTable:
+            tableName: account_block_projections
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: blocker_account_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: blocked_account_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+        - addUniqueConstraint:
+            tableName: account_block_projections
+            columnNames: blocker_account_id, blocked_account_id
+            constraintName: uq_account_block_projections_pair
+        - createIndex:
+            tableName: account_block_projections
+            indexName: idx_account_block_projections_blocked
+            columns:
+              - column:
+                  name: blocked_account_id
+              - column:
+                  name: blocker_account_id

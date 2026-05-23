@@ -22,6 +22,4 @@ public interface DeviceService {
     DeviceResponseDto updateCurrentAccountDeviceMetadata(String username, UUID deviceId, UpdateDeviceMetadataRequestDto requestDto);
 
     void revokeCurrentAccountDevice(String username, UUID deviceId);
-
-    void revokeDeviceSessions(UUID deviceId);
 }

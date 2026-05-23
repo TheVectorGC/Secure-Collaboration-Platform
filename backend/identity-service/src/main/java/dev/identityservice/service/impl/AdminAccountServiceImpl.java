@@ -1,5 +1,6 @@
 package dev.identityservice.service.impl;
 
+import dev.identityservice.common.util.StringNormalizer;
 import dev.identityservice.exception.AccountAlreadyExistsException;
 import dev.identityservice.exception.AccountNotFoundException;
 import dev.identityservice.model.dto.request.CreateAccountRegistrationRequestDto;
@@ -52,11 +53,11 @@ public class AdminAccountServiceImpl implements AdminAccountService {
         String registrationToken = SecureTokenGenerator.generateToken();
 
         AccountRegistrationEntity accountRegistrationEntity = AccountRegistrationEntity.builder()
-                .username(createAccountRegistrationRequestDto.username().trim())
-                .email(createAccountRegistrationRequestDto.email().trim().toLowerCase())
-                .firstName(createAccountRegistrationRequestDto.firstName().trim())
-                .lastName(createAccountRegistrationRequestDto.lastName().trim())
-                .middleName(trimToNull(createAccountRegistrationRequestDto.middleName()))
+                .username(StringNormalizer.trimToNull(createAccountRegistrationRequestDto.username()))
+                .email(StringNormalizer.normalizeEmail(createAccountRegistrationRequestDto.email()))
+                .firstName(StringNormalizer.trimToNull(createAccountRegistrationRequestDto.firstName()))
+                .lastName(StringNormalizer.trimToNull(createAccountRegistrationRequestDto.lastName()))
+                .middleName(StringNormalizer.trimToNull(createAccountRegistrationRequestDto.middleName()))
                 .registrationTokenHash(HashUtils.sha256Hex(registrationToken))
                 .status(RegistrationStatus.PENDING)
                 .expiresAt(createAccountRegistrationRequestDto.expiresAt())
@@ -110,8 +111,8 @@ public class AdminAccountServiceImpl implements AdminAccountService {
     }
 
     private void validateUniqueIdentity(String username, String email) {
-        String normalizedEmail = email.trim().toLowerCase();
-        String normalizedUsername = username.trim();
+        String normalizedEmail = StringNormalizer.normalizeEmail(email);
+        String normalizedUsername = StringNormalizer.trimToNull(username);
 
         if (
                 accountRepository.existsByUsername(normalizedUsername)
@@ -132,11 +133,4 @@ public class AdminAccountServiceImpl implements AdminAccountService {
         }
     }
 
-    private String trimToNull(String value) {
-        if (value == null || value.trim().isEmpty()) {
-            return null;
-        }
-
-        return value.trim();
-    }
 }

@@ -4,6 +4,7 @@ import dev.documentservice.client.MediaAccessClient;
 import dev.documentservice.config.properties.MediaServiceProperties;
 import dev.documentservice.exception.ExternalServiceException;
 import dev.documentservice.model.dto.request.GrantMediaAccessRequestDto;
+import dev.documentservice.provider.RequestIdProvider;
 import dev.documentservice.security.AuthorizationHeaderProvider;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -22,6 +23,7 @@ public class MediaAccessClientImpl implements MediaAccessClient {
     private final RestClient mediaServiceRestClient;
     private final MediaServiceProperties mediaServiceProperties;
     private final AuthorizationHeaderProvider authorizationHeaderProvider;
+    private final RequestIdProvider requestIdProvider;
 
     @Override
     public void grantMediaAccess(UUID mediaFileId, Collection<UUID> accountIds) {
@@ -33,6 +35,7 @@ public class MediaAccessClientImpl implements MediaAccessClient {
             mediaServiceRestClient.patch()
                 .uri(mediaServiceProperties.grantAccessPath(), mediaFileId)
                 .header(HttpHeaders.AUTHORIZATION, authorizationHeaderProvider.getAuthorizationHeader())
+                .header(RequestIdProvider.HEADER_NAME, requestIdProvider.getCurrentRequestId())
                 .body(new GrantMediaAccessRequestDto(new ArrayList<>(accountIds)))
                 .retrieve()
                 .toBodilessEntity();

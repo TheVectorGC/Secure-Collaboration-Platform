@@ -1,0 +1,45 @@
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+  cloud:
+    vault:
+      enabled: true
+      uri: ${VAULT_URI}
+      token: ${VAULT_TOKEN}
+
+application:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS}
+
+  initial-admin:
+    enabled: ${INITIAL_ADMIN_ENABLED:false}
+
+  outbox:
+    enabled: ${OUTBOX_ENABLED:true}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+logging:
+  level:
+    root: INFO
+    dev.identityservice: INFO

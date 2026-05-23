@@ -2,11 +2,6 @@ databaseChangeLog:
   - changeSet:
       id: 001-create-accounts-table
       author: identity-service
-      preConditions:
-        - onFail: MARK_RAN
-        - not:
-            tableExists:
-              tableName: accounts
       changes:
         - createTable:
             tableName: accounts
@@ -17,62 +12,52 @@ databaseChangeLog:
                   constraints:
                     primaryKey: true
                     nullable: false
-
               - column:
                   name: username
                   type: VARCHAR(32)
                   constraints:
                     nullable: false
                     unique: true
-
               - column:
                   name: email
                   type: VARCHAR(320)
                   constraints:
                     nullable: false
                     unique: true
-
               - column:
                   name: password_hash
                   type: VARCHAR(255)
                   constraints:
                     nullable: false
-
               - column:
                   name: status
                   type: VARCHAR(32)
                   constraints:
                     nullable: false
-
               - column:
                   name: role
                   type: VARCHAR(32)
                   constraints:
                     nullable: false
-
               - column:
                   name: last_login_at
                   type: TIMESTAMP WITH TIME ZONE
-
               - column:
                   name: created_at
                   type: TIMESTAMP WITH TIME ZONE
                   constraints:
                     nullable: false
-
               - column:
                   name: updated_at
                   type: TIMESTAMP WITH TIME ZONE
                   constraints:
                     nullable: false
-
         - createIndex:
             tableName: accounts
             indexName: idx_accounts_username
             columns:
               - column:
                   name: username
-
         - createIndex:
             tableName: accounts
             indexName: idx_accounts_email

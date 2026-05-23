@@ -1,0 +1,75 @@
+databaseChangeLog:
+  - changeSet:
+      id: 008-create-group-epoch-key-envelopes-table
+      author: messaging-service
+      changes:
+        - createTable:
+            tableName: group_epoch_key_envelopes
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: chat_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: epoch
+                  type: INTEGER
+                  constraints:
+                    nullable: false
+              - column:
+                  name: target_account_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: sender_device_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: algorithm
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: encrypted_key_base64
+                  type: TEXT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: group_epoch_key_envelopes
+            baseColumnNames: chat_id
+            constraintName: fk_group_epoch_key_envelopes_chats
+            referencedTableName: chats
+            referencedColumnNames: id
+            onDelete: CASCADE
+        - addUniqueConstraint:
+            tableName: group_epoch_key_envelopes
+            columnNames: chat_id, epoch, target_account_id
+            constraintName: uq_group_epoch_key_envelopes_chat_epoch_account
+        - createIndex:
+            tableName: group_epoch_key_envelopes
+            indexName: idx_group_epoch_key_envelopes_account
+            columns:
+              - column:
+                  name: target_account_id
+              - column:
+                  name: chat_id
+              - column:
+                  name: epoch

@@ -22,6 +22,7 @@ import org.springframework.vault.support.Signature;
 @RequiredArgsConstructor
 public class VaultJwtTokenServiceImpl implements JwtTokenService {
     private static final String VAULT_SIGNATURE_PREFIX = "vault:v1:";
+    private static final int JWT_PART_COUNT = 3;
 
     private final VaultOperations vaultOperations;
     private final ObjectMapper objectMapper;
@@ -31,27 +32,24 @@ public class VaultJwtTokenServiceImpl implements JwtTokenService {
     public boolean validateToken(String token) {
         Map<String, Object> claims = extractClaims(token);
         Object issuer = claims.get("iss");
-        Number expiresAt = (Number) claims.get("exp");
+        Object expiresAtClaim = claims.get("exp");
+        if (!(expiresAtClaim instanceof Number expiresAt)) {
+            throw new TokenValidationException("JWT expiration claim is missing or invalid.");
+        }
         long currentEpochSecond = OffsetDateTime.now().toEpochSecond();
-
         return jwtProperties.issuer().equals(String.valueOf(issuer))
-                && expiresAt.longValue() > currentEpochSecond
-                && verify(token);
+            && expiresAt.longValue() > currentEpochSecond
+            && verify(token);
     }
 
     @Override
     public Map<String, Object> extractClaims(String token) {
         try {
-            String[] tokenParts = token.split("\\.");
-
-            if (tokenParts.length != 3) {
-                throw new TokenValidationException("JWT token format is invalid.");
-            }
-
+            String[] tokenParts = splitToken(token);
             String payloadJson = Base64UrlUtils.decodeToString(tokenParts[1]);
             return objectMapper.readValue(payloadJson, new TypeReference<>() {});
         }
-        catch (RuntimeException exception) {
+        catch (TokenValidationException exception) {
             throw exception;
         }
         catch (Exception exception) {
@@ -61,18 +59,25 @@ public class VaultJwtTokenServiceImpl implements JwtTokenService {
 
     private boolean verify(String token) {
         try {
-            String[] tokenParts = token.split("\\.");
+            String[] tokenParts = splitToken(token);
             String signingInput = tokenParts[0] + "." + tokenParts[1];
             byte[] signatureBytes = Base64UrlUtils.decode(tokenParts[2]);
             String vaultSignature = VAULT_SIGNATURE_PREFIX + Base64.getEncoder().encodeToString(signatureBytes);
             Plaintext plaintext = Plaintext.of(signingInput.getBytes(StandardCharsets.UTF_8));
             Signature signature = Signature.of(vaultSignature);
-
             return vaultOperations.opsForTransit().verify(jwtProperties.keyName(), plaintext, signature);
         }
         catch (Exception exception) {
-            log.warn("JWT signature verification failed: {}.", exception.getMessage());
+            log.warn("JWT signature verification failed. reason={}", exception.getMessage());
             return false;
         }
+    }
+
+    private String[] splitToken(String token) {
+        String[] tokenParts = token.split("\\.");
+        if (tokenParts.length != JWT_PART_COUNT) {
+            throw new TokenValidationException("JWT token format is invalid.");
+        }
+        return tokenParts;
     }
 }

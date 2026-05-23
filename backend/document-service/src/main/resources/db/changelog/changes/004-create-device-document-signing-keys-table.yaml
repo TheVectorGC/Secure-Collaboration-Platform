@@ -1,0 +1,58 @@
+databaseChangeLog:
+  - changeSet:
+      id: 004-create-device-document-signing-keys-table
+      author: vector
+      changes:
+        - createTable:
+            tableName: device_document_signing_keys
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: account_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: device_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: algorithm
+                  type: varchar(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: public_key_base64
+                  type: text
+                  constraints:
+                    nullable: false
+              - column:
+                  name: fingerprint
+                  type: varchar(128)
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: status
+                  type: varchar(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamp with time zone
+                  constraints:
+                    nullable: false
+        - createIndex:
+            tableName: device_document_signing_keys
+            indexName: idx_device_document_signing_keys_account_device
+            columns:
+              - column:
+                  name: account_id
+              - column:
+                  name: device_id

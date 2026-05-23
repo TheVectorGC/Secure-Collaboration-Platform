@@ -6,6 +6,7 @@ import dev.messagingservice.exception.DeviceDirectoryUnavailableException;
 import dev.messagingservice.model.dto.internal.ActiveDeviceDirectoryEntryDto;
 import dev.messagingservice.service.CurrentAuthorizationHeaderService;
 import dev.messagingservice.service.IdentityDeviceDirectoryClient;
+import dev.messagingservice.web.RequestIdProvider;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -27,16 +28,19 @@ public class HttpIdentityDeviceDirectoryClient implements IdentityDeviceDirector
 
     private final IdentityServiceProperties identityServiceProperties;
     private final CurrentAuthorizationHeaderService currentAuthorizationHeaderService;
+    private final RequestIdProvider requestIdProvider;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
 
     public HttpIdentityDeviceDirectoryClient(
             IdentityServiceProperties identityServiceProperties,
             CurrentAuthorizationHeaderService currentAuthorizationHeaderService,
+            RequestIdProvider requestIdProvider,
             ObjectMapper objectMapper
     ) {
         this.identityServiceProperties = identityServiceProperties;
         this.currentAuthorizationHeaderService = currentAuthorizationHeaderService;
+        this.requestIdProvider = requestIdProvider;
         this.objectMapper = objectMapper;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(REQUEST_TIMEOUT)
@@ -51,6 +55,7 @@ public class HttpIdentityDeviceDirectoryClient implements IdentityDeviceDirector
                 .timeout(REQUEST_TIMEOUT)
                 .header("Authorization", currentAuthorizationHeaderService.getCurrentAuthorizationHeader())
                 .header("Accept", "application/json")
+                .header(RequestIdProvider.REQUEST_ID_HEADER, requestIdProvider.getCurrentRequestId())
                 .GET()
                 .build();
 
@@ -66,7 +71,6 @@ public class HttpIdentityDeviceDirectoryClient implements IdentityDeviceDirector
                     httpResponse.body(),
                     ActiveDeviceDirectoryEntryDto[].class
             );
-
             return Arrays.stream(activeDeviceDirectoryEntries)
                     .filter(activeDeviceDirectoryEntry -> activeDeviceDirectoryEntry.deviceId() != null)
                     .toList();

@@ -3,14 +3,14 @@ package dev.identityservice.service.impl;
 import dev.identityservice.model.entity.AccountEntity;
 import dev.identityservice.repository.AccountRepository;
 import dev.identityservice.security.AccountPrincipal;
-import dev.identityservice.service.AccountDetailsService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
-public class AccountDetailsServiceImpl implements AccountDetailsService {
+public class AccountDetailsServiceImpl implements UserDetailsService {
     private final AccountRepository accountRepository;
 
     @Override

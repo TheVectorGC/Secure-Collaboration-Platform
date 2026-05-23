@@ -8,9 +8,5 @@ public class Base64UrlUtils {
         return Base64.getUrlDecoder().decode(value);
     }
 
-    public static String encodeToString(byte[] value) {
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(value);
-    }
-
     private Base64UrlUtils() {}
 }

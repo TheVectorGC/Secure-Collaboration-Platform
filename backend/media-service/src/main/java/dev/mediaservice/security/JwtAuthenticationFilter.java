@@ -12,16 +12,20 @@ import java.util.UUID;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
+    private static final String BEARER_PREFIX = "Bearer ";
+
     private final JwtTokenService jwtTokenService;
 
     @Override
@@ -30,30 +34,27 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         @NonNull HttpServletResponse response,
         @NonNull FilterChain filterChain
     ) throws ServletException, IOException {
-        String requestTokenHeader = request.getHeader("Authorization");
-
-        if (requestTokenHeader == null || !requestTokenHeader.startsWith("Bearer ")) {
+        String authorizationHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
+        if (!StringUtils.hasText(authorizationHeader) || !authorizationHeader.startsWith(BEARER_PREFIX)) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        String jwtToken = requestTokenHeader.substring(7);
-
+        String jwtToken = authorizationHeader.substring(BEARER_PREFIX.length());
         try {
             if (SecurityContextHolder.getContext().getAuthentication() == null && jwtTokenService.validateToken(jwtToken)) {
-                Map<String, Object> claims = jwtTokenService.extractClaims(jwtToken);
-                AccountPrincipal accountPrincipal = buildAccountPrincipal(claims);
+                AccountPrincipal accountPrincipal = buildAccountPrincipal(jwtTokenService.extractClaims(jwtToken));
                 UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(
-                        accountPrincipal,
-                        null,
-                        accountPrincipal.getAuthorities()
+                    accountPrincipal,
+                    null,
+                    accountPrincipal.getAuthorities()
                 );
                 authenticationToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authenticationToken);
             }
         }
         catch (RuntimeException exception) {
-            log.warn("JWT token is invalid: {}.", exception.getMessage());
+            log.warn("JWT token was rejected. reason={}", exception.getMessage());
         }
 
         filterChain.doFilter(request, response);
@@ -64,9 +65,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String username = String.valueOf(claims.get("sub"));
         Object rolesClaim = claims.get("roles");
         List<String> roles = rolesClaim instanceof List<?> roleList
-                ? roleList.stream().map(String::valueOf).toList()
-                : List.of();
-
+            ? roleList.stream().map(String::valueOf).toList()
+            : List.of();
         return new AccountPrincipal(accountId, username, roles);
     }
 }

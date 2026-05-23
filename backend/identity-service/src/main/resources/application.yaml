@@ -5,49 +5,80 @@ spring:
   application:
     name: identity-service
 
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5433/identity_db}
     username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:postgres}
 
   jpa:
+    open-in-view: false
     hibernate:
       ddl-auto: validate
-    open-in-view: false
 
   liquibase:
     change-log: classpath:db/changelog/db.changelog-master.yaml
 
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
   cloud:
     vault:
-      enabled: true
+      enabled: ${VAULT_ENABLED:true}
       uri: ${VAULT_URI:http://localhost:8200}
       token: ${VAULT_TOKEN:root}
       kv:
         enabled: false
 
 application:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
+
   security:
     jwt:
       issuer: ${JWT_ISSUER:identity-service}
       key-name: ${JWT_KEY_NAME:identity-service-jwt-ed25519}
       access-token-expiration: ${ACCESS_TOKEN_EXPIRATION:15m}
-
     refresh-token:
       expiration: ${REFRESH_TOKEN_EXPIRATION:30d}
 
   initial-admin:
-    enabled: ${INITIAL_ADMIN_ENABLED:true}
+    enabled: ${INITIAL_ADMIN_ENABLED:false}
     username: ${INITIAL_ADMIN_USERNAME:admin}
     email: ${INITIAL_ADMIN_EMAIL:admin@company.local}
     password: ${INITIAL_ADMIN_PASSWORD:InitialPassword123!}
     first-name: ${INITIAL_ADMIN_FIRST_NAME:System}
     last-name: ${INITIAL_ADMIN_LAST_NAME:Administrator}
 
-logging:
-  level:
-    dev.identityservice: INFO
+  outbox:
+    enabled: ${OUTBOX_ENABLED:false}
+    topic: ${IDENTITY_EVENTS_TOPIC:identity.events}
+    batch-size: ${OUTBOX_BATCH_SIZE:50}
+    publish-interval: ${OUTBOX_PUBLISH_INTERVAL:PT5S}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
 
 springdoc:
+  api-docs:
+    enabled: false
   swagger-ui:
-    path: /swagger-ui.html
+    enabled: false
+
+logging:
+  pattern:
+    level: "%5p [requestId:%X{requestId:-none}]"
+  level:
+    root: INFO
+    dev.identityservice: INFO

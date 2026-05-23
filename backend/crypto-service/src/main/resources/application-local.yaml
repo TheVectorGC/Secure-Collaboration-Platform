@@ -1,0 +1,27 @@
+spring:
+  config:
+    activate:
+      on-profile: local
+
+application:
+  security:
+    public-paths: /actuator/**,/swagger-ui/**,/v3/api-docs/**
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,env,beans,loggers
+  endpoint:
+    health:
+      show-details: always
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+
+logging:
+  level:
+    dev.cryptoservice: DEBUG

@@ -2,7 +2,6 @@ package dev.messagingservice.repository;
 
 import dev.messagingservice.model.entity.ChatParticipantEntity;
 import dev.messagingservice.model.enumeration.ChatParticipantStatus;
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -15,13 +14,9 @@ public interface ChatParticipantRepository extends JpaRepository<ChatParticipant
 
     boolean existsByChatIdAndAccountIdAndStatus(UUID chatId, UUID accountId, ChatParticipantStatus status);
 
-    List<ChatParticipantEntity> findByAccountIdAndStatus(UUID accountId, ChatParticipantStatus status);
-
     List<ChatParticipantEntity> findByAccountId(UUID accountId);
 
     List<ChatParticipantEntity> findByChatIdAndStatus(UUID chatId, ChatParticipantStatus status);
 
     List<ChatParticipantEntity> findByChatId(UUID chatId);
-
-    List<ChatParticipantEntity> findByChatIdInAndStatus(Collection<UUID> chatIds, ChatParticipantStatus status);
 }

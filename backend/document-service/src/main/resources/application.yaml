@@ -1,29 +1,26 @@
 server:
-  port: ${SERVER_PORT:8091}
+  port: ${SERVER_PORT:8090}
 
 spring:
   application:
     name: document-service
-
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5436/document_db}
+    url: ${DB_URL:jdbc:postgresql://localhost:5437/document_db}
     username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:postgres}
-
   jpa:
     hibernate:
       ddl-auto: validate
     open-in-view: false
-
   liquibase:
     change-log: classpath:db/changelog/db.changelog-master.yaml
-
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
-
   cloud:
     vault:
       enabled: true
@@ -33,32 +30,52 @@ spring:
         enabled: false
 
 application:
+  cors:
+    allowed-origins:
+      - ${FRONTEND_ORIGIN:http://localhost:5173}
+      - http://127.0.0.1:5173
   security:
     jwt:
       issuer: ${JWT_ISSUER:identity-service}
       key-name: ${JWT_KEY_NAME:identity-service-jwt-ed25519}
-
   kafka:
     topics:
       document-events: ${DOCUMENT_EVENTS_TOPIC:document.events}
-
+  outbox:
+    enabled: ${DOCUMENT_OUTBOX_ENABLED:true}
+    batch-size: ${DOCUMENT_OUTBOX_BATCH_SIZE:50}
+    dispatch-interval-ms: ${DOCUMENT_OUTBOX_DISPATCH_INTERVAL_MS:1000}
+    max-attempts: ${DOCUMENT_OUTBOX_MAX_ATTEMPTS:10}
   messaging-service:
     base-url: ${MESSAGING_SERVICE_BASE_URL:http://localhost:8087}
     chat-path: ${MESSAGING_SERVICE_CHAT_PATH:/api/v1/chats/{chatId}}
     current-chats-path: ${MESSAGING_SERVICE_CURRENT_CHATS_PATH:/api/v1/chats}
-
   media-service:
     base-url: ${MEDIA_SERVICE_BASE_URL:http://localhost:8089}
     grant-access-path: ${MEDIA_SERVICE_GRANT_ACCESS_PATH:/api/v1/media/files/{mediaFileId}/access}
-
   identity-service:
     base-url: ${IDENTITY_SERVICE_BASE_URL:http://localhost:8085}
     internal-device-path: ${IDENTITY_SERVICE_INTERNAL_DEVICE_PATH:/api/v1/devices/{deviceId}/internal}
 
-logging:
-  level:
-    dev.documentservice: INFO
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
 
 springdoc:
+  api-docs:
+    enabled: true
   swagger-ui:
+    enabled: true
     path: /swagger-ui.html
+
+logging:
+  level:
+    root: INFO
+    dev.documentservice: INFO
+  pattern:
+    level: "%5p [requestId=%X{requestId:-}]"

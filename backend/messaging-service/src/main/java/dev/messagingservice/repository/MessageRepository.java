@@ -13,7 +13,5 @@ public interface MessageRepository extends JpaRepository<MessageEntity, UUID> {
 
     Optional<MessageEntity> findFirstByChatIdOrderByCreatedAtDesc(UUID chatId);
 
-    List<MessageEntity> findTop50ByChatIdOrderByCreatedAtDesc(UUID chatId);
-
     List<MessageEntity> findByChatIdOrderByCreatedAtAsc(UUID chatId);
 }

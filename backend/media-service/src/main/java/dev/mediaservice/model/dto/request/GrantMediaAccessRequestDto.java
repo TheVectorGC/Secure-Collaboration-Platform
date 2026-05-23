@@ -7,4 +7,5 @@ import java.util.UUID;
 
 public record GrantMediaAccessRequestDto(
     @NotEmpty(message = "At least one account ID is required.")
-    List<@NotNull(message = "Account ID is required.") UUID> accountIds) {}
+    List<@NotNull(message = "Account ID is required.") UUID> accountIds
+) {}

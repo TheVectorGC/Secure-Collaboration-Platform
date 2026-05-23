@@ -1,5 +1,6 @@
 package dev.mediaservice.service.impl;
 
+import dev.mediaservice.exception.MediaAccessDeniedException;
 import dev.mediaservice.security.AccountPrincipal;
 import dev.mediaservice.service.CurrentAccountService;
 import java.util.UUID;
@@ -14,18 +15,11 @@ public class CurrentAccountServiceImpl implements CurrentAccountService {
         return getCurrentPrincipal().getAccountId();
     }
 
-    @Override
-    public String getCurrentUsername() {
-        return getCurrentPrincipal().getUsername();
-    }
-
     private AccountPrincipal getCurrentPrincipal() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
         if (authentication == null || !(authentication.getPrincipal() instanceof AccountPrincipal accountPrincipal)) {
-            throw new IllegalStateException("Authenticated account principal was not found.");
+            throw new MediaAccessDeniedException("Authenticated account principal was not found.");
         }
-
         return accountPrincipal;
     }
 }

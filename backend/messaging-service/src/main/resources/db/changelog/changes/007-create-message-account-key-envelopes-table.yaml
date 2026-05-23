@@ -1,0 +1,58 @@
+databaseChangeLog:
+  - changeSet:
+      id: 007-create-message-account-key-envelopes-table
+      author: messaging-service
+      changes:
+        - createTable:
+            tableName: message_account_key_envelopes
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: message_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: target_account_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: algorithm
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: encrypted_key_base64
+                  type: TEXT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: message_account_key_envelopes
+            baseColumnNames: message_id
+            constraintName: fk_message_account_key_envelopes_messages
+            referencedTableName: messages
+            referencedColumnNames: id
+            onDelete: CASCADE
+        - addUniqueConstraint:
+            tableName: message_account_key_envelopes
+            columnNames: message_id, target_account_id
+            constraintName: uq_message_account_key_envelopes_message_account
+        - createIndex:
+            tableName: message_account_key_envelopes
+            indexName: idx_message_account_key_envelopes_account
+            columns:
+              - column:
+                  name: target_account_id
+              - column:
+                  name: message_id

@@ -16,16 +16,22 @@ public class DocumentEventKafkaListener {
     private final ObjectMapper objectMapper;
 
     @KafkaListener(
-        topics = "${application.kafka.topics.document-events}",
-        groupId = "${spring.kafka.consumer.group-id}"
+            topics = "${application.kafka.topics.document-events}",
+            groupId = "${spring.kafka.consumer.group-id}"
     )
     public void handleDocumentEvent(String serializedDocumentEvent) {
         try {
             MessagingEventDto messagingEventDto = objectMapper.readValue(serializedDocumentEvent, MessagingEventDto.class);
+            log.info(
+                    "Document event received. eventId={}, eventType={}.",
+                    messagingEventDto.eventId(),
+                    messagingEventDto.eventType()
+            );
             realtimeDeliveryService.deliverMessagingEvent(messagingEventDto);
         }
         catch (Exception exception) {
-            log.warn("Failed to handle document event: {}.", serializedDocumentEvent, exception);
+            log.warn("Failed to handle document event.", exception);
+            log.debug("Invalid document event payload: {}.", serializedDocumentEvent);
         }
     }
 }

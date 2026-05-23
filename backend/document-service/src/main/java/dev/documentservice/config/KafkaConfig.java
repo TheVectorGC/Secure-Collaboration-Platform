@@ -1,8 +1,9 @@
 package dev.documentservice.config;
 
+import dev.documentservice.config.properties.DocumentKafkaProperties;
 import java.util.HashMap;
 import java.util.Map;
-
+import lombok.RequiredArgsConstructor;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringSerializer;
@@ -15,7 +16,10 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.ProducerFactory;
 
 @Configuration
+@RequiredArgsConstructor
 public class KafkaConfig {
+    private final DocumentKafkaProperties documentKafkaProperties;
+
     @Value("${spring.kafka.bootstrap-servers}")
     private String bootstrapServers;
 
@@ -25,7 +29,6 @@ public class KafkaConfig {
         producerProperties.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         producerProperties.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         producerProperties.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-
         return new DefaultKafkaProducerFactory<>(producerProperties);
     }
 
@@ -36,9 +39,6 @@ public class KafkaConfig {
 
     @Bean
     public NewTopic documentEventsTopic() {
-        return TopicBuilder.name("document.events")
-                .partitions(1)
-                .replicas(1)
-                .build();
+        return TopicBuilder.name(documentKafkaProperties.documentEvents()).partitions(1).replicas(1).build();
     }
 }

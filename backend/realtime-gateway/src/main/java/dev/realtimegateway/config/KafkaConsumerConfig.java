@@ -7,31 +7,36 @@ import org.apache.kafka.common.serialization.StringDeserializer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.annotation.EnableKafka;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 
 @Configuration
+@EnableKafka
 public class KafkaConsumerConfig {
-    @Value("${spring.kafka.bootstrap-servers}")
-    private String bootstrapServers;
+    private final String bootstrapServers;
+    private final String consumerGroupId;
+    private final String autoOffsetReset;
 
-    @Value("${spring.kafka.consumer.group-id}")
-    private String consumerGroupId;
-
-    @Value("${spring.kafka.consumer.auto-offset-reset:latest}")
-    private String autoOffsetReset;
+    public KafkaConsumerConfig(
+            @Value("${spring.kafka.bootstrap-servers}") String bootstrapServers,
+            @Value("${spring.kafka.consumer.group-id}") String consumerGroupId,
+            @Value("${spring.kafka.consumer.auto-offset-reset:latest}") String autoOffsetReset
+    ) {
+        this.bootstrapServers = bootstrapServers;
+        this.consumerGroupId = consumerGroupId;
+        this.autoOffsetReset = autoOffsetReset;
+    }
 
     @Bean
     public ConsumerFactory<String, String> kafkaConsumerFactory() {
         Map<String, Object> consumerProperties = new HashMap<>();
-
         consumerProperties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         consumerProperties.put(ConsumerConfig.GROUP_ID_CONFIG, consumerGroupId);
         consumerProperties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, autoOffsetReset);
         consumerProperties.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         consumerProperties.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
-
         return new DefaultKafkaConsumerFactory<>(consumerProperties);
     }
 
@@ -41,9 +46,7 @@ public class KafkaConsumerConfig {
     ) {
         ConcurrentKafkaListenerContainerFactory<String, String> kafkaListenerContainerFactory =
                 new ConcurrentKafkaListenerContainerFactory<>();
-
         kafkaListenerContainerFactory.setConsumerFactory(kafkaConsumerFactory);
-
         return kafkaListenerContainerFactory;
     }
 }

@@ -1,5 +1,6 @@
 package dev.messagingservice.config;
 
+import dev.messagingservice.config.properties.SecurityCorsProperties;
 import dev.messagingservice.security.JwtAuthenticationFilter;
 import dev.messagingservice.security.RestAccessDeniedHandler;
 import dev.messagingservice.security.RestAuthenticationEntryPoint;
@@ -29,9 +30,10 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final RestAuthenticationEntryPoint restAuthenticationEntryPoint;
     private final RestAccessDeniedHandler restAccessDeniedHandler;
+    private final SecurityCorsProperties securityCorsProperties;
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) {
         httpSecurity
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(Customizer.withDefaults())
@@ -41,8 +43,8 @@ public class SecurityConfig {
                 )
                 .authorizeHttpRequests(authorizationManagerRequestMatcherRegistry -> authorizationManagerRequestMatcherRegistry
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
-                        .requestMatchers("/actuator/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(sessionManagementConfigurer -> sessionManagementConfigurer
@@ -56,11 +58,9 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration corsConfiguration = new CorsConfiguration();
+        List<String> allowedOrigins = securityCorsProperties.allowedOriginList();
 
-        corsConfiguration.setAllowedOrigins(List.of(
-                "http://localhost:5173",
-                "http://127.0.0.1:5173"
-        ));
+        corsConfiguration.setAllowedOrigins(allowedOrigins.isEmpty() ? List.of("http://localhost:5173") : allowedOrigins);
         corsConfiguration.setAllowedMethods(List.of(
                 HttpMethod.GET.name(),
                 HttpMethod.POST.name(),
@@ -72,16 +72,14 @@ public class SecurityConfig {
         corsConfiguration.setAllowedHeaders(List.of(
                 HttpHeaders.AUTHORIZATION,
                 HttpHeaders.CONTENT_TYPE,
-                HttpHeaders.ACCEPT
+                HttpHeaders.ACCEPT,
+                "X-Request-Id"
         ));
-        corsConfiguration.setExposedHeaders(List.of(
-                HttpHeaders.AUTHORIZATION
-        ));
+        corsConfiguration.setExposedHeaders(List.of("X-Request-Id"));
         corsConfiguration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource urlBasedCorsConfigurationSource = new UrlBasedCorsConfigurationSource();
         urlBasedCorsConfigurationSource.registerCorsConfiguration("/**", corsConfiguration);
-
         return urlBasedCorsConfigurationSource;
     }
 }

@@ -48,9 +48,6 @@ public class DeviceKyberPreKeyEntity {
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
-    @Column(name = "used_at")
-    private OffsetDateTime usedAt;
-
     @Column(name = "expires_at")
     private OffsetDateTime expiresAt;
 }

@@ -1,10 +1,27 @@
 HELP.md
-target/
-.mvn/wrapper/maven-wrapper.jar
-!**/src/main/**/target/
-!**/src/test/**/target/
+logs
+*.log
+*.zip
 
-### STS ###
+node_modules
+target
+build
+out
+
+.mvn/wrapper/maven-wrapper.jar
+
+.idea
+*.iws
+*.iml
+*.ipr
+.vscode
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
 .apt_generated
 .classpath
 .factorypath
@@ -12,22 +29,3 @@ target/
 .settings
 .springBeans
 .sts4-cache
-
-### IntelliJ IDEA ###
-.idea
-*.iws
-*.iml
-*.ipr
-
-### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
-build/
-!**/src/main/**/build/
-!**/src/test/**/build/
-
-### VS Code ###
-.vscode/

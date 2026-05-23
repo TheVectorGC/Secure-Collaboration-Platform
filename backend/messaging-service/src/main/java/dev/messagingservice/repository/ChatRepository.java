@@ -61,7 +61,7 @@ public interface ChatRepository extends JpaRepository<ChatEntity, UUID> {
             """,
         nativeQuery = true
     )
-    int insertParticipantIfAbsent(
+    void insertParticipantIfAbsent(
         @Param("participantId") UUID participantId,
         @Param("chatId") UUID chatId,
         @Param("accountId") UUID accountId,

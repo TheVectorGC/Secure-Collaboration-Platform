@@ -4,10 +4,14 @@ import dev.realtimegateway.model.dto.RealtimeEnvelopeDto;
 import dev.realtimegateway.model.event.MessagingEventDto;
 import dev.realtimegateway.service.RealtimeDeliveryService;
 import dev.realtimegateway.session.ConnectionRegistry;
+import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class RealtimeDeliveryServiceImpl implements RealtimeDeliveryService {
@@ -15,19 +19,27 @@ public class RealtimeDeliveryServiceImpl implements RealtimeDeliveryService {
 
     @Override
     public void deliverMessagingEvent(MessagingEventDto messagingEventDto) {
+        if (messagingEventDto.recipientAccountIds() == null || messagingEventDto.recipientAccountIds().isEmpty()) {
+            log.debug("Realtime event has no recipients. eventId={}, eventType={}.", messagingEventDto.eventId(), messagingEventDto.eventType());
+            return;
+        }
+
         RealtimeEnvelopeDto realtimeEnvelopeDto = new RealtimeEnvelopeDto(
-            messagingEventDto.eventId(),
-            messagingEventDto.eventType(),
-            messagingEventDto.occurredAt(),
-            messagingEventDto.payload()
+                messagingEventDto.eventId(),
+                messagingEventDto.eventType(),
+                messagingEventDto.occurredAt(),
+                messagingEventDto.payload()
         );
-
-        messagingEventDto.recipientAccountIds().stream()
-            .filter(accountId -> accountId != null)
-            .forEach(accountId -> deliverToAccount(accountId, realtimeEnvelopeDto));
-    }
-
-    private void deliverToAccount(UUID accountId, RealtimeEnvelopeDto realtimeEnvelopeDto) {
-        connectionRegistry.sendToAccount(accountId, realtimeEnvelopeDto);
+        List<UUID> recipientAccountIds = messagingEventDto.recipientAccountIds().stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        connectionRegistry.sendToAccounts(recipientAccountIds, realtimeEnvelopeDto);
+        log.debug(
+                "Realtime event delivered to connected sessions. eventId={}, eventType={}, recipientCount={}.",
+                messagingEventDto.eventId(),
+                messagingEventDto.eventType(),
+                recipientAccountIds.size()
+        );
     }
 }

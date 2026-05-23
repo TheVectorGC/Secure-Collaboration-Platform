@@ -11,9 +11,9 @@ public class OpenApiConfig {
     @Bean
     public OpenAPI openApi() {
         return new OpenAPI()
-            .info(new Info()
-                .title("Realtime Gateway API")
-                .description("WebSocket realtime gateway for messenger events.")
-                .version("v1"));
+                .info(new Info()
+                        .title("Vector Realtime Gateway API")
+                        .description("WebSocket gateway for encrypted messaging, document and presence events.")
+                        .version("v1"));
     }
 }

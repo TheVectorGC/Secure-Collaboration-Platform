@@ -21,7 +21,6 @@ public class KafkaProducerConfig {
     @Bean
     public ProducerFactory<String, MessagingEventDto> messagingEventProducerFactory() {
         Map<String, Object> producerProperties = new HashMap<>();
-
         producerProperties.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         producerProperties.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         producerProperties.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, MessagingEventSerializer.class);
@@ -31,7 +30,6 @@ public class KafkaProducerConfig {
         producerProperties.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 10000);
         producerProperties.put(ProducerConfig.MAX_BLOCK_MS_CONFIG, 5000);
         producerProperties.put(ProducerConfig.LINGER_MS_CONFIG, 0);
-
         return new DefaultKafkaProducerFactory<>(producerProperties);
     }
 

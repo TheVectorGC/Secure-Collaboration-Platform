@@ -11,7 +11,5 @@ import org.springframework.stereotype.Repository;
 public interface MessageDevicePayloadRepository extends JpaRepository<MessageDevicePayloadEntity, UUID> {
     List<MessageDevicePayloadEntity> findByMessageId(UUID messageId);
 
-    List<MessageDevicePayloadEntity> findByMessageIdIn(Collection<UUID> messageIds);
-
     List<MessageDevicePayloadEntity> findByMessageIdInAndTargetAccountId(Collection<UUID> messageIds, UUID targetAccountId);
 }

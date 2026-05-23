@@ -20,6 +20,7 @@ public class RestAccessDeniedHandler implements AccessDeniedHandler {
             AccessDeniedException accessDeniedException
     ) throws IOException {
         authenticationErrorResponseWriter.writeForbidden(
+                request,
                 response,
                 "You do not have permission to access this resource."
         );
