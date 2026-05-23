@@ -14,9 +14,8 @@ spring:
 application:
   identity-service:
     base-url: ${IDENTITY_SERVICE_BASE_URL}
-  security:
-    cors:
-      allowed-origins: ${CORS_ALLOWED_ORIGINS}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS}
   outbox:
     enabled: true
 
@@ -37,5 +36,9 @@ springdoc:
 
 logging:
   level:
+    org.springframework.data.repository.config: WARN
+    org.springframework.data.redis.repository.configuration: WARN
+    org.apache.kafka: WARN
+    org.springframework.kafka: WARN
     dev.messagingservice: INFO
     org.springframework.kafka: WARN

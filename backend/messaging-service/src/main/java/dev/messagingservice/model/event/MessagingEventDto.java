@@ -14,5 +14,6 @@ public record MessagingEventDto(
     UUID senderAccountId,
     List<UUID> recipientAccountIds,
     OffsetDateTime occurredAt,
+    String requestId,
     JsonNode payload
 ) {}

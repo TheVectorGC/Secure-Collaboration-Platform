@@ -31,6 +31,7 @@ import dev.documentservice.model.enumeration.DocumentSigningKeyStatus;
 import dev.documentservice.model.enumeration.DocumentStatus;
 import dev.documentservice.model.enumeration.SignatureAlgorithm;
 import dev.documentservice.model.event.DocumentEventDto;
+import dev.documentservice.observability.RequestIdProvider;
 import dev.documentservice.outbox.DocumentEventPublisher;
 import dev.documentservice.repository.DeviceDocumentSigningKeyRepository;
 import dev.documentservice.repository.DocumentHiddenRepository;
@@ -65,6 +66,7 @@ public class DocumentServiceImpl implements DocumentService {
     private final MessagingAccessClient messagingAccessClient;
     private final MediaAccessClient mediaAccessClient;
     private final DocumentEventPublisher documentEventPublisher;
+    private final RequestIdProvider requestIdProvider;
     private final DocumentMapper documentMapper;
     private final DocumentAccessPolicy documentAccessPolicy;
     private final DocumentSignatureVerifier documentSignatureVerifier;
@@ -543,6 +545,7 @@ public class DocumentServiceImpl implements DocumentService {
             documentEntity.getOwnerAccountId(),
             recipientAccountIds == null ? List.of() : recipientAccountIds.stream().filter(Objects::nonNull).distinct().toList(),
             OffsetDateTime.now(),
+            requestIdProvider.getCurrentRequestId(),
             objectMapper.valueToTree(payload)
         );
         documentEventPublisher.publish(documentEventDto);

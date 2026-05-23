@@ -36,5 +36,9 @@ springdoc:
 
 logging:
   level:
+    org.springframework.data.repository.config: WARN
+    org.springframework.data.redis.repository.configuration: WARN
+    org.apache.kafka: WARN
+    org.springframework.kafka: WARN
     dev.realtimegateway: INFO
     org.springframework.kafka: WARN

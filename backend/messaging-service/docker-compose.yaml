@@ -9,7 +9,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     volumes:
-      - messaging-postgres-data:/var/lib/postgresql/data
+      - messaging-postgres-pg18-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d messaging_db"]
       interval: 5s
@@ -17,4 +17,4 @@ services:
       retries: 30
 
 volumes:
-  messaging-postgres-data:
+  messaging-postgres-pg18-data:

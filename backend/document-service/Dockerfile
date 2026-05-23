@@ -1,13 +1,18 @@
 FROM eclipse-temurin:21-jdk AS build
 WORKDIR /workspace
-COPY mvnw mvnw
 COPY .mvn .mvn
+COPY mvnw mvnw
 COPY pom.xml pom.xml
+RUN chmod +x mvnw
+RUN ./mvnw -B -DskipTests dependency:go-offline
 COPY src src
-RUN chmod +x mvnw && ./mvnw clean package -DskipTests
+RUN ./mvnw -B -DskipTests clean package
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app
-COPY --from=build /workspace/target/document-service-0.0.1-SNAPSHOT.jar app.jar
+RUN addgroup --system vector && adduser --system --ingroup vector vector
+COPY --from=build /workspace/target/*.jar /app/app.jar
+RUN chown -R vector:vector /app
+USER vector
 EXPOSE 8090
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]

@@ -40,12 +40,6 @@ public class VaultJwtTokenServiceImpl implements JwtTokenService {
     }
 
     @Override
-    public String extractUsername(String token) {
-        Map<String, Object> claims = extractClaims(token);
-        return String.valueOf(claims.get("sub"));
-    }
-
-    @Override
     public Map<String, Object> extractClaims(String token) {
         try {
             String[] tokenParts = token.split("\\.");

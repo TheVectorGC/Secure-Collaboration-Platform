@@ -1,15 +1,21 @@
-HELP.md
 target/
 logs/
 *.log
 *.zip
+*.tar
+*.tar.gz
+
+.env
+.env.*
 *.local
 
 .idea/
 .vscode/
-*.iws
 *.iml
+*.iws
 *.ipr
+
 .DS_Store
+Thumbs.db
 
 .mvn/wrapper/maven-wrapper.jar

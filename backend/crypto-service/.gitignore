@@ -1,24 +1,21 @@
-logs
+target/
+logs/
 *.log
-
-target
-build
-out
-
-.mvn/wrapper/maven-wrapper.jar
-
-.env
-*.local
-
 *.zip
 *.tar
 *.tar.gz
 
-.idea
-.vscode
+.env
+.env.*
+*.local
+
+.idea/
+.vscode/
 *.iml
 *.iws
 *.ipr
 
 .DS_Store
 Thumbs.db
+
+.mvn/wrapper/maven-wrapper.jar

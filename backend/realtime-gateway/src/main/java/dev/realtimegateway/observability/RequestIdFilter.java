@@ -13,7 +13,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 @Component
 public class RequestIdFilter extends OncePerRequestFilter {
     public static final String REQUEST_ID_HEADER = "X-Request-Id";
-    private static final String REQUEST_ID_MDC_KEY = "requestId";
+    public static final String REQUEST_ID_MDC_KEY = "requestId";
 
     @Override
     protected void doFilterInternal(

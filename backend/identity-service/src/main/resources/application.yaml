@@ -8,6 +8,15 @@ spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:local}
 
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: ${REDIS_TIMEOUT:2s}
+    repositories:
+      enabled: false
+
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5433/identity_db}
     username: ${DB_USERNAME:postgres}
@@ -61,6 +70,12 @@ application:
     batch-size: ${OUTBOX_BATCH_SIZE:50}
     publish-interval: ${OUTBOX_PUBLISH_INTERVAL:PT5S}
 
+  rate-limit:
+    enabled: ${RATE_LIMIT_ENABLED:false}
+    redis-key-prefix: ${RATE_LIMIT_REDIS_KEY_PREFIX:vector:identity-service:rate-limit}
+    max-requests: ${RATE_LIMIT_MAX_REQUESTS:300}
+    window: ${RATE_LIMIT_WINDOW:60s}
+
 management:
   endpoints:
     web:
@@ -80,5 +95,9 @@ logging:
   pattern:
     level: "%5p [requestId:%X{requestId:-none}]"
   level:
+    org.springframework.data.repository.config: WARN
+    org.springframework.data.redis.repository.configuration: WARN
+    org.apache.kafka: WARN
+    org.springframework.kafka: WARN
     root: INFO
     dev.identityservice: INFO

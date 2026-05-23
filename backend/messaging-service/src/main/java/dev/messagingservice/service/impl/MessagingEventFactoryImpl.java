@@ -9,6 +9,7 @@ import dev.messagingservice.model.entity.MessageDevicePayloadEntity;
 import dev.messagingservice.model.entity.MessageEntity;
 import dev.messagingservice.model.enumeration.MessagingEventType;
 import dev.messagingservice.model.event.MessagingEventDto;
+import dev.messagingservice.observability.RequestIdProvider;
 import dev.messagingservice.service.MessagingEventFactory;
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
@@ -22,6 +23,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class MessagingEventFactoryImpl implements MessagingEventFactory {
     private final ObjectMapper objectMapper;
+    private final RequestIdProvider requestIdProvider;
 
     @Override
     public MessagingEventDto createMessageCreatedEvent(
@@ -176,6 +178,7 @@ public class MessagingEventFactoryImpl implements MessagingEventFactory {
                 senderAccountId,
                 recipientAccountIds,
                 OffsetDateTime.now(),
+                requestIdProvider.getCurrentRequestId(),
                 payloadNode
         );
     }

@@ -1,9 +1,11 @@
 package dev.realtimegateway.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.realtimegateway.model.event.MessagingEventDto;
+import dev.realtimegateway.model.event.RealtimeDomainEventDto;
 import dev.realtimegateway.service.RealtimeDeliveryService;
+import dev.realtimegateway.observability.RequestIdFilter;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.MDC;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
@@ -21,18 +23,28 @@ public class MessagingEventKafkaListener {
     )
     public void handleMessagingEvent(String serializedMessagingEvent) {
         try {
-            MessagingEventDto messagingEventDto = objectMapper.readValue(serializedMessagingEvent, MessagingEventDto.class);
+            RealtimeDomainEventDto realtimeDomainEventDto = objectMapper.readValue(serializedMessagingEvent, RealtimeDomainEventDto.class);
+            putRequestId(realtimeDomainEventDto);
             log.info(
                     "Messaging event received. eventId={}, eventType={}, chatId={}.",
-                    messagingEventDto.eventId(),
-                    messagingEventDto.eventType(),
-                    messagingEventDto.chatId()
+                    realtimeDomainEventDto.eventId(),
+                    realtimeDomainEventDto.eventType(),
+                    realtimeDomainEventDto.chatId()
             );
-            realtimeDeliveryService.deliverMessagingEvent(messagingEventDto);
+            realtimeDeliveryService.deliverMessagingEvent(realtimeDomainEventDto);
         }
         catch (Exception exception) {
             log.warn("Failed to handle messaging event.", exception);
             log.debug("Invalid messaging event payload: {}.", serializedMessagingEvent);
+        }
+        finally {
+            MDC.remove(RequestIdFilter.REQUEST_ID_MDC_KEY);
+        }
+    }
+
+    private void putRequestId(RealtimeDomainEventDto realtimeDomainEventDto) {
+        if (realtimeDomainEventDto.requestId() != null && !realtimeDomainEventDto.requestId().isBlank()) {
+            MDC.put(RequestIdFilter.REQUEST_ID_MDC_KEY, realtimeDomainEventDto.requestId());
         }
     }
 }

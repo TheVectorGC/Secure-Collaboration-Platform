@@ -2,6 +2,14 @@ spring:
   config:
     activate:
       on-profile: local
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: ${REDIS_TIMEOUT:2s}
+    repositories:
+      enabled: false
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5436/media_db}
     username: ${DB_USERNAME:postgres}
@@ -29,4 +37,8 @@ springdoc:
 
 logging:
   level:
+    org.springframework.data.repository.config: WARN
+    org.springframework.data.redis.repository.configuration: WARN
+    org.apache.kafka: WARN
+    org.springframework.kafka: WARN
     dev.mediaservice: DEBUG

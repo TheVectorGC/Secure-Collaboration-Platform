@@ -1,7 +1,10 @@
 package dev.identityservice.outbox;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.identityservice.model.event.IdentityOutboxEventDto;
+import dev.identityservice.observability.RequestIdProvider;
 import dev.identityservice.model.entity.OutboxEventEntity;
 import dev.identityservice.model.enumeration.OutboxEventStatus;
 import dev.identityservice.repository.OutboxEventRepository;
@@ -17,12 +20,13 @@ import org.springframework.stereotype.Service;
 public class IdentityOutboxServiceImpl implements IdentityOutboxService {
     private static final String ACCOUNT_AGGREGATE = "ACCOUNT";
     private static final String DEVICE_AGGREGATE = "DEVICE";
-    private static final String ACCOUNT_BLOCKED_EVENT = "identity.account.blocked";
-    private static final String ACCOUNT_UNBLOCKED_EVENT = "identity.account.unblocked";
-    private static final String DEVICE_REVOKED_EVENT = "identity.device.revoked";
+    private static final String ACCOUNT_BLOCKED_EVENT = "ACCOUNT_BLOCKED";
+    private static final String ACCOUNT_UNBLOCKED_EVENT = "ACCOUNT_UNBLOCKED";
+    private static final String DEVICE_REVOKED_EVENT = "DEVICE_REVOKED";
 
     private final ObjectMapper objectMapper;
     private final OutboxEventRepository outboxEventRepository;
+    private final RequestIdProvider requestIdProvider;
 
     @Override
     public void enqueueAccountBlocked(UUID blockerAccountId, UUID blockedAccountId) {
@@ -55,11 +59,13 @@ public class IdentityOutboxServiceImpl implements IdentityOutboxService {
             Map<String, Object> payload
     ) {
         OffsetDateTime now = OffsetDateTime.now();
+        UUID eventId = UUID.randomUUID();
         OutboxEventEntity outboxEventEntity = OutboxEventEntity.builder()
+                .id(eventId)
                 .aggregateType(aggregateType)
                 .aggregateId(aggregateId)
                 .eventType(eventType)
-                .payload(writePayload(payload))
+                .payload(writeEventPayload(eventId, aggregateType, aggregateId, eventType, now, payload))
                 .status(OutboxEventStatus.PENDING)
                 .attemptCount(0)
                 .nextAttemptAt(now)
@@ -69,9 +75,26 @@ public class IdentityOutboxServiceImpl implements IdentityOutboxService {
         outboxEventRepository.save(outboxEventEntity);
     }
 
-    private String writePayload(Map<String, Object> payload) {
+    private String writeEventPayload(
+            UUID eventId,
+            String aggregateType,
+            String aggregateId,
+            String eventType,
+            OffsetDateTime occurredAt,
+            Map<String, Object> payload
+    ) {
         try {
-            return objectMapper.writeValueAsString(payload);
+            JsonNode payloadNode = objectMapper.valueToTree(payload);
+            IdentityOutboxEventDto identityOutboxEventDto = new IdentityOutboxEventDto(
+                    eventId,
+                    eventType,
+                    aggregateType,
+                    aggregateId,
+                    occurredAt,
+                    requestIdProvider.currentRequestId(),
+                    payloadNode
+            );
+            return objectMapper.writeValueAsString(identityOutboxEventDto);
         }
         catch (JsonProcessingException exception) {
             throw new IllegalStateException("Failed to serialize identity outbox event payload.", exception);

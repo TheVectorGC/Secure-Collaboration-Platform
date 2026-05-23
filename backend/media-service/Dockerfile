@@ -6,13 +6,14 @@ COPY pom.xml pom.xml
 RUN chmod +x mvnw
 RUN ./mvnw -B -DskipTests dependency:go-offline
 COPY src src
-RUN ./mvnw -B -DskipTests package
+RUN ./mvnw -B -DskipTests clean package
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app
 RUN addgroup --system vector && adduser --system --ingroup vector vector
-COPY --from=build /workspace/target/*.jar /app/media-service.jar
-RUN mkdir -p /var/lib/vector/media-files && chown -R vector:vector /app /var/lib/vector
+COPY --from=build /workspace/target/*.jar /app/app.jar
+RUN chown -R vector:vector /app
+RUN mkdir -p /var/lib/vector/media-files && chown -R vector:vector /var/lib/vector
 USER vector
 EXPOSE 8089
-ENTRYPOINT ["java", "-jar", "/app/media-service.jar"]
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]

@@ -1,5 +1,6 @@
 package dev.identityservice.config;
 
+import dev.identityservice.properties.CorsProperties;
 import dev.identityservice.security.JwtAuthenticationFilter;
 import dev.identityservice.security.RestAccessDeniedHandler;
 import dev.identityservice.security.RestAuthenticationEntryPoint;

@@ -9,7 +9,7 @@ services:
     ports:
       - "5433:5432"
     volumes:
-      - identity-db-data:/var/lib/postgresql/data
+      - identity-db-pg18-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d identity_db"]
       interval: 10s
@@ -26,7 +26,7 @@ services:
     ports:
       - "5434:5432"
     volumes:
-      - crypto-db-data:/var/lib/postgresql/data
+      - crypto-db-pg18-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d crypto_db"]
       interval: 10s
@@ -43,7 +43,7 @@ services:
     ports:
       - "5435:5432"
     volumes:
-      - messaging-db-data:/var/lib/postgresql/data
+      - messaging-db-pg18-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d messaging_db"]
       interval: 10s
@@ -60,7 +60,7 @@ services:
     ports:
       - "5436:5432"
     volumes:
-      - media-db-data:/var/lib/postgresql/data
+      - media-db-pg18-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d media_db"]
       interval: 10s
@@ -77,7 +77,7 @@ services:
     ports:
       - "5437:5432"
     volumes:
-      - document-db-data:/var/lib/postgresql/data
+      - document-db-pg18-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d document_db"]
       interval: 10s
@@ -182,6 +182,8 @@ services:
       context: ./identity-service
     container_name: vector-identity-service
     depends_on:
+      redis:
+        condition: service_healthy
       identity-db:
         condition: service_healthy
       kafka:
@@ -200,6 +202,9 @@ services:
       INITIAL_ADMIN_ENABLED: true
       OUTBOX_ENABLED: true
       CORS_ALLOWED_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RATE_LIMIT_ENABLED: true
     ports:
       - "8085:8085"
 
@@ -208,6 +213,8 @@ services:
       context: ./crypto-service
     container_name: vector-crypto-service
     depends_on:
+      redis:
+        condition: service_healthy
       crypto-db:
         condition: service_healthy
       identity-service:
@@ -224,6 +231,9 @@ services:
       VAULT_TOKEN: root
       IDENTITY_SERVICE_BASE_URL: http://identity-service:8085
       CORS_ALLOWED_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RATE_LIMIT_ENABLED: true
     ports:
       - "8086:8086"
 
@@ -232,6 +242,8 @@ services:
       context: ./messaging-service
     container_name: vector-messaging-service
     depends_on:
+      redis:
+        condition: service_healthy
       messaging-db:
         condition: service_healthy
       identity-service:
@@ -252,6 +264,9 @@ services:
       IDENTITY_SERVICE_BASE_URL: http://identity-service:8085
       OUTBOX_ENABLED: true
       CORS_ALLOWED_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RATE_LIMIT_ENABLED: true
     ports:
       - "8087:8087"
 
@@ -284,6 +299,8 @@ services:
       context: ./media-service
     container_name: vector-media-service
     depends_on:
+      redis:
+        condition: service_healthy
       media-db:
         condition: service_healthy
       messaging-service:
@@ -300,8 +317,10 @@ services:
       VAULT_TOKEN: root
       MESSAGING_SERVICE_BASE_URL: http://messaging-service:8087
       MEDIA_STORAGE_ROOT_PATH: /var/lib/vector/media-files
-      FRONTEND_ORIGIN: http://localhost:5173
-      FRONTEND_LOOPBACK_ORIGIN: http://127.0.0.1:5173
+      CORS_ALLOWED_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RATE_LIMIT_ENABLED: true
     ports:
       - "8089:8089"
     volumes:
@@ -312,6 +331,8 @@ services:
       context: ./document-service
     container_name: vector-document-service
     depends_on:
+      redis:
+        condition: service_healthy
       document-db:
         condition: service_healthy
       identity-service:
@@ -336,16 +357,19 @@ services:
       IDENTITY_SERVICE_BASE_URL: http://identity-service:8085
       MESSAGING_SERVICE_BASE_URL: http://messaging-service:8087
       MEDIA_SERVICE_BASE_URL: http://media-service:8089
-      FRONTEND_ORIGIN: http://localhost:5173
+      CORS_ALLOWED_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RATE_LIMIT_ENABLED: true
     ports:
       - "8090:8090"
 
 volumes:
-  identity-db-data:
-  crypto-db-data:
-  messaging-db-data:
-  media-db-data:
-  document-db-data:
+  identity-db-pg18-data:
+  crypto-db-pg18-data:
+  messaging-db-pg18-data:
+  media-db-pg18-data:
+  document-db-pg18-data:
   kafka-data:
   redis-data:
   media-files:

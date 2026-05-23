@@ -6,6 +6,7 @@ import dev.identityservice.model.entity.ProfileEntity;
 import dev.identityservice.model.enumeration.AccountRole;
 import dev.identityservice.model.enumeration.AccountStatus;
 import dev.identityservice.model.enumeration.AvatarType;
+import dev.identityservice.properties.InitialAdminProperties;
 import dev.identityservice.repository.AccountRepository;
 import dev.identityservice.repository.ProfileRepository;
 import java.time.OffsetDateTime;

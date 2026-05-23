@@ -1,9 +1,11 @@
 package dev.realtimegateway.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.realtimegateway.model.event.MessagingEventDto;
+import dev.realtimegateway.model.event.RealtimeDomainEventDto;
 import dev.realtimegateway.service.RealtimeDeliveryService;
+import dev.realtimegateway.observability.RequestIdFilter;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.MDC;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
@@ -21,17 +23,27 @@ public class DocumentEventKafkaListener {
     )
     public void handleDocumentEvent(String serializedDocumentEvent) {
         try {
-            MessagingEventDto messagingEventDto = objectMapper.readValue(serializedDocumentEvent, MessagingEventDto.class);
+            RealtimeDomainEventDto realtimeDomainEventDto = objectMapper.readValue(serializedDocumentEvent, RealtimeDomainEventDto.class);
+            putRequestId(realtimeDomainEventDto);
             log.info(
                     "Document event received. eventId={}, eventType={}.",
-                    messagingEventDto.eventId(),
-                    messagingEventDto.eventType()
+                    realtimeDomainEventDto.eventId(),
+                    realtimeDomainEventDto.eventType()
             );
-            realtimeDeliveryService.deliverMessagingEvent(messagingEventDto);
+            realtimeDeliveryService.deliverMessagingEvent(realtimeDomainEventDto);
         }
         catch (Exception exception) {
             log.warn("Failed to handle document event.", exception);
             log.debug("Invalid document event payload: {}.", serializedDocumentEvent);
+        }
+        finally {
+            MDC.remove(RequestIdFilter.REQUEST_ID_MDC_KEY);
+        }
+    }
+
+    private void putRequestId(RealtimeDomainEventDto realtimeDomainEventDto) {
+        if (realtimeDomainEventDto.requestId() != null && !realtimeDomainEventDto.requestId().isBlank()) {
+            MDC.put(RequestIdFilter.REQUEST_ID_MDC_KEY, realtimeDomainEventDto.requestId());
         }
     }
 }

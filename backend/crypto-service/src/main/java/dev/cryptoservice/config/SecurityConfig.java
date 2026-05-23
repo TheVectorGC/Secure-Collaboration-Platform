@@ -1,5 +1,7 @@
 package dev.cryptoservice.config;
 
+import dev.cryptoservice.properties.CorsProperties;
+import dev.cryptoservice.properties.SecurityProperties;
 import dev.cryptoservice.security.JwtAuthenticationFilter;
 import dev.cryptoservice.security.RestAccessDeniedHandler;
 import dev.cryptoservice.security.RestAuthenticationEntryPoint;

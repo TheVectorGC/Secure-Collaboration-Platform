@@ -30,7 +30,7 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final RestAuthenticationEntryPoint restAuthenticationEntryPoint;
     private final RestAccessDeniedHandler restAccessDeniedHandler;
-    private final CorsProperties securityCorsProperties;
+    private final CorsProperties corsProperties;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) {
@@ -58,9 +58,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration corsConfiguration = new CorsConfiguration();
-        List<String> allowedOrigins = securityCorsProperties.allowedOriginList();
-
-        corsConfiguration.setAllowedOrigins(allowedOrigins.isEmpty() ? List.of("http://localhost:5173") : allowedOrigins);
+        corsConfiguration.setAllowedOrigins(corsProperties.allowedOrigins());
         corsConfiguration.setAllowedMethods(List.of(
                 HttpMethod.GET.name(),
                 HttpMethod.POST.name(),

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.OffsetDateTime;
 import java.util.Locale;
+import org.slf4j.MDC;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +22,11 @@ public class IdentityAccountBlockEventConsumer {
     public void consumeIdentityEvent(String eventJson) {
         try {
             JsonNode rootNode = objectMapper.readTree(eventJson);
+            String requestId = readText(rootNode, "requestId");
+            if (requestId != null && !requestId.isBlank()) {
+                MDC.put("requestId", requestId);
+            }
+
             String eventType = readText(rootNode, "eventType", "type");
 
             if (eventType == null) {
@@ -52,6 +58,9 @@ public class IdentityAccountBlockEventConsumer {
         }
         catch (Exception exception) {
             log.warn("Identity account block event could not be processed: {}.", exception.getMessage());
+        }
+        finally {
+            MDC.remove("requestId");
         }
     }
 

@@ -2,8 +2,22 @@ spring:
   config:
     activate:
       on-profile: local
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: ${REDIS_TIMEOUT:2s}
+    repositories:
+      enabled: false
 
 application:
+  rate-limit:
+    enabled: true
+    key-prefix: ${RATE_LIMIT_KEY_PREFIX:vector:crypto:rate-limit}
+    requests-per-window: ${RATE_LIMIT_REQUESTS_PER_WINDOW:120}
+    window: ${RATE_LIMIT_WINDOW:PT1M}
+
   security:
     public-paths: /actuator/**,/swagger-ui/**,/v3/api-docs/**
 
@@ -24,4 +38,8 @@ springdoc:
 
 logging:
   level:
+    org.springframework.data.repository.config: WARN
+    org.springframework.data.redis.repository.configuration: WARN
+    org.apache.kafka: WARN
+    org.springframework.kafka: WARN
     dev.cryptoservice: DEBUG

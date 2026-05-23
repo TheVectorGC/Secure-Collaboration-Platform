@@ -1,7 +1,7 @@
 package dev.realtimegateway.service;
 
-import dev.realtimegateway.model.event.MessagingEventDto;
+import dev.realtimegateway.model.event.RealtimeDomainEventDto;
 
 public interface RealtimeDeliveryService {
-    void deliverMessagingEvent(MessagingEventDto messagingEventDto);
+    void deliverMessagingEvent(RealtimeDomainEventDto realtimeDomainEventDto);
 }

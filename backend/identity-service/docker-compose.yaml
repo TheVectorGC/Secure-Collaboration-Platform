@@ -9,7 +9,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     volumes:
-      - identity-postgres-data:/var/lib/postgresql/data
+      - identity-postgres-pg18-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d identity_db"]
       interval: 5s
@@ -56,4 +56,4 @@ services:
         fi
 
 volumes:
-  identity-postgres-data:
+  identity-postgres-pg18-data:

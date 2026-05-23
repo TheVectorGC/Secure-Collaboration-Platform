@@ -9,7 +9,7 @@ services:
     ports:
       - "5436:5432"
     volumes:
-      - media-db-data:/var/lib/postgresql/data
+      - media-db-pg18-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d media_db"]
       interval: 10s
@@ -19,4 +19,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  media-db-data:
+  media-db-pg18-data:

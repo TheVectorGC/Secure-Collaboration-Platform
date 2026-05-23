@@ -14,4 +14,5 @@ public record DocumentEventDto(
     UUID senderAccountId,
     List<UUID> recipientAccountIds,
     OffsetDateTime occurredAt,
+    String requestId,
     JsonNode payload) {}

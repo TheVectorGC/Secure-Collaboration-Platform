@@ -2,6 +2,14 @@ spring:
   config:
     activate:
       on-profile: prod
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: ${REDIS_TIMEOUT:2s}
+    repositories:
+      enabled: false
 
   datasource:
     url: ${DB_URL}
@@ -15,6 +23,12 @@ spring:
       token: ${VAULT_TOKEN}
 
 application:
+  rate-limit:
+    enabled: ${RATE_LIMIT_ENABLED:true}
+    key-prefix: ${RATE_LIMIT_KEY_PREFIX:vector:identity:rate-limit}
+    requests-per-window: ${RATE_LIMIT_REQUESTS_PER_WINDOW:120}
+    window: ${RATE_LIMIT_WINDOW:PT1M}
+
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS}
 
@@ -41,5 +55,9 @@ springdoc:
 
 logging:
   level:
+    org.springframework.data.repository.config: WARN
+    org.springframework.data.redis.repository.configuration: WARN
+    org.apache.kafka: WARN
+    org.springframework.kafka: WARN
     root: INFO
     dev.identityservice: INFO

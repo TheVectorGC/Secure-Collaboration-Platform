@@ -12,6 +12,8 @@ spring:
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
       timeout: ${REDIS_TIMEOUT:2s}
+    repositories:
+      enabled: false
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     consumer:
@@ -65,5 +67,8 @@ logging:
   pattern:
     level: "%5p [${spring.application.name:realtime-gateway}] [requestId=%X{requestId:-none}]"
   level:
+    org.springframework.data.repository.config: WARN
+    org.springframework.data.redis.repository.configuration: WARN
+    org.apache.kafka: WARN
+    org.springframework.kafka: WARN
     dev.realtimegateway: INFO
-    org.springframework.kafka: INFO
