@@ -1,18 +1,24 @@
+import { useState } from 'react';
 import { X, Image as ImageIcon, FileText } from 'lucide-react';
 import { DevAccountPanel } from '../../../admin/ui/DevAccountPanel';
 import type { ChatAttachmentDisplayMode } from '../ChatComposer';
 import type { ChatResponseDto } from '../../../../shared/types/api';
+import { getDirectCompanionAccountId } from '../../../../shared/lib/profile';
 
 type MessengerOverlaysProps = {
   selectedChat: ChatResponseDto | null;
+  currentAccountId: string | undefined;
   isDeleteChatConfirmOpen: boolean;
+  isClearHistoryConfirmOpen: boolean;
   droppedImageFiles: File[];
   isDraggingFileOverChat: boolean;
   isSelectedChatWritable: boolean;
   isDevToolsOpen: boolean;
   isAdmin: boolean;
   onCloseDeleteChatConfirm: () => void;
-  onDeleteSelectedChatLocally: () => void;
+  onCloseClearHistoryConfirm: () => void;
+  onClearSelectedChatHistory: () => void;
+  onDeleteSelectedChatLocally: (options?: { blockedAccountId?: string | null }) => void;
   onSendDroppedImages: (attachmentDisplayMode: ChatAttachmentDisplayMode) => void;
   onClearDroppedImageFiles: () => void;
   onCloseDraggingFileOverlay: () => void;
@@ -21,39 +27,96 @@ type MessengerOverlaysProps = {
 
 export function MessengerOverlays({
   selectedChat,
+  currentAccountId,
   isDeleteChatConfirmOpen,
+  isClearHistoryConfirmOpen,
   droppedImageFiles,
   isDraggingFileOverChat,
   isSelectedChatWritable,
   isDevToolsOpen,
   isAdmin,
   onCloseDeleteChatConfirm,
+  onCloseClearHistoryConfirm,
+  onClearSelectedChatHistory,
   onDeleteSelectedChatLocally,
   onSendDroppedImages,
   onClearDroppedImageFiles,
   onCloseDraggingFileOverlay,
   onCloseDevTools,
 }: MessengerOverlaysProps) {
+  const [shouldBlockUser, setShouldBlockUser] = useState(false);
+  const directCompanionAccountId = selectedChat?.type === 'DIRECT' ? getDirectCompanionAccountId(selectedChat, currentAccountId) : null;
+
+  function closeDeleteConfirmation() {
+    setShouldBlockUser(false);
+    onCloseDeleteChatConfirm();
+  }
+
+  function confirmDeleteChat() {
+    onDeleteSelectedChatLocally({
+      blockedAccountId: shouldBlockUser ? directCompanionAccountId : null,
+    });
+    setShouldBlockUser(false);
+  }
+
   return (
     <>
-      {isDeleteChatConfirmOpen && selectedChat && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-md">
+      {isClearHistoryConfirmOpen && selectedChat && (
+        <div className="absolute inset-0 z-[110] flex items-center justify-center bg-black/60 p-4 backdrop-blur-md">
           <div className="vector-surface-card w-full max-w-md p-5">
-            <div className="text-lg font-semibold text-white">Удалить чат?</div>
+            <div className="text-lg font-semibold text-white">Очистить историю?</div>
             <div className="mt-2 text-sm leading-6 text-zinc-400">
-              Чат исчезнет из списка на этом устройстве. История переписки не очищается и может снова появиться, если собеседник напишет новое сообщение.
+              Сообщения будут скрыты только на этом устройстве. Новые сообщения продолжат появляться в чате.
             </div>
             <div className="mt-5 flex justify-end gap-3">
               <button
                 type="button"
-                onClick={onCloseDeleteChatConfirm}
+                onClick={onCloseClearHistoryConfirm}
                 className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-zinc-300 transition hover:bg-white/[0.06] hover:text-white"
               >
                 Отмена
               </button>
               <button
                 type="button"
-                onClick={onDeleteSelectedChatLocally}
+                onClick={onClearSelectedChatHistory}
+                className="rounded-2xl bg-violet-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-400"
+              >
+                Очистить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isDeleteChatConfirmOpen && selectedChat && (
+        <div className="absolute inset-0 z-[110] flex items-center justify-center bg-black/60 p-4 backdrop-blur-md">
+          <div className="vector-surface-card w-full max-w-md p-5">
+            <div className="text-lg font-semibold text-white">Удалить чат?</div>
+            <div className="mt-2 text-sm leading-6 text-zinc-400">
+              Чат исчезнет из списка на этом устройстве. История переписки не очищается и может снова появиться, если собеседник напишет новое сообщение.
+            </div>
+            {directCompanionAccountId && (
+              <label className="mt-5 flex cursor-pointer items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-3 text-sm text-zinc-200 transition hover:bg-white/[0.055]">
+                <input
+                  type="checkbox"
+                  checked={shouldBlockUser}
+                  onChange={(event) => setShouldBlockUser(event.target.checked)}
+                  className="h-4 w-4 accent-violet-500"
+                />
+                Заблокировать пользователя
+              </label>
+            )}
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeDeleteConfirmation}
+                className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-zinc-300 transition hover:bg-white/[0.06] hover:text-white"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteChat}
                 className="rounded-2xl bg-red-500/90 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-400"
               >
                 Удалить чат

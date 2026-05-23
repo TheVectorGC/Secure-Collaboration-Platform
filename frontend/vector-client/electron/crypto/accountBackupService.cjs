@@ -1,4 +1,5 @@
 const crypto = require('node:crypto');
+const secureStorageService = require('./secureStorageService.cjs');
 
 const BACKUP_KDF_ALGORITHM = 'scrypt';
 const BACKUP_KDF_PARAMETERS = {
@@ -102,9 +103,41 @@ function hasAccountBackupPassword(accountId) {
   return accountBackupUnlockKeyByAccountId.has(accountId);
 }
 
+function restorePersistedAccountBackupPrivateKey(accountId) {
+  validateAccountId(accountId);
+
+  if (accountBackupPrivateKeyByAccountId.has(accountId)) {
+    return true;
+  }
+
+  try {
+    const privateKeyBase64 = secureStorageService.loadAccountBackupPrivateKey(accountId);
+
+    if (!privateKeyBase64) {
+      return false;
+    }
+
+    accountBackupPrivateKeyByAccountId.set(accountId, privateKeyBase64);
+    return true;
+  }
+  catch (error) {
+    console.warn('Unable to restore persisted account backup private key.', error);
+    return false;
+  }
+}
+
+function persistAccountBackupPrivateKey(accountId, privateKeyBase64) {
+  try {
+    secureStorageService.saveAccountBackupPrivateKey(accountId, privateKeyBase64);
+  }
+  catch (error) {
+    console.warn('Unable to persist account backup private key for trusted local unlock.', error);
+  }
+}
+
 function hasUnlockedAccountBackupPrivateKey(accountId) {
   validateAccountId(accountId);
-  return accountBackupPrivateKeyByAccountId.has(accountId);
+  return restorePersistedAccountBackupPrivateKey(accountId);
 }
 
 function resolveAccountBackupUnlockKey(accountId, backup) {
@@ -155,7 +188,9 @@ function createAccountBackupProfile(request) {
     },
   });
   const encryptedPrivateKey = encryptWithAesGcm(sessionKey.key, keyPair.privateKey);
-  accountBackupPrivateKeyByAccountId.set(request.accountId, toBase64(keyPair.privateKey));
+  const privateKeyBase64 = toBase64(keyPair.privateKey);
+  accountBackupPrivateKeyByAccountId.set(request.accountId, privateKeyBase64);
+  persistAccountBackupPrivateKey(request.accountId, privateKeyBase64);
 
   return {
     backupPublicKeyBase64: toBase64(keyPair.publicKey),
@@ -180,7 +215,9 @@ function unlockAccountBackupProfile(request) {
     request.privateKeyAuthenticationTagBase64,
     request.encryptedBackupPrivateKeyBase64
   );
-  accountBackupPrivateKeyByAccountId.set(request.accountId, toBase64(privateKeyDer));
+  const privateKeyBase64 = toBase64(privateKeyDer);
+  accountBackupPrivateKeyByAccountId.set(request.accountId, privateKeyBase64);
+  persistAccountBackupPrivateKey(request.accountId, privateKeyBase64);
 
   return {
     unlocked: true,
@@ -216,6 +253,7 @@ function decryptAccountKeyEnvelope(request) {
     throw new Error('encryptedKeyBase64 is required.');
   }
 
+  restorePersistedAccountBackupPrivateKey(request.accountId);
   const privateKeyBase64 = accountBackupPrivateKeyByAccountId.get(request.accountId);
 
   if (!privateKeyBase64) {

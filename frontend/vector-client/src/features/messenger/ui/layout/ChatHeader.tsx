@@ -35,7 +35,7 @@ export function ChatHeader({
   }
 
   return (
-    <header className="flex h-[86px] items-center justify-between border-b border-white/10 bg-[#11131b]/78 px-7 shadow-xl shadow-black/14 backdrop-blur-2xl">
+    <header className="relative z-40 flex h-[86px] items-center justify-between border-b border-white/10 bg-[#11131b]/78 px-7 shadow-xl shadow-black/14 backdrop-blur-2xl">
       <div className="flex min-w-0 items-center gap-4">
         <button
           type="button"
@@ -83,20 +83,20 @@ export function ChatHeader({
           </button>
 
           {isChatActionsMenuOpen && (
-            <div className="absolute right-0 top-12 z-[80] w-64 rounded-3xl border border-white/10 bg-[#171923]/96 p-2 text-sm shadow-2xl shadow-black/50 backdrop-blur-2xl">
+            <div className="absolute right-0 top-12 z-[140] w-64 rounded-3xl border border-white/10 bg-[#171923] p-2 text-sm shadow-2xl shadow-black/60">
               <button
                 type="button"
                 onClick={onClearSelectedChatHistory}
-                className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-zinc-200 transition hover:bg-white/[0.06]"
+                className="flex min-h-12 w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-zinc-200 transition hover:bg-white/[0.06]"
               >
                 <Eraser size={17} className="text-zinc-400" />
-                Очистить историю у меня
+                Очистить историю
               </button>
               {selectedChat.type !== 'SELF' && (
                 <button
                   type="button"
                   onClick={onOpenDeleteChatConfirm}
-                  className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-red-200 transition hover:bg-red-500/10"
+                  className="flex min-h-12 w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-red-200 transition hover:bg-red-500/10"
                 >
                   <Trash2 size={17} />
                   Удалить чат

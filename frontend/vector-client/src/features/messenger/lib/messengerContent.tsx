@@ -7,12 +7,14 @@ import type { DocumentAttachmentMessageContent, FileAttachmentMessageContent, Me
 import { UserAvatar, getAccountAvatarUrl } from './messengerProfileVisual';
 import { type ForwardedMessageSnapshot, type ReplyDraft, type RichMessageContent } from './messengerTypes';
 
+export const DECRYPTION_PLACEHOLDER_TEXT = 'Зашифрованное сообщение';
+
 export function isDecryptionPlaceholder(value: string | undefined): boolean {
   if (!value) {
     return false;
   }
 
-  return value === '[Не удалось расшифровать сообщение]' || value === '[Сообщение недоступно для этого устройства]' || value === '[Ключ группы пока недоступен]';
+  return value === DECRYPTION_PLACEHOLDER_TEXT || value === '[Не удалось расшифровать сообщение]' || value === '[Сообщение недоступно для этого устройства]' || value === '[Ключ группы пока недоступен]';
 }
 export function parseRichMessageContent(value: string | null | undefined): RichMessageContent | null {
   if (!value) {
@@ -111,9 +113,13 @@ export function getMessageContentPreview(plainText: string | undefined, fallback
 
     if (richMessageContent.attachments.length > 0) {
       const imageCount = richMessageContent.attachments.filter((attachment) => attachment.attachmentDisplayMode === 'IMAGE').length;
+      if (richMessageContent.attachments.length === 1) {
+        return richMessageContent.attachments[0].attachmentDisplayMode === 'IMAGE' ? 'Фотография' : 'Файл';
+      }
+
       return imageCount === richMessageContent.attachments.length
-        ? `${richMessageContent.attachments.length} фото`
-        : `${richMessageContent.attachments.length} вложений`;
+        ? 'Фотографии'
+        : 'Файлы';
     }
 
     if (richMessageContent.forwardedMessages.length > 0) {
@@ -128,7 +134,7 @@ export function getMessageContentPreview(plainText: string | undefined, fallback
       return 'Фотография';
     }
 
-    return `Файл: ${fileAttachment.fileName}`;
+    return 'Файл';
   }
 
   const documentAttachment = parseDocumentAttachmentMessageContent(plainText);

@@ -56,7 +56,18 @@ function readPresenceByAccountId(): Record<string, AccountPresenceState> {
 }
 
 function persistPresenceByAccountId(presenceByAccountId: Record<string, AccountPresenceState>) {
-  localStorage.setItem(PRESENCE_STORAGE_KEY, JSON.stringify(presenceByAccountId));
+  const persistedPresenceByAccountId = Object.fromEntries(
+    Object.entries(presenceByAccountId).map(([accountId, presence]) => [
+      accountId,
+      {
+        ...presence,
+        isOnline: false,
+        lastSeenAt: presence.isOnline ? presence.lastSeenAt ?? null : presence.lastSeenAt,
+      },
+    ]),
+  );
+
+  localStorage.setItem(PRESENCE_STORAGE_KEY, JSON.stringify(persistedPresenceByAccountId));
 }
 
 function mapPresencePayload(payload: AccountPresencePayload): AccountPresenceState {

@@ -1,7 +1,7 @@
 import { parseDocumentAttachmentMessageContent, parseFileAttachmentMessageContent } from '../../media/lib/fileCrypto';
 import type { MessageResponseDto, ProfileResponseDto } from '../../../shared/types/api';
 import { type ChatListPreview } from './messengerTypes';
-import { isDecryptionPlaceholder, parseRichMessageContent } from './messengerContent';
+import { DECRYPTION_PLACEHOLDER_TEXT, isDecryptionPlaceholder, parseRichMessageContent } from './messengerContent';
 import { formatGroupSystemMessage, parseGroupSystemMessagePayload } from './messengerGroupSystem';
 export function getVisibleChatMessages(messages: MessageResponseDto[], clearedAt: string | null | undefined): MessageResponseDto[] {
   if (!clearedAt) {
@@ -35,7 +35,7 @@ export function buildChatPreviewFromMessage(
   }
 
   if (!decryptedMessage || isDecryptionPlaceholder(decryptedMessage) || decryptedMessage === 'Расшифровка…') {
-    return { text: 'Зашифрованное сообщение', accent: 'muted' };
+    return { text: DECRYPTION_PLACEHOLDER_TEXT, accent: 'muted' };
   }
 
   const fileAttachment = parseFileAttachmentMessageContent(decryptedMessage);
@@ -45,7 +45,7 @@ export function buildChatPreviewFromMessage(
       return { text: 'Фотография', accent: 'media' };
     }
 
-    return { text: `Файл: ${fileAttachment.fileName}`, accent: 'media' };
+    return { text: 'Файл', accent: 'media' };
   }
 
   const documentAttachment = parseDocumentAttachmentMessageContent(decryptedMessage);
@@ -63,6 +63,22 @@ export function buildChatPreviewFromMessage(
       return {
         text: compactRichText.length > 58 ? `${compactRichText.slice(0, 58)}…` : compactRichText,
         accent: 'default',
+      };
+    }
+
+    if (richMessageContent.attachments.length > 0) {
+      const imageAttachmentCount = richMessageContent.attachments.filter((attachment) => attachment.attachmentDisplayMode === 'IMAGE').length;
+
+      if (richMessageContent.attachments.length === 1) {
+        return {
+          text: richMessageContent.attachments[0].attachmentDisplayMode === 'IMAGE' ? 'Фотография' : 'Файл',
+          accent: 'media',
+        };
+      }
+
+      return {
+        text: imageAttachmentCount === richMessageContent.attachments.length ? 'Фотографии' : 'Файлы',
+        accent: 'media',
       };
     }
 

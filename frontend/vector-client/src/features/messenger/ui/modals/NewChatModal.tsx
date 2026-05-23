@@ -130,7 +130,7 @@ export function NewChatModal({
 
         <div className="relative grid gap-5 p-6 md:grid-cols-[1fr_18rem]">
           <div className="min-w-0">
-            <div className="mb-4 flex items-center gap-3 rounded-[1.6rem] border border-white/10 bg-white/[0.055] px-4 py-3 shadow-inner shadow-black/15 transition focus-within:border-violet-300/35 focus-within:bg-white/[0.075]">
+            <div className="mb-4 flex items-center gap-3 rounded-[1.6rem] border border-white/10 bg-[#20212a] px-4 py-3 shadow-inner shadow-black/15 transition focus-within:border-violet-300/35 focus-within:bg-[#242633]">
               <Search size={18} className="text-zinc-500" />
               <input
                 autoFocus
@@ -214,7 +214,7 @@ export function NewChatModal({
             </div>
           </div>
 
-          <aside className="rounded-[1.75rem] border border-white/10 bg-black/18 p-4">
+          <aside className="rounded-[1.75rem] border border-white/10 bg-[#151721] p-4">
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-violet-200/80">
               <Users size={15} />
               Группа
@@ -222,10 +222,10 @@ export function NewChatModal({
             <input
               value={groupName}
               onChange={(event) => setGroupName(event.target.value)}
-              className="mt-4 w-full rounded-2xl border border-white/10 bg-white/[0.045] px-4 py-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 transition focus:border-violet-300/35 focus:bg-white/[0.065]"
+              className="mt-4 w-full rounded-2xl border border-white/10 bg-[#20212a] px-4 py-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 transition focus:border-violet-300/35 focus:bg-[#242633]"
               placeholder="Название группы"
             />
-            <div className="mt-4 min-h-24 rounded-2xl border border-white/8 bg-white/[0.025] p-3">
+            <div className="mt-4 min-h-24 rounded-2xl border border-white/8 bg-[#191b24] p-3">
               {selectedProfiles.length === 0 ? (
                 <div className="flex h-full min-h-16 items-center justify-center text-center text-xs leading-5 text-zinc-500">Отметь сотрудников плюсом слева — они появятся здесь.</div>
               ) : (

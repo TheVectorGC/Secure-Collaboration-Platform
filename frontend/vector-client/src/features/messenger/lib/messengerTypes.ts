@@ -69,6 +69,7 @@ export type LocalChatState = {
   readAtByChatId: Record<string, string>;
   clearedAtByChatId: Record<string, string>;
   hiddenChatIds: string[];
+  blockedAccountIds: string[];
 };
 
 export type ChatListPreview = {

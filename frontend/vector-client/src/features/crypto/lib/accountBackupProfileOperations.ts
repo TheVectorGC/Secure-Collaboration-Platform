@@ -8,6 +8,33 @@ function isNotFoundError(error: unknown): boolean {
   return (error as { response?: { status?: number } })?.response?.status === 404;
 }
 
+export async function prepareAccountBackupUnlockKey(accountId: string, accountPassword: string): Promise<void> {
+  if (!window.vectorCrypto) {
+    throw new Error('Local cryptography is not available.');
+  }
+
+  try {
+    const existingProfile = await getCurrentAccountBackupProfile();
+    await window.vectorCrypto.setAccountBackupPassword({
+      accountId,
+      password: accountPassword,
+      kdfSaltBase64: existingProfile.kdfSaltBase64,
+      kdfParametersJson: existingProfile.kdfParametersJson,
+    });
+    return;
+  }
+  catch (error) {
+    if (!isNotFoundError(error)) {
+      throw error;
+    }
+  }
+
+  await window.vectorCrypto.setAccountBackupPassword({
+    accountId,
+    password: accountPassword,
+  });
+}
+
 export async function ensureAccountBackupProfileUnlocked(accountId: string): Promise<AccountBackupProfileResponseDto> {
   if (!window.vectorCrypto) {
     throw new Error('Local cryptography is not available.');
@@ -40,4 +67,9 @@ export async function ensureAccountBackupProfileUnlocked(accountId: string): Pro
     });
     return savedProfile;
   }
+}
+
+export async function unlockAccountBackupProfileWithPassword(accountId: string, accountPassword: string): Promise<AccountBackupProfileResponseDto> {
+  await prepareAccountBackupUnlockKey(accountId, accountPassword);
+  return ensureAccountBackupProfileUnlocked(accountId);
 }

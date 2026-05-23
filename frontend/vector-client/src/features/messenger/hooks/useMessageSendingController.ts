@@ -5,8 +5,7 @@ import { sendMessage } from '../../messages/api/messagesApi';
 import { getCurrentAccountGroupEpochKeyEnvelope } from '../../chats/api/chatsApi';
 import { getAccountBackupPublicKey } from '../../crypto/api/accountBackupProfileApi';
 import type { AccountKeyEnvelopeRequestDto, ChatResponseDto, DeviceMessagePayloadRequestDto, FileAttachmentMessageContent, MessageResponseDto } from '../../../shared/types/api';
-import type { ForwardedMessageSnapshot, PendingAttachmentDraft, ReplyDraft } from '../../../pages/MessengerPageSupport';
-import { buildRichMessageContent, getActiveGroupParticipantAccountIds, isCurrentAccountActiveInChat } from '../../../pages/MessengerPageSupport';
+import { buildRichMessageContent, getActiveGroupParticipantAccountIds, isCurrentAccountActiveInChat, type ForwardedMessageSnapshot, type PendingAttachmentDraft, type ReplyDraft } from '../lib/messengerCore';
 
 type UseMessageSendingControllerParams = {
   selectedChatId: string | null;

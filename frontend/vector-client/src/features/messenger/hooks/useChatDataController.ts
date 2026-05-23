@@ -3,6 +3,7 @@ import { createSelfChat, getChat, getChats } from '../../chats/api/chatsApi';
 import { getChatMessages, markMessageDelivered } from '../../messages/api/messagesApi';
 import type { ChatResponseDto, MessageResponseDto } from '../../../shared/types/api';
 import type { LocalChatState } from '../lib/messengerCore';
+import { getDirectCompanionAccountId } from '../../../shared/lib/profile';
 
 
 type UpdateLocalChatState = (updater: (previousValue: LocalChatState) => LocalChatState) => void;
@@ -107,8 +108,7 @@ export function useChatDataController(params: UseChatDataControllerParams) {
         setMessages(selectedChatId, loadedMessages);
       }
       catch (error) {
-        console.error(error);
-        setErrorMessage('Не удалось загрузить сообщения.');
+        console.warn('Failed to load selected chat messages.', error);
       }
     }
 
@@ -150,7 +150,18 @@ export function useChatDataController(params: UseChatDataControllerParams) {
       return;
     }
 
+    const blockedAccountIdSet = new Set(localChatState.blockedAccountIds ?? []);
     const hiddenChatIdsToRestore = localChatState.hiddenChatIds.filter((hiddenChatId) => {
+      const hiddenChat = chats.find((chat) => chat.chatId === hiddenChatId) ?? null;
+
+      if (hiddenChat?.type === 'DIRECT') {
+        const companionAccountId = getDirectCompanionAccountId(hiddenChat, currentAccountId);
+
+        if (companionAccountId && blockedAccountIdSet.has(companionAccountId)) {
+          return false;
+        }
+      }
+
       const chatMessages = messagesByChatId[hiddenChatId] ?? [];
       const clearedAt = localChatState.clearedAtByChatId[hiddenChatId];
       const clearedAtTime = clearedAt ? new Date(clearedAt).getTime() : 0;
@@ -171,7 +182,7 @@ export function useChatDataController(params: UseChatDataControllerParams) {
       ...previousValue,
       hiddenChatIds: previousValue.hiddenChatIds.filter((hiddenChatId) => !hiddenChatIdRestoreSet.has(hiddenChatId)),
     }));
-  }, [localChatState.clearedAtByChatId, localChatState.hiddenChatIds, messagesByChatId, currentAccountId]);
+  }, [chats, localChatState.blockedAccountIds, localChatState.clearedAtByChatId, localChatState.hiddenChatIds, messagesByChatId, currentAccountId]);
 
   useEffect(() => {
     if (!selectedChatId) {

@@ -88,10 +88,14 @@ export function MessageTimeline({
         {renderedMessages.map((message, messageIndex) => {
           const previousMessage = messageIndex > 0 ? renderedMessages[messageIndex - 1] : null;
           const shouldShowDateSeparator = !previousMessage || !isSameCalendarDate(previousMessage.createdAt, message.createdAt);
-          const decryptedMessage = decryptedMessagesById[message.messageId] ?? 'Расшифровка…';
+          const decryptedMessage = decryptedMessagesById[message.messageId];
+
+          if (message.messageType !== 'SYSTEM' && !decryptedMessage) {
+            return null;
+          }
 
           if (message.messageType === 'SYSTEM') {
-            const systemPayload = parseGroupSystemMessagePayload(decryptedMessage);
+            const systemPayload = parseGroupSystemMessagePayload(decryptedMessage ?? message.encryptedPayload);
             return (
               <div key={message.messageId}>
                 {shouldShowDateSeparator && <MessageDateSeparator createdAt={message.createdAt} />}
@@ -194,7 +198,7 @@ export function MessageTimeline({
                       {richMessageContent?.replyTo && (
                         <ReplyReferenceBlock replyTo={richMessageContent.replyTo} isOwnMessage={isOwnMessage} onOpenOriginalMessage={onScrollToMessage} />
                       )}
-                      {visibleMessageText.trim() && !fileAttachment && !documentAttachment && !isDecryptionPlaceholder(visibleMessageText) && visibleMessageText !== 'Расшифровка…' && (
+                      {visibleMessageText.trim() && !fileAttachment && !documentAttachment && !isDecryptionPlaceholder(visibleMessageText) && (
                         <div className="whitespace-pre-wrap text-sm leading-6">
                           {visibleMessageText}
                         </div>
@@ -207,7 +211,7 @@ export function MessageTimeline({
                         ) : (
                           <FileAttachmentBlock attachment={fileAttachment} isOwnMessage={isOwnMessage} onDownload={onDownloadAttachment} />
                         )
-                      ) : (!visibleMessageText.trim() || isDecryptionPlaceholder(visibleMessageText) || visibleMessageText === 'Расшифровка…') && !richMessageContent?.forwardedMessages.length && richAttachments.length === 0 ? (
+                      ) : (!visibleMessageText.trim() || isDecryptionPlaceholder(visibleMessageText)) && !richMessageContent?.forwardedMessages.length && richAttachments.length === 0 ? (
                         <div className="whitespace-pre-wrap text-sm leading-6">
                           {visibleMessageText || 'Сообщение'}
                         </div>

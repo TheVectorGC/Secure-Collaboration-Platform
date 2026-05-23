@@ -5,6 +5,8 @@ const path = require('node:path');
 
 const MASTER_KEY_FILE_NAME = 'vector-master-key.bin';
 const CLIENT_INSTALLATION_ID_FILE_NAME = 'vector-client-installation-id.bin';
+const ACCOUNT_BACKUP_PRIVATE_KEY_FILE_PREFIX = 'vector-account-backup-private-key.';
+const ACCOUNT_BACKUP_PRIVATE_KEY_FILE_SUFFIX = '.bin';
 
 function getCryptoDirectory() {
   const cryptoDirectory = path.join(app.getPath('userData'), 'crypto');
@@ -18,6 +20,21 @@ function getMasterKeyFilePath() {
 
 function getClientInstallationIdFilePath() {
   return path.join(getCryptoDirectory(), CLIENT_INSTALLATION_ID_FILE_NAME);
+}
+
+function normalizeStorageFilePart(value) {
+  if (!value || typeof value !== 'string') {
+    throw new Error('Storage key is required.');
+  }
+
+  return value.replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+function getAccountBackupPrivateKeyFilePath(accountId) {
+  return path.join(
+    getCryptoDirectory(),
+    `${ACCOUNT_BACKUP_PRIVATE_KEY_FILE_PREFIX}${normalizeStorageFilePart(accountId)}${ACCOUNT_BACKUP_PRIVATE_KEY_FILE_SUFFIX}`
+  );
 }
 
 function createMasterKey() {
@@ -82,6 +99,45 @@ function getOrCreateClientInstallationId() {
   return clientInstallationId;
 }
 
+function saveAccountBackupPrivateKey(accountId, privateKeyBase64) {
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error('Electron safeStorage encryption is not available on this system.');
+  }
+
+  if (!privateKeyBase64 || typeof privateKeyBase64 !== 'string') {
+    throw new Error('privateKeyBase64 is required.');
+  }
+
+  const encryptedPrivateKey = safeStorage.encryptString(privateKeyBase64);
+  fs.writeFileSync(getAccountBackupPrivateKeyFilePath(accountId), encryptedPrivateKey, { mode: 0o600 });
+
+  return { saved: true };
+}
+
+function loadAccountBackupPrivateKey(accountId) {
+  const privateKeyFilePath = getAccountBackupPrivateKeyFilePath(accountId);
+
+  if (!fs.existsSync(privateKeyFilePath)) {
+    return null;
+  }
+
+  if (!safeStorage.isEncryptionAvailable()) {
+    return null;
+  }
+
+  return safeStorage.decryptString(fs.readFileSync(privateKeyFilePath));
+}
+
+function clearAccountBackupPrivateKey(accountId) {
+  const privateKeyFilePath = getAccountBackupPrivateKeyFilePath(accountId);
+
+  if (fs.existsSync(privateKeyFilePath)) {
+    fs.rmSync(privateKeyFilePath, { force: true });
+  }
+
+  return { cleared: true };
+}
+
 function getHealth() {
   return {
     safeStorageAvailable: safeStorage.isEncryptionAvailable(),
@@ -96,5 +152,8 @@ module.exports = {
   getOrCreateClientInstallationId,
   getOrCreateMasterKey,
   clearMasterKey,
+  saveAccountBackupPrivateKey,
+  loadAccountBackupPrivateKey,
+  clearAccountBackupPrivateKey,
   getHealth,
 };

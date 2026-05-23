@@ -3,7 +3,7 @@ import { Clock3, LoaderCircle, Mail, MessageSquare, User, X } from 'lucide-react
 import { getDisplayName } from '../../../shared/lib/profile';
 import type { ProfileResponseDto } from '../../../shared/types/api';
 import type { AccountPresenceState } from '../../realtime/model/realtimeStore';
-import { Avatar, getAccountActivityLabel, getAccountAvatarUrl, UserAvatar } from '../../messenger/lib/messengerCore';
+import { getAccountActivityLabel, getAccountAvatarUrl, UserAvatar } from '../../messenger/lib/messengerCore';
 
 export function MiniProfileModal({
   profile,

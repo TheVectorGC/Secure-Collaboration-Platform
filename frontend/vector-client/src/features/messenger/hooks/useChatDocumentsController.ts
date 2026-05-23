@@ -3,14 +3,7 @@ import { addDocumentObservers, cancelDocument, createDocument, getDocument, getD
 import { downloadEncryptedMediaFile, uploadEncryptedMediaFile } from '../../media/api/mediaApi';
 import { decryptDownloadedFile, encryptFileForUpload, parseDocumentAttachmentMessageContent } from '../../media/lib/fileCrypto';
 import type { DocumentAttachmentMessageContent, DocumentResponseDto, FileAttachmentMessageContent } from '../../../shared/types/api';
-
-export type DocumentCreationDraft = {
-  file: File;
-  title: string;
-  description: string;
-  requiredSignerAccountIds: string[];
-  observerAccountIds: string[];
-};
+import type { DocumentCreationDraft } from '../lib/messengerCore';
 
 type UseChatDocumentsControllerParams = {
   currentAccountId: string | undefined;

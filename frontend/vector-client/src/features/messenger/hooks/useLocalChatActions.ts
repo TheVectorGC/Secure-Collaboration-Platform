@@ -8,6 +8,7 @@ type UseLocalChatActionsParams = {
   updateLocalChatState: (updater: (previousValue: LocalChatState) => LocalChatState) => void;
   setIsChatActionsMenuOpen: (isOpen: boolean) => void;
   setIsDeleteChatConfirmOpen: (isOpen: boolean) => void;
+  setIsClearHistoryConfirmOpen: (isOpen: boolean) => void;
 };
 
 export function useLocalChatActions({
@@ -17,6 +18,7 @@ export function useLocalChatActions({
   updateLocalChatState,
   setIsChatActionsMenuOpen,
   setIsDeleteChatConfirmOpen,
+  setIsClearHistoryConfirmOpen,
 }: UseLocalChatActionsParams) {
   function handleClearSelectedChatHistory() {
     if (!selectedChatId) {
@@ -37,19 +39,24 @@ export function useLocalChatActions({
       },
     }));
 
+    setIsClearHistoryConfirmOpen(false);
     setIsChatActionsMenuOpen(false);
   }
 
-  function handleDeleteSelectedChatLocally() {
+  function handleDeleteSelectedChatLocally(options?: { blockedAccountId?: string | null }) {
     if (!selectedChatId) {
       return;
     }
 
     const chatIdToHide = selectedChatId;
+    const blockedAccountId = options?.blockedAccountId ?? null;
 
     updateLocalChatState((previousValue) => ({
       ...previousValue,
       hiddenChatIds: Array.from(new Set([...previousValue.hiddenChatIds, chatIdToHide])),
+      blockedAccountIds: blockedAccountId
+        ? Array.from(new Set([...(previousValue.blockedAccountIds ?? []), blockedAccountId]))
+        : previousValue.blockedAccountIds ?? [],
     }));
 
     const nextChat = filteredChats.find((chat) => chat.chatId !== chatIdToHide && chat.type === 'SELF')

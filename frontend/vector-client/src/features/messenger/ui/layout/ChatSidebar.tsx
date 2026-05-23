@@ -1,4 +1,4 @@
-import { Check, CheckCheck, FileText, Plus, Search, Star, Wifi, WifiOff, Wrench } from 'lucide-react';
+import { Check, CheckCheck, FileText, Plus, Search, Star, Wrench } from 'lucide-react';
 import { formatChatTime } from '../../../../shared/lib/dateFormat';
 import { getDirectCompanionAccountId, getDisplayName } from '../../../../shared/lib/profile';
 import type { ChatResponseDto, MessageResponseDto, ProfileResponseDto } from '../../../../shared/types/api';
@@ -55,11 +55,11 @@ export function ChatSidebar({
   const currentUserDisplayName = currentProfile ? getDisplayName(currentProfile) : 'Vector user';
 
   return (
-    <aside className="vector-panel relative z-10 flex w-[398px] shrink-0 flex-col rounded-r-[2rem] border-y-0 border-l-0 shadow-2xl shadow-black/35">
+    <aside className="vector-panel relative z-10 flex w-[398px] shrink-0 flex-col border-y-0 border-l-0 shadow-2xl shadow-black/35">
       <div className="border-b border-white/10 p-5">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-violet-300/70">Vector Messenger</div>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-violet-300/70">VECTOR</div>
             <div className="mt-1 text-2xl font-semibold tracking-tight text-zinc-50">Чаты</div>
           </div>
 
@@ -174,16 +174,14 @@ export function ChatSidebar({
             className="flex min-w-0 flex-1 items-center gap-3 rounded-[1.35rem] p-2 text-left transition hover:bg-white/[0.05]"
             title="Открыть настройки"
           >
-            <UserAvatar label={currentUserDisplayName} imageUrl={getAccountAvatarUrl(currentProfile, localAvatarDataUrl)} size="sm" />
+            <span className="relative shrink-0">
+              <UserAvatar label={currentUserDisplayName} imageUrl={getAccountAvatarUrl(currentProfile, localAvatarDataUrl)} size="sm" />
+              <span className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-[#17181c] ${realtimeStatus === 'connected' ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
+            </span>
 
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-semibold text-zinc-100">{currentUserDisplayName}</div>
-              <div className="mt-1 flex items-center gap-2 text-xs text-zinc-500">
-                {realtimeStatus === 'connected'
-                  ? <Wifi size={13} className="text-emerald-300" />
-                  : <WifiOff size={13} className="text-zinc-600" />}
-                <span>@{currentProfile?.username ?? 'user'} • {cryptoStatus === 'ready' ? 'защищено' : 'настройка'}</span>
-              </div>
+              <div className="mt-1 truncate text-xs text-zinc-500">@{currentProfile?.username ?? 'user'} • {cryptoStatus === 'ready' ? 'защищено' : 'настройка'}</div>
             </div>
           </button>
 

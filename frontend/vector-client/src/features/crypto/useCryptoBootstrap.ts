@@ -40,6 +40,8 @@ export function useCryptoBootstrap() {
   const setReady = useCryptoStore((state) => state.setReady);
   const setUnavailable = useCryptoStore((state) => state.setUnavailable);
   const setError = useCryptoStore((state) => state.setError);
+  const setLocked = useCryptoStore((state) => state.setLocked);
+  const bootstrapVersion = useCryptoStore((state) => state.bootstrapVersion);
 
   useEffect(() => {
     if (!profile?.accountId || !deviceId) {
@@ -80,14 +82,38 @@ export function useCryptoBootstrap() {
           return;
         }
 
-        await ensureAccountBackupProfileUnlocked(activeAccountId);
-
-        const accountBackupPrivateKeyUnlocked = await window.vectorCrypto!.hasUnlockedAccountBackupPrivateKey({
+        let accountBackupPrivateKeyUnlocked = await window.vectorCrypto!.hasUnlockedAccountBackupPrivateKey({
           accountId: activeAccountId,
         });
 
         if (!accountBackupPrivateKeyUnlocked) {
-          throw new Error('Account backup private key is not unlocked. Sign in again.');
+          try {
+            await ensureAccountBackupProfileUnlocked(activeAccountId);
+            accountBackupPrivateKeyUnlocked = await window.vectorCrypto!.hasUnlockedAccountBackupPrivateKey({
+              accountId: activeAccountId,
+            });
+          }
+          catch (error) {
+            const message = error instanceof Error ? error.message : '';
+
+            if (message.includes('Backup unlock key is not available') || message.includes('Sign in again') || message.includes('confirm your password')) {
+              if (!cancelled) {
+                setLocked('Подтвердите пароль, чтобы открыть защищённые сообщения.');
+              }
+
+              return;
+            }
+
+            throw error;
+          }
+        }
+
+        if (!accountBackupPrivateKeyUnlocked) {
+          if (!cancelled) {
+            setLocked('Подтвердите пароль, чтобы открыть защищённые сообщения.');
+          }
+
+          return;
         }
 
         setStatus('registering');
@@ -125,5 +151,5 @@ export function useCryptoBootstrap() {
     return () => {
       cancelled = true;
     };
-  }, [deviceId, profile?.accountId, setError, setReady, setStatus, setUnavailable]);
+  }, [bootstrapVersion, deviceId, profile?.accountId, setError, setLocked, setReady, setStatus, setUnavailable]);
 }

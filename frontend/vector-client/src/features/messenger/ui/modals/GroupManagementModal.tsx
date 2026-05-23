@@ -306,7 +306,7 @@ export function GroupManagementModal({
                 />
                 <div>
                   <div className="text-sm font-semibold text-zinc-100">Вся доступная история</div>
-                  <div className="mt-1 text-xs leading-5 text-zinc-500">Участник сможет открыть всю доступную историю группы.</div>
+                  <div className="mt-1 text-xs leading-5 text-zinc-500">Новый участник увидит историю, доступную администратору, который добавляет его в группу.</div>
                 </div>
               </div>
             </label>
@@ -319,8 +319,8 @@ export function GroupManagementModal({
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 disabled={!canManageMembers}
-                className="w-full bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-600 disabled:cursor-not-allowed"
-                placeholder="Найти пользователя по имени, username или email"
+                className="min-w-0 flex-1 bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-600 disabled:cursor-not-allowed"
+                placeholder="Имя, username или email"
               />
               {isSearching && <LoaderCircle size={16} className="animate-spin text-violet-200" />}
             </div>

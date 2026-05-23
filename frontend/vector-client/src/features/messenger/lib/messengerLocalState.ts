@@ -8,6 +8,7 @@ export function createEmptyLocalChatState(): LocalChatState {
     readAtByChatId: {},
     clearedAtByChatId: {},
     hiddenChatIds: [],
+    blockedAccountIds: [],
   };
 }
 
@@ -25,6 +26,7 @@ export function readLocalChatState(accountId: string | undefined): LocalChatStat
       readAtByChatId: parsedValue.readAtByChatId ?? {},
       clearedAtByChatId: parsedValue.clearedAtByChatId ?? {},
       hiddenChatIds: parsedValue.hiddenChatIds ?? [],
+      blockedAccountIds: parsedValue.blockedAccountIds ?? [],
     };
   }
   catch {

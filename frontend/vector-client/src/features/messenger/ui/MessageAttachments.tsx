@@ -4,6 +4,43 @@ import { downloadEncryptedMediaFile } from '../../media/api/mediaApi';
 import { decryptDownloadedFile, formatFileSize } from '../../media/lib/fileCrypto';
 import type { DocumentAttachmentMessageContent, FileAttachmentMessageContent } from '../../../shared/types/api';
 
+const imagePreviewUrlCache = new Map<string, string>();
+const imagePreviewPromiseCache = new Map<string, Promise<string>>();
+
+function buildPreviewCacheKey(attachment: FileAttachmentMessageContent): string {
+  return `${attachment.mediaFileId}:${attachment.fileEncryption.keyBase64}:${attachment.fileEncryption.initializationVectorBase64}:${attachment.encryptedSha256Base64}`;
+}
+
+async function loadImagePreviewUrl(attachment: FileAttachmentMessageContent): Promise<string> {
+  const cacheKey = buildPreviewCacheKey(attachment);
+  const cachedPreviewUrl = imagePreviewUrlCache.get(cacheKey);
+
+  if (cachedPreviewUrl) {
+    return cachedPreviewUrl;
+  }
+
+  const existingPromise = imagePreviewPromiseCache.get(cacheKey);
+
+  if (existingPromise) {
+    return existingPromise;
+  }
+
+  const previewPromise = (async () => {
+    const encryptedBytes = await downloadEncryptedMediaFile(attachment.mediaFileId);
+    const decryptedBlob = await decryptDownloadedFile(encryptedBytes, attachment);
+    const objectUrl = URL.createObjectURL(decryptedBlob);
+    imagePreviewUrlCache.set(cacheKey, objectUrl);
+    imagePreviewPromiseCache.delete(cacheKey);
+    return objectUrl;
+  })().catch((error) => {
+    imagePreviewPromiseCache.delete(cacheKey);
+    throw error;
+  });
+
+  imagePreviewPromiseCache.set(cacheKey, previewPromise);
+  return previewPromise;
+}
+
 export function ImageAttachmentPreview({
   attachment,
   onDownload,
@@ -11,25 +48,34 @@ export function ImageAttachmentPreview({
   attachment: FileAttachmentMessageContent;
   onDownload: (attachment: FileAttachmentMessageContent) => Promise<void>;
 }) {
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(() => imagePreviewUrlCache.get(buildPreviewCacheKey(attachment)) ?? null);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(!previewUrl);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [isViewerOpen, setIsViewerOpen] = useState(false);
+  const previewCacheKey = buildPreviewCacheKey(attachment);
 
   useEffect(() => {
     let isCancelled = false;
-    let objectUrl: string | null = null;
+    const cachedPreviewUrl = imagePreviewUrlCache.get(previewCacheKey);
+
+    if (cachedPreviewUrl) {
+      setPreviewUrl(cachedPreviewUrl);
+      setPreviewError(null);
+      setIsLoadingPreview(false);
+      return () => {
+        isCancelled = true;
+      };
+    }
 
     async function loadPreview() {
       setIsLoadingPreview(true);
       setPreviewError(null);
 
       try {
-        const encryptedBytes = await downloadEncryptedMediaFile(attachment.mediaFileId);
-        const decryptedBlob = await decryptDownloadedFile(encryptedBytes, attachment);
-        objectUrl = URL.createObjectURL(decryptedBlob);
+        const loadedPreviewUrl = await loadImagePreviewUrl(attachment);
 
         if (!isCancelled) {
-          setPreviewUrl(objectUrl);
+          setPreviewUrl(loadedPreviewUrl);
         }
       }
       catch (error) {
@@ -50,14 +96,8 @@ export function ImageAttachmentPreview({
 
     return () => {
       isCancelled = true;
-
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
     };
-  }, [attachment]);
-
-  const [isViewerOpen, setIsViewerOpen] = useState(false);
+  }, [attachment, previewCacheKey]);
 
   return (
     <>

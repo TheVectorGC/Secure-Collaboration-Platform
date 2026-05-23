@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { getCurrentAccountGroupEpochKeyEnvelope } from '../../chats/api/chatsApi';
 import type { MessageResponseDto } from '../../../shared/types/api';
-import { decryptDirectMessageWithAvailablePayloads, isDecryptionPlaceholder } from '../lib/messengerCore';
+import { DECRYPTION_PLACEHOLDER_TEXT, decryptDirectMessageWithAvailablePayloads, isDecryptionPlaceholder } from '../lib/messengerCore';
 
 type UseMessageDecryptionControllerParams = {
   accountId: string | undefined;
@@ -440,7 +440,7 @@ export function useMessageDecryptionController({
           });
           setDecryptedMessagesById((previousValue) => ({
             ...previousValue,
-            [messageId]: '[Не удалось расшифровать сообщение]',
+            [messageId]: DECRYPTION_PLACEHOLDER_TEXT,
           }));
         })
         .finally(() => {

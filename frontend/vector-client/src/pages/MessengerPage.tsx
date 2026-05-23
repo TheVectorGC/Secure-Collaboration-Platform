@@ -4,6 +4,7 @@ import { logout as logoutRequest } from '../features/auth/api/authApi';
 import { useAuthStore } from '../features/auth/model/authStore';
 import { useCryptoBootstrap } from '../features/crypto/useCryptoBootstrap';
 import { useCryptoStore } from '../features/crypto/model/cryptoStore';
+import { BackupUnlockModal } from '../features/crypto/ui/BackupUnlockModal';
 import { useDirectoryStore } from '../features/directory/model/directoryStore';
 import { getProfilesByAccountIds } from '../features/directory/api/profilesApi';
 import { updateGroupChatAvatar } from '../features/chats/api/chatsApi';
@@ -13,31 +14,31 @@ import { useRealtimeStore } from '../features/realtime/model/realtimeStore';
 import { getDirectCompanionAccountId } from '../shared/lib/profile';
 import type { ProfileResponseDto } from '../shared/types/api';
 import {
-  getLocalAvatarStorageKey,
-  createLocalAvatarDataUrl,
-  getVisibleChatMessages,
-  getLastTimelineMessage,
-  getDownloadableAttachmentFromPlainText,
-  getLastPeerActivityAt,
-  getAccountActivityLabel,
   buildAccountLastActivityMap,
-  isCurrentAccountActiveInChat,
+  createLocalAvatarDataUrl,
+  getAccountActivityLabel,
   getActiveGroupParticipantAccountIds,
   getChatPresentation,
-  NewChatModal,
-  SettingsModal,
-  MiniProfileModal,
-} from './MessengerPageSupport';
+  getDownloadableAttachmentFromPlainText,
+  getLastPeerActivityAt,
+  getLastTimelineMessage,
+  getLocalAvatarStorageKey,
+  getVisibleChatMessages,
+  isCurrentAccountActiveInChat,
+} from '../features/messenger/lib/messengerCore';
+import { NewChatModal } from '../features/messenger/ui/modals/NewChatModal';
+import { SettingsModal } from '../features/settings/ui/SettingsModal';
+import { MiniProfileModal } from '../features/profile/ui/MiniProfileModal';
 import { DocumentCreationModal, DocumentsPanel } from '../features/documents/ui/DocumentWorkflowModals';
-import { MessengerOverlays } from '../features/messenger/ui/refactored/MessengerOverlays';
+import { MessengerOverlays } from '../features/messenger/ui/layout/MessengerOverlays';
 import { GroupManagementModal } from '../features/messenger/ui/modals/GroupManagementModal';
-import { ChatSidebar } from '../features/messenger/ui/refactored/ChatSidebar';
-import { ChatHeader } from '../features/messenger/ui/refactored/ChatHeader';
-import { EmptyChatState, ChatAlerts } from '../features/messenger/ui/refactored/ChatStateBlocks';
-import { MessageTimeline } from '../features/messenger/ui/refactored/MessageTimeline';
-import { ForwardChatPicker } from '../features/messenger/ui/refactored/ForwardChatPicker';
-import { MessageContextMenu } from '../features/messenger/ui/refactored/MessageContextMenu';
-import { ComposerDock } from '../features/messenger/ui/refactored/ComposerDock';
+import { ChatSidebar } from '../features/messenger/ui/layout/ChatSidebar';
+import { ChatHeader } from '../features/messenger/ui/layout/ChatHeader';
+import { EmptyChatState, ChatAlerts } from '../features/messenger/ui/layout/ChatStateBlocks';
+import { MessageTimeline } from '../features/messenger/ui/layout/MessageTimeline';
+import { ForwardChatPicker } from '../features/messenger/ui/layout/ForwardChatPicker';
+import { MessageContextMenu } from '../features/messenger/ui/layout/MessageContextMenu';
+import { ComposerDock } from '../features/messenger/ui/layout/ComposerDock';
 import { usePersistentLocalChatState } from '../features/messenger/hooks/usePersistentLocalChatState';
 import { useLocalMessageReactions } from '../features/messenger/hooks/useLocalMessageReactions';
 import { useMessageContextMenuController } from '../features/messenger/hooks/useMessageContextMenuController';
@@ -68,7 +69,6 @@ export function MessengerPage() {
   const presenceByAccountId = useRealtimeStore((state) => state.presenceByAccountId);
   const sendTypingEvent = useRealtimeStore((state) => state.sendTypingEvent);
   const cryptoStatus = useCryptoStore((state) => state.status);
-  const cryptoDatabasePath = useCryptoStore((state) => state.databasePath);
 
   const chats = useMessengerStore((state) => state.chats);
   const selectedChatId = useMessengerStore((state) => state.selectedChatId);
@@ -94,6 +94,7 @@ export function MessengerPage() {
   const [, setOpenedChatMenuId] = useState<string | null>(null);
   const [isChatActionsMenuOpen, setIsChatActionsMenuOpen] = useState(false);
   const [isDeleteChatConfirmOpen, setIsDeleteChatConfirmOpen] = useState(false);
+  const [isClearHistoryConfirmOpen, setIsClearHistoryConfirmOpen] = useState(false);
   const { localChatState, updateLocalChatState } = usePersistentLocalChatState(profile?.accountId);
   const { localReactionsByMessageId, setLocalMessageReaction: updateLocalMessageReaction } = useLocalMessageReactions(profile?.accountId);
 
@@ -316,6 +317,7 @@ export function MessengerPage() {
     updateLocalChatState,
     setIsChatActionsMenuOpen,
     setIsDeleteChatConfirmOpen,
+    setIsClearHistoryConfirmOpen,
   });
 
   const { refreshSelectedChat } = useChatDataController({
@@ -591,7 +593,6 @@ export function MessengerPage() {
         profile={profile}
         deviceId={deviceId}
         cryptoStatus={cryptoStatus}
-        cryptoDatabasePath={cryptoDatabasePath}
         realtimeStatus={realtimeStatus}
         onClose={() => setIsSettingsOpen(false)}
         onLogout={handleLogout}
@@ -663,19 +664,25 @@ export function MessengerPage() {
 
       <MessengerOverlays
         selectedChat={selectedChat}
+        currentAccountId={profile?.accountId}
         isDeleteChatConfirmOpen={isDeleteChatConfirmOpen}
+        isClearHistoryConfirmOpen={isClearHistoryConfirmOpen}
         droppedImageFiles={droppedImageFiles}
         isDraggingFileOverChat={isDraggingFileOverChat}
         isSelectedChatWritable={isSelectedChatWritable}
         isDevToolsOpen={isDevToolsOpen}
         isAdmin={profile?.username === 'admin'}
         onCloseDeleteChatConfirm={() => setIsDeleteChatConfirmOpen(false)}
+        onCloseClearHistoryConfirm={() => setIsClearHistoryConfirmOpen(false)}
+        onClearSelectedChatHistory={handleClearSelectedChatHistory}
         onDeleteSelectedChatLocally={handleDeleteSelectedChatLocally}
         onSendDroppedImages={(attachmentDisplayMode) => void sendDroppedImages(attachmentDisplayMode)}
         onClearDroppedImageFiles={() => setDroppedImageFiles([])}
         onCloseDraggingFileOverlay={() => setIsDraggingFileOverChat(false)}
         onCloseDevTools={() => setIsDevToolsOpen(false)}
       />
+
+      <BackupUnlockModal profile={profile} />
 
       <ChatSidebar
         chats={chats}
@@ -714,7 +721,10 @@ export function MessengerPage() {
               onOpenGroupManagement={() => setIsGroupManagementOpen(true)}
               onOpenDirectProfile={() => selectedChatPresentation.companionProfile && setMiniProfile(selectedChatPresentation.companionProfile)}
               onToggleChatActionsMenu={() => setIsChatActionsMenuOpen((previousValue) => !previousValue)}
-              onClearSelectedChatHistory={handleClearSelectedChatHistory}
+              onClearSelectedChatHistory={() => {
+                setIsChatActionsMenuOpen(false);
+                setIsClearHistoryConfirmOpen(true);
+              }}
               onOpenDeleteChatConfirm={() => {
                 setIsChatActionsMenuOpen(false);
                 setIsDeleteChatConfirmOpen(true);
