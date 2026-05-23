@@ -1,6 +1,6 @@
 package dev.mediaservice.service.impl;
 
-import dev.mediaservice.config.properties.MediaStorageProperties;
+import dev.mediaservice.properties.MediaStorageProperties;
 import dev.mediaservice.exception.MediaFileValidationException;
 import dev.mediaservice.exception.MediaStorageException;
 import dev.mediaservice.model.dto.response.StoredMediaResourceDto;

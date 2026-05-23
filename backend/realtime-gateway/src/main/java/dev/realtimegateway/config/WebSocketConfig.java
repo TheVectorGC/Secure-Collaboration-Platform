@@ -1,6 +1,6 @@
 package dev.realtimegateway.config;
 
-import dev.realtimegateway.config.properties.WebSocketProperties;
+import dev.realtimegateway.properties.WebSocketProperties;
 import dev.realtimegateway.websocket.RealtimeWebSocketHandler;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;

@@ -1,6 +1,6 @@
 package dev.cryptoservice.service.impl;
 
-import dev.cryptoservice.config.PreKeyProperties;
+import dev.cryptoservice.properties.PreKeyProperties;
 import dev.cryptoservice.mapper.CryptoKeyMapper;
 import dev.cryptoservice.model.dto.request.RegisterIdentityKeyRequestDto;
 import dev.cryptoservice.model.dto.request.UploadKyberPreKeyRequestDto;

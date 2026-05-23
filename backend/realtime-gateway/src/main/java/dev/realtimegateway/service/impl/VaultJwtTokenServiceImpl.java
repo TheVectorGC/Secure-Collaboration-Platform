@@ -2,7 +2,7 @@ package dev.realtimegateway.service.impl;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.realtimegateway.config.properties.JwtProperties;
+import dev.realtimegateway.properties.JwtProperties;
 import dev.realtimegateway.exception.TokenValidationException;
 import dev.realtimegateway.security.AccountPrincipal;
 import dev.realtimegateway.service.JwtTokenService;

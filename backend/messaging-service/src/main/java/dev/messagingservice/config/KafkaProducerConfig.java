@@ -1,6 +1,6 @@
 package dev.messagingservice.config;
 
-import dev.messagingservice.config.kafka.MessagingEventSerializer;
+import dev.messagingservice.config.MessagingEventSerializer;
 import dev.messagingservice.model.event.MessagingEventDto;
 import java.util.HashMap;
 import java.util.Map;

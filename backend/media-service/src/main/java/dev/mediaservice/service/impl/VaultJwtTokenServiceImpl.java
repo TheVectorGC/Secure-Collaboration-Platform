@@ -2,7 +2,7 @@ package dev.mediaservice.service.impl;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.mediaservice.config.properties.JwtProperties;
+import dev.mediaservice.properties.JwtProperties;
 import dev.mediaservice.exception.TokenValidationException;
 import dev.mediaservice.service.JwtTokenService;
 import dev.mediaservice.util.Base64UrlUtils;

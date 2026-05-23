@@ -1,7 +1,7 @@
 package dev.mediaservice.client.impl;
 
 import dev.mediaservice.client.MessagingAccessClient;
-import dev.mediaservice.config.properties.MessagingServiceProperties;
+import dev.mediaservice.properties.MessagingServiceProperties;
 import dev.mediaservice.exception.MediaAccessDeniedException;
 import dev.mediaservice.exception.MediaDependencyUnavailableException;
 import dev.mediaservice.model.dto.response.InternalChatResponseDto;

@@ -2,7 +2,7 @@ package dev.cryptoservice.service.impl;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.cryptoservice.config.JwtProperties;
+import dev.cryptoservice.properties.JwtProperties;
 import dev.cryptoservice.exception.TokenValidationException;
 import dev.cryptoservice.service.JwtTokenService;
 import dev.cryptoservice.util.Base64UrlUtils;

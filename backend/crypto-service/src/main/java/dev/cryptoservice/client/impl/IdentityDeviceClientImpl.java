@@ -1,7 +1,7 @@
 package dev.cryptoservice.client.impl;
 
 import dev.cryptoservice.client.IdentityDeviceClient;
-import dev.cryptoservice.config.IdentityServiceProperties;
+import dev.cryptoservice.properties.IdentityServiceProperties;
 import dev.cryptoservice.exception.DeviceNotFoundException;
 import dev.cryptoservice.exception.ExternalServiceException;
 import dev.cryptoservice.model.dto.response.InternalDeviceResponseDto;

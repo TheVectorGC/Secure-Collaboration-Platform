@@ -1,6 +1,6 @@
 package dev.mediaservice.config;
 
-import dev.mediaservice.config.properties.CorsProperties;
+import dev.mediaservice.properties.CorsProperties;
 import dev.mediaservice.security.JwtAuthenticationFilter;
 import java.util.List;
 import lombok.RequiredArgsConstructor;

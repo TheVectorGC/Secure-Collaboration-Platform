@@ -1,4 +1,4 @@
-package dev.messagingservice.controller.exceptionHandler;
+package dev.messagingservice.controller.exceptionhandler;
 
 import dev.messagingservice.exception.AccountBlockedException;
 import dev.messagingservice.exception.ChatAccessDeniedException;
@@ -9,7 +9,7 @@ import dev.messagingservice.exception.MessagePayloadValidationException;
 import dev.messagingservice.exception.TokenValidationException;
 import dev.messagingservice.model.dto.error.ApiErrorResponseDto;
 import dev.messagingservice.model.dto.error.FieldErrorResponseDto;
-import dev.messagingservice.web.RequestIdProvider;
+import dev.messagingservice.observability.RequestIdProvider;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.OffsetDateTime;
 import java.util.Comparator;

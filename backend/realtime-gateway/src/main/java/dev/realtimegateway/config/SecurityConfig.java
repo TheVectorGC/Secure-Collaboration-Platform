@@ -1,6 +1,6 @@
 package dev.realtimegateway.config;
 
-import dev.realtimegateway.config.properties.CorsProperties;
+import dev.realtimegateway.properties.CorsProperties;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;

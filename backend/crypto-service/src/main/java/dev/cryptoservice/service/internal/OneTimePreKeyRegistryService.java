@@ -1,6 +1,6 @@
 package dev.cryptoservice.service.internal;
 
-import dev.cryptoservice.config.PreKeyProperties;
+import dev.cryptoservice.properties.PreKeyProperties;
 import dev.cryptoservice.exception.OneTimePreKeyAlreadyExistsException;
 import dev.cryptoservice.mapper.CryptoKeyMapper;
 import dev.cryptoservice.model.dto.request.OneTimePreKeyRequestDto;

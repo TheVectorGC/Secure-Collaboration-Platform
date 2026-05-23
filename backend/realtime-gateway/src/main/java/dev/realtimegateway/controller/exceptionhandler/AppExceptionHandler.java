@@ -2,7 +2,7 @@ package dev.realtimegateway.controller.exceptionhandler;
 
 import dev.realtimegateway.exception.TokenValidationException;
 import dev.realtimegateway.exception.WebSocketAuthenticationException;
-import dev.realtimegateway.filter.RequestIdFilter;
+import dev.realtimegateway.observability.RequestIdFilter;
 import dev.realtimegateway.model.dto.error.ApiErrorResponseDto;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.OffsetDateTime;

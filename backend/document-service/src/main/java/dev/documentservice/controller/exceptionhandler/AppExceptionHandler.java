@@ -10,7 +10,7 @@ import dev.documentservice.exception.SigningKeyNotFoundException;
 import dev.documentservice.exception.TokenValidationException;
 import dev.documentservice.model.dto.error.ApiErrorResponseDto;
 import dev.documentservice.model.dto.error.FieldErrorResponseDto;
-import dev.documentservice.provider.RequestIdProvider;
+import dev.documentservice.observability.RequestIdProvider;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.OffsetDateTime;
 import java.util.List;

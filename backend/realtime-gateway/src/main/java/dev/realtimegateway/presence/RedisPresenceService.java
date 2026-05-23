@@ -1,6 +1,6 @@
 package dev.realtimegateway.presence;
 
-import dev.realtimegateway.config.properties.PresenceProperties;
+import dev.realtimegateway.properties.PresenceProperties;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Set;

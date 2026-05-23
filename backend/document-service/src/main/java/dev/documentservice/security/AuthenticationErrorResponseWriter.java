@@ -2,7 +2,7 @@ package dev.documentservice.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.documentservice.model.dto.error.ApiErrorResponseDto;
-import dev.documentservice.provider.RequestIdProvider;
+import dev.documentservice.observability.RequestIdProvider;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;

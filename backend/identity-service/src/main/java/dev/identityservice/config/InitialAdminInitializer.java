@@ -1,6 +1,6 @@
 package dev.identityservice.config;
 
-import dev.identityservice.common.util.StringNormalizer;
+import dev.identityservice.util.StringNormalizer;
 import dev.identityservice.model.entity.AccountEntity;
 import dev.identityservice.model.entity.ProfileEntity;
 import dev.identityservice.model.enumeration.AccountRole;

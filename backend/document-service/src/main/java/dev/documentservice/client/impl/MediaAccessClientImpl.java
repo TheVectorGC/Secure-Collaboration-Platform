@@ -1,10 +1,10 @@
 package dev.documentservice.client.impl;
 
 import dev.documentservice.client.MediaAccessClient;
-import dev.documentservice.config.properties.MediaServiceProperties;
+import dev.documentservice.properties.MediaServiceProperties;
 import dev.documentservice.exception.ExternalServiceException;
 import dev.documentservice.model.dto.request.GrantMediaAccessRequestDto;
-import dev.documentservice.provider.RequestIdProvider;
+import dev.documentservice.observability.RequestIdProvider;
 import dev.documentservice.security.AuthorizationHeaderProvider;
 import java.util.ArrayList;
 import java.util.Collection;

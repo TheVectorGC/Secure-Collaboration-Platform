@@ -2,7 +2,7 @@ package dev.messagingservice.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.messagingservice.model.dto.error.ApiErrorResponseDto;
-import dev.messagingservice.web.RequestIdProvider;
+import dev.messagingservice.observability.RequestIdProvider;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;

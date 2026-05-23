@@ -1,4 +1,4 @@
-package dev.cryptoservice.controller.exceptionHandler;
+package dev.cryptoservice.controller.exceptionhandler;
 
 import dev.cryptoservice.exception.AccountBackupProfileConflictException;
 import dev.cryptoservice.exception.AccountBackupProfileNotFoundException;
@@ -20,7 +20,7 @@ import dev.cryptoservice.exception.SignedPreKeySignatureInvalidException;
 import dev.cryptoservice.exception.TokenValidationException;
 import dev.cryptoservice.model.dto.error.ApiErrorResponseDto;
 import dev.cryptoservice.model.dto.error.FieldErrorResponseDto;
-import dev.cryptoservice.web.RequestIdProvider;
+import dev.cryptoservice.observability.RequestIdProvider;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.OffsetDateTime;
 import java.util.List;

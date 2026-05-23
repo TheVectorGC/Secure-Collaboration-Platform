@@ -1,0 +1,12 @@
+.idea/
+*.iml
+*.zip
+
+logs/
+*.log
+
+.env
+.env.*
+
+**/target/
+**/node_modules/

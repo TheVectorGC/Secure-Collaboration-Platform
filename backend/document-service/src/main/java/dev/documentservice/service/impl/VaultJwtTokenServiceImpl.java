@@ -2,7 +2,7 @@ package dev.documentservice.service.impl;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.documentservice.config.properties.JwtProperties;
+import dev.documentservice.properties.JwtProperties;
 import dev.documentservice.exception.TokenValidationException;
 import dev.documentservice.service.JwtTokenService;
 import dev.documentservice.util.Base64UrlUtils;

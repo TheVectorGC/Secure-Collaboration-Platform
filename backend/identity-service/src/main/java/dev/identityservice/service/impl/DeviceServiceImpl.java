@@ -1,6 +1,6 @@
 package dev.identityservice.service.impl;
 
-import dev.identityservice.common.util.StringNormalizer;
+import dev.identityservice.util.StringNormalizer;
 import dev.identityservice.exception.AccountNotFoundException;
 import dev.identityservice.exception.DeviceNotFoundException;
 import dev.identityservice.exception.DeviceRegistrationException;
@@ -20,8 +20,8 @@ import dev.identityservice.repository.AccountRepository;
 import dev.identityservice.repository.AuthSessionRepository;
 import dev.identityservice.repository.DeviceRepository;
 import dev.identityservice.service.DeviceService;
-import dev.identityservice.service.event.IdentityOutboxService;
-import dev.identityservice.service.mapper.DeviceMapper;
+import dev.identityservice.outbox.IdentityOutboxService;
+import dev.identityservice.mapper.DeviceMapper;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;

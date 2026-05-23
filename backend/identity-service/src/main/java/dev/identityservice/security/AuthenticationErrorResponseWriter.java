@@ -1,9 +1,9 @@
 package dev.identityservice.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.identityservice.common.error.ApiErrorResponse;
-import dev.identityservice.common.error.ErrorCode;
-import dev.identityservice.common.request.RequestIdProvider;
+import dev.identityservice.model.dto.error.ApiErrorResponseDto;
+import dev.identityservice.model.dto.error.ErrorCode;
+import dev.identityservice.observability.RequestIdProvider;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
@@ -46,7 +46,7 @@ public class AuthenticationErrorResponseWriter {
             return;
         }
 
-        ApiErrorResponse apiErrorResponse = new ApiErrorResponse(
+        ApiErrorResponseDto apiErrorResponse = new ApiErrorResponseDto(
                 OffsetDateTime.now(),
                 requestIdProvider.currentRequestId(),
                 httpStatus.value(),

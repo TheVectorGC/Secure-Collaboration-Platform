@@ -1,8 +1,8 @@
 package dev.identityservice.service.impl;
 
-import dev.identityservice.config.JwtProperties;
-import dev.identityservice.config.RefreshTokenProperties;
-import dev.identityservice.common.util.StringNormalizer;
+import dev.identityservice.properties.JwtProperties;
+import dev.identityservice.properties.RefreshTokenProperties;
+import dev.identityservice.util.StringNormalizer;
 import dev.identityservice.exception.AccountBlockedException;
 import dev.identityservice.exception.AccountNotFoundException;
 import dev.identityservice.exception.DeviceNotFoundException;

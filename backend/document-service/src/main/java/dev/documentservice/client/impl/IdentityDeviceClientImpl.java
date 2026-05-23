@@ -1,11 +1,11 @@
 package dev.documentservice.client.impl;
 
 import dev.documentservice.client.IdentityDeviceClient;
-import dev.documentservice.config.properties.IdentityServiceProperties;
+import dev.documentservice.properties.IdentityServiceProperties;
 import dev.documentservice.exception.DocumentAccessDeniedException;
 import dev.documentservice.exception.ExternalServiceException;
 import dev.documentservice.model.dto.response.InternalDeviceResponseDto;
-import dev.documentservice.provider.RequestIdProvider;
+import dev.documentservice.observability.RequestIdProvider;
 import dev.documentservice.security.AuthorizationHeaderProvider;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;

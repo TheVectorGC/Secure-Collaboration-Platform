@@ -2,7 +2,7 @@ package dev.messagingservice.service.impl;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.messagingservice.config.properties.JwtProperties;
+import dev.messagingservice.properties.JwtProperties;
 import dev.messagingservice.exception.TokenValidationException;
 import dev.messagingservice.service.JwtTokenService;
 import dev.messagingservice.util.Base64UrlUtils;

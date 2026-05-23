@@ -1,12 +1,12 @@
 package dev.messagingservice.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.messagingservice.config.properties.IdentityServiceProperties;
+import dev.messagingservice.properties.IdentityServiceProperties;
 import dev.messagingservice.exception.DeviceDirectoryUnavailableException;
 import dev.messagingservice.model.dto.internal.ActiveDeviceDirectoryEntryDto;
 import dev.messagingservice.service.CurrentAuthorizationHeaderService;
 import dev.messagingservice.service.IdentityDeviceDirectoryClient;
-import dev.messagingservice.web.RequestIdProvider;
+import dev.messagingservice.observability.RequestIdProvider;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;

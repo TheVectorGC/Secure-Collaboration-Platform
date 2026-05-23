@@ -31,7 +31,7 @@ import dev.documentservice.model.enumeration.DocumentSigningKeyStatus;
 import dev.documentservice.model.enumeration.DocumentStatus;
 import dev.documentservice.model.enumeration.SignatureAlgorithm;
 import dev.documentservice.model.event.DocumentEventDto;
-import dev.documentservice.publisher.DocumentEventPublisher;
+import dev.documentservice.outbox.DocumentEventPublisher;
 import dev.documentservice.repository.DeviceDocumentSigningKeyRepository;
 import dev.documentservice.repository.DocumentHiddenRepository;
 import dev.documentservice.repository.DocumentKeyEnvelopeRepository;

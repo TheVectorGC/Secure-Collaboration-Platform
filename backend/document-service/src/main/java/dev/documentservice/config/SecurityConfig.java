@@ -1,6 +1,6 @@
 package dev.documentservice.config;
 
-import dev.documentservice.config.properties.ApplicationCorsProperties;
+import dev.documentservice.properties.CorsProperties;
 import dev.documentservice.security.JwtAuthenticationFilter;
 import dev.documentservice.security.RestAccessDeniedHandler;
 import dev.documentservice.security.RestAuthenticationEntryPoint;
@@ -30,7 +30,7 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final RestAuthenticationEntryPoint restAuthenticationEntryPoint;
     private final RestAccessDeniedHandler restAccessDeniedHandler;
-    private final ApplicationCorsProperties applicationCorsProperties;
+    private final CorsProperties applicationCorsProperties;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) {

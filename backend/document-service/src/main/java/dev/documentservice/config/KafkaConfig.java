@@ -1,6 +1,6 @@
 package dev.documentservice.config;
 
-import dev.documentservice.config.properties.DocumentKafkaProperties;
+import dev.documentservice.properties.DocumentKafkaProperties;
 import java.util.HashMap;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;

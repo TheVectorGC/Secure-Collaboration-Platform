@@ -1,6 +1,6 @@
 package dev.realtimegateway.controller;
 
-import dev.realtimegateway.config.properties.WebSocketProperties;
+import dev.realtimegateway.properties.WebSocketProperties;
 import dev.realtimegateway.model.dto.RealtimeGatewayInfoResponseDto;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;

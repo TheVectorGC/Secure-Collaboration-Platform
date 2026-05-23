@@ -1,6 +1,6 @@
 package dev.messagingservice.config;
 
-import dev.messagingservice.config.properties.SecurityCorsProperties;
+import dev.messagingservice.properties.CorsProperties;
 import dev.messagingservice.security.JwtAuthenticationFilter;
 import dev.messagingservice.security.RestAccessDeniedHandler;
 import dev.messagingservice.security.RestAuthenticationEntryPoint;
@@ -30,7 +30,7 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final RestAuthenticationEntryPoint restAuthenticationEntryPoint;
     private final RestAccessDeniedHandler restAccessDeniedHandler;
-    private final SecurityCorsProperties securityCorsProperties;
+    private final CorsProperties securityCorsProperties;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) {

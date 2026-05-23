@@ -2,7 +2,7 @@ package dev.identityservice.service.impl;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.identityservice.config.JwtProperties;
+import dev.identityservice.properties.JwtProperties;
 import dev.identityservice.exception.TokenSigningException;
 import dev.identityservice.exception.TokenValidationException;
 import dev.identityservice.model.entity.AccountEntity;

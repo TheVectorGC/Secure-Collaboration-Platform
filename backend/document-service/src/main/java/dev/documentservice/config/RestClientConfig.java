@@ -1,8 +1,8 @@
 package dev.documentservice.config;
 
-import dev.documentservice.config.properties.IdentityServiceProperties;
-import dev.documentservice.config.properties.MediaServiceProperties;
-import dev.documentservice.config.properties.MessagingServiceProperties;
+import dev.documentservice.properties.IdentityServiceProperties;
+import dev.documentservice.properties.MediaServiceProperties;
+import dev.documentservice.properties.MessagingServiceProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.client.RestClient;

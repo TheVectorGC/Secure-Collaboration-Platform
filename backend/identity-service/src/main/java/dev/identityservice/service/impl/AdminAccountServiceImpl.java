@@ -1,6 +1,6 @@
 package dev.identityservice.service.impl;
 
-import dev.identityservice.common.util.StringNormalizer;
+import dev.identityservice.util.StringNormalizer;
 import dev.identityservice.exception.AccountAlreadyExistsException;
 import dev.identityservice.exception.AccountNotFoundException;
 import dev.identityservice.model.dto.request.CreateAccountRegistrationRequestDto;

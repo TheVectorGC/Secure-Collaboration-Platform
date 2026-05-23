@@ -1,11 +1,11 @@
 package dev.documentservice.client.impl;
 
 import dev.documentservice.client.MessagingAccessClient;
-import dev.documentservice.config.properties.MessagingServiceProperties;
+import dev.documentservice.properties.MessagingServiceProperties;
 import dev.documentservice.exception.DocumentAccessDeniedException;
 import dev.documentservice.exception.ExternalServiceException;
 import dev.documentservice.model.dto.response.InternalChatResponseDto;
-import dev.documentservice.provider.RequestIdProvider;
+import dev.documentservice.observability.RequestIdProvider;
 import dev.documentservice.security.AuthorizationHeaderProvider;
 import java.util.Arrays;
 import java.util.List;

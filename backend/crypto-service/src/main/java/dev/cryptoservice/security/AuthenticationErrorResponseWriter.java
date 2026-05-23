@@ -2,7 +2,7 @@ package dev.cryptoservice.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.cryptoservice.model.dto.error.ApiErrorResponseDto;
-import dev.cryptoservice.web.RequestIdProvider;
+import dev.cryptoservice.observability.RequestIdProvider;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;

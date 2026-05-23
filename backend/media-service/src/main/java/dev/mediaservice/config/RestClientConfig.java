@@ -1,6 +1,6 @@
 package dev.mediaservice.config;
 
-import dev.mediaservice.config.properties.MessagingServiceProperties;
+import dev.mediaservice.properties.MessagingServiceProperties;
 import dev.mediaservice.observability.RequestIdProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
