@@ -19,4 +19,6 @@ public interface DeviceRepository extends JpaRepository<DeviceEntity, UUID> {
     List<DeviceEntity> findByAccountIdAndStatus(UUID accountId, DeviceStatus status);
 
     boolean existsByAccountIdAndStatus(UUID accountId, DeviceStatus status);
+
+    long countByAccountIdAndStatus(UUID accountId, DeviceStatus status);
 }

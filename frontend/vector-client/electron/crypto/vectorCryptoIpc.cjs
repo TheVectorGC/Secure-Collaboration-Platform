@@ -7,6 +7,33 @@ const signalMessageService = require('./signalMessageService.cjs');
 const accountBackupService = require('./accountBackupService.cjs');
 const deviceEnvironmentService = require('./deviceEnvironmentService.cjs');
 
+
+function getErrorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function classifyCryptoError(error) {
+  const message = getErrorMessage(error);
+
+  if (message.includes('Account backup private key is not unlocked')) {
+    return 'BACKUP_LOCKED';
+  }
+
+  if (message.includes('Group key is not available') || message.includes('Group epoch key is not available')) {
+    return 'GROUP_KEY_MISSING';
+  }
+
+  return 'CRYPTO_OPERATION_FAILED';
+}
+
+function buildFailedCryptoResponse(error) {
+  return {
+    failed: true,
+    errorCode: classifyCryptoError(error),
+    errorMessage: getErrorMessage(error),
+  };
+}
+
 function validateInitializeRequest(request) {
   if (!request || typeof request !== 'object') {
     throw new Error('Crypto initialization request is required.');
@@ -100,7 +127,16 @@ function registerVectorCryptoIpc() {
   });
 
   ipcMain.handle('vectorCrypto:decryptGroupMessageV2', async (_event, request) => {
-    return signalMessageService.decryptGroupMessageV2(request);
+    try {
+      return signalMessageService.decryptGroupMessageV2(request);
+    }
+    catch (error) {
+      if (request?.allowFailure) {
+        return buildFailedCryptoResponse(error);
+      }
+
+      throw error;
+    }
   });
 
   ipcMain.handle('vectorCrypto:encryptMessage', async (_event, request) => {
@@ -169,7 +205,16 @@ function registerVectorCryptoIpc() {
   });
 
   ipcMain.handle('vectorCrypto:decryptAccountKeyEnvelope', async (_event, request) => {
-    return accountBackupService.decryptAccountKeyEnvelope(request);
+    try {
+      return accountBackupService.decryptAccountKeyEnvelope(request);
+    }
+    catch (error) {
+      if (request?.allowFailure) {
+        return buildFailedCryptoResponse(error);
+      }
+
+      throw error;
+    }
   });
 
 

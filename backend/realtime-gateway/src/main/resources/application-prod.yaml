@@ -17,6 +17,8 @@ spring:
       token: ${VAULT_TOKEN}
 
 application:
+  internal-api:
+    token: ${INTERNAL_API_TOKEN}
   websocket:
     allowed-origins: ${WEBSOCKET_ALLOWED_ORIGINS}
 

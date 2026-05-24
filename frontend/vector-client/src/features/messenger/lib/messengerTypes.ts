@@ -70,6 +70,7 @@ export type LocalChatState = {
   clearedAtByChatId: Record<string, string>;
   hiddenChatIds: string[];
   blockedAccountIds: string[];
+  pinnedChatIds: string[];
 };
 
 export type ChatListPreview = {

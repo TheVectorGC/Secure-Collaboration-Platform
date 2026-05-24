@@ -3,7 +3,9 @@ package dev.messagingservice.controller;
 import dev.messagingservice.model.dto.error.ApiErrorResponseDto;
 import dev.messagingservice.model.dto.request.MarkChatReadRequestDto;
 import dev.messagingservice.model.dto.request.SendMessageRequestDto;
+import dev.messagingservice.model.dto.request.SetMessageReactionRequestDto;
 import dev.messagingservice.model.dto.response.MessageResponseDto;
+import dev.messagingservice.model.dto.response.MessageReactionResponseDto;
 import dev.messagingservice.service.CurrentAccountService;
 import dev.messagingservice.service.MessageService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -18,10 +20,12 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -56,6 +60,27 @@ public class MessageController {
     @GetMapping
     public ResponseEntity<List<MessageResponseDto>> getChatMessages(@PathVariable UUID chatId) {
         return ResponseEntity.ok(messageService.getChatMessages(currentAccountService.getCurrentAccountId(), chatId));
+    }
+
+
+    @Operation(summary = "Set message reaction", description = "Creates or replaces the current account reaction for one visible message.")
+    @PutMapping("/{messageId}/reaction")
+    public ResponseEntity<MessageReactionResponseDto> setMessageReaction(
+            @PathVariable UUID chatId,
+            @PathVariable UUID messageId,
+            @Valid @RequestBody SetMessageReactionRequestDto requestDto
+    ) {
+        return ResponseEntity.ok(messageService.setMessageReaction(currentAccountService.getCurrentAccountId(), chatId, messageId, requestDto));
+    }
+
+    @Operation(summary = "Remove message reaction", description = "Removes the current account reaction from one visible message.")
+    @DeleteMapping("/{messageId}/reaction")
+    public ResponseEntity<Void> removeMessageReaction(
+            @PathVariable UUID chatId,
+            @PathVariable UUID messageId
+    ) {
+        messageService.removeMessageReaction(currentAccountService.getCurrentAccountId(), chatId, messageId);
+        return ResponseEntity.ok().build();
     }
 
     @Operation(summary = "Mark message delivered", description = "Marks one message as delivered for the current account.")

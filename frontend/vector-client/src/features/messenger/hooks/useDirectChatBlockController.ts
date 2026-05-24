@@ -2,29 +2,15 @@ import axios from 'axios';
 import { blockAccount, unblockAccount } from '../../account-blocks/api/accountBlocksApi';
 import type { ChatResponseDto } from '../../../shared/types/api';
 import type { LocalChatState } from '../lib/messengerCore';
+import { clientLogger } from '../../../shared/lib/clientLogger';
 
-
-function getErrorResponseMessage(error: unknown): string | null {
-  if (!axios.isAxiosError(error)) {
-    return null;
-  }
-
-  const responseData = error.response?.data as { message?: string; error?: string } | string | undefined;
-
-  if (typeof responseData === 'string') {
-    return responseData.trim() || null;
-  }
-
-  return responseData?.message ?? responseData?.error ?? null;
-}
 
 function getBlockErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
     const status = error.response?.status;
-    const responseMessage = getErrorResponseMessage(error);
 
     if (status === 400) {
-      return responseMessage ?? 'Не удалось заблокировать пользователя. Проверьте, что выбран не ваш собственный чат.';
+      return 'Не удалось заблокировать пользователя. Проверьте выбранный чат.';
     }
 
     if (status === 401 || status === 403) {
@@ -32,19 +18,35 @@ function getBlockErrorMessage(error: unknown): string {
     }
 
     if (status === 404) {
-      return responseMessage ?? 'Не удалось заблокировать пользователя: профиль не найден.';
+      return 'Не удалось заблокировать пользователя: профиль не найден.';
     }
 
     if (status === 429) {
       return 'Слишком много действий подряд. Подождите немного и повторите попытку.';
     }
-
-    if (responseMessage) {
-      return responseMessage;
-    }
   }
 
-  return 'Не удалось заблокировать пользователя.';
+  return 'Не удалось заблокировать пользователя. Попробуйте ещё раз.';
+}
+
+function logBlockError(error: unknown, blockedAccountId: string | null | undefined) {
+  clientLogger.error('Account block action failed.', {
+    blockedAccountId,
+    error,
+  }, {
+    dedupeKey: `account-block:${blockedAccountId ?? 'unknown'}`,
+    throttleMs: 30000,
+  });
+}
+
+function logUnblockError(error: unknown, blockedAccountId: string | null | undefined) {
+  clientLogger.error('Account unblock action failed.', {
+    blockedAccountId,
+    error,
+  }, {
+    dedupeKey: `account-unblock:${blockedAccountId ?? 'unknown'}`,
+    throttleMs: 30000,
+  });
 }
 
 type DeleteSelectedChatOptions = {
@@ -96,7 +98,7 @@ export function useDirectChatBlockController(params: UseDirectChatBlockControlle
         }));
       }
       catch (error) {
-        console.error(error);
+        logBlockError(error, blockedAccountId);
         setErrorMessage(getBlockErrorMessage(error));
         return;
       }
@@ -131,7 +133,7 @@ export function useDirectChatBlockController(params: UseDirectChatBlockControlle
       sendCurrentTypingState(false);
     }
     catch (error) {
-      console.error(error);
+      logBlockError(error, selectedDirectCompanionAccountId);
       setErrorMessage(getBlockErrorMessage(error));
     }
   }
@@ -156,8 +158,8 @@ export function useDirectChatBlockController(params: UseDirectChatBlockControlle
       }));
     }
     catch (error) {
-      console.error(error);
-      setErrorMessage('Не удалось разблокировать пользователя.');
+      logUnblockError(error, selectedDirectCompanionAccountId);
+      setErrorMessage('Не удалось разблокировать пользователя. Попробуйте ещё раз.');
     }
   }
 

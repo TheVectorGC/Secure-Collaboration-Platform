@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { getCurrentAccountGroupEpochKeyEnvelope } from '../../chats/api/chatsApi';
 import type { MessageResponseDto } from '../../../shared/types/api';
 import { DECRYPTION_PLACEHOLDER_TEXT, decryptDirectMessageWithAvailablePayloads, isDecryptionPlaceholder } from '../lib/messengerCore';
+import { clientLogger } from '../../../shared/lib/clientLogger';
 
 type UseMessageDecryptionControllerParams = {
   accountId: string | undefined;
@@ -72,6 +73,7 @@ export function useMessageDecryptionController({
   const failedMessageIdsRef = useRef<Set<string>>(new Set());
   const failedAttemptsByMessageIdRef = useRef<Map<string, number>>(new Map());
   const retryTimersByMessageIdRef = useRef<Map<string, number>>(new Map());
+  const backupPrivateKeyUnlockedRef = useRef<boolean | null>(null);
 
   function clearRetryTimer(messageId: string) {
     const existingTimerId = retryTimersByMessageIdRef.current.get(messageId);
@@ -108,12 +110,14 @@ export function useMessageDecryptionController({
     failedAttemptsByMessageIdRef.current.clear();
     failedMessageIdsRef.current.clear();
     decryptingMessageIdsRef.current.clear();
+    backupPrivateKeyUnlockedRef.current = null;
     setDecryptedMessagesById({});
   }
 
   function clearTemporarilyMissingGroupKeys() {
     failedAttemptsByMessageIdRef.current.clear();
     failedMessageIdsRef.current.clear();
+    backupPrivateKeyUnlockedRef.current = null;
     retryTimersByMessageIdRef.current.forEach((timerId) => window.clearTimeout(timerId));
     retryTimersByMessageIdRef.current.clear();
 
@@ -187,11 +191,36 @@ export function useMessageDecryptionController({
     const activeDeviceId = deviceId;
     const localDecryptDeviceIds = new Set([activeDeviceId].filter(Boolean));
 
+    async function getBackupPrivateKeyUnlocked(): Promise<boolean | null> {
+      if (backupPrivateKeyUnlockedRef.current !== null) {
+        return backupPrivateKeyUnlockedRef.current;
+      }
+
+      try {
+        const unlocked = await activeVectorCrypto.hasUnlockedAccountBackupPrivateKey({ accountId: activeAccountId });
+        backupPrivateKeyUnlockedRef.current = unlocked;
+        return unlocked;
+      }
+      catch (error) {
+        clientLogger.warn('Failed to read account backup unlock status.', {
+          accountId: activeAccountId,
+          error,
+        }, {
+          dedupeKey: `backup-unlock-status:${activeAccountId}`,
+          throttleMs: 60000,
+        });
+        return null;
+      }
+    }
+
     async function decryptMessageKeyFromDevicePayload(message: MessageResponseDto): Promise<string | null> {
       const candidatePayloads = message.devicePayloads.filter((devicePayload) => localDecryptDeviceIds.has(devicePayload.targetDeviceId));
 
       if (candidatePayloads.length === 0) {
-        console.debug('No direct device payload for current device.', buildMessageDiagnostics(message, activeAccountId, activeDeviceId));
+        clientLogger.debug('Direct device payload is not available for the current device.', buildMessageDiagnostics(message, activeAccountId, activeDeviceId), {
+          dedupeKey: `direct-payload-missing:${message.chatId}:${message.senderDeviceId}:${activeDeviceId}`,
+          throttleMs: 60000,
+        });
         return null;
       }
 
@@ -205,11 +234,14 @@ export function useMessageDecryptionController({
         return parseMessageKeyPackage(decryptResponse.plainText);
       }
       catch (error) {
-        console.warn('Device payload decryption failed.', {
+        clientLogger.warn('Device payload decryption failed.', {
           stage: 'DEVICE_PAYLOAD' satisfies DecryptionStage,
           ...buildMessageDiagnostics(message, activeAccountId, activeDeviceId),
           candidatePayloadTargetDeviceIds: candidatePayloads.map((candidatePayload) => candidatePayload.targetDeviceId),
           error,
+        }, {
+          dedupeKey: `device-payload-decryption:${message.messageId}:${activeDeviceId}`,
+          throttleMs: 60000,
         });
         return null;
       }
@@ -219,34 +251,72 @@ export function useMessageDecryptionController({
       const accountEnvelope = message.accountKeyEnvelopes.find((envelope) => envelope.targetAccountId === activeAccountId);
 
       if (!accountEnvelope) {
-        console.debug('No account envelope for current account.', buildMessageDiagnostics(message, activeAccountId, activeDeviceId));
+        clientLogger.debug('Account key envelope is not available for the current account.', buildMessageDiagnostics(message, activeAccountId, activeDeviceId), {
+          dedupeKey: `account-envelope-missing:${message.chatId}:${activeAccountId}`,
+          throttleMs: 60000,
+        });
         return null;
       }
 
       try {
+        const backupPrivateKeyUnlocked = await getBackupPrivateKeyUnlocked();
+
+        if (backupPrivateKeyUnlocked === false) {
+          clientLogger.debug('Account backup key is locked. Account envelope decryption is postponed.', {
+            stage: 'ACCOUNT_ENVELOPE' satisfies DecryptionStage,
+            ...buildMessageDiagnostics(message, activeAccountId, activeDeviceId),
+          }, {
+            dedupeKey: `account-backup-locked:${activeAccountId}`,
+            throttleMs: 60000,
+          });
+          return null;
+        }
+
         const decryptResponse = await activeVectorCrypto.decryptAccountKeyEnvelope({
           accountId: activeAccountId,
           encryptedKeyBase64: accountEnvelope.encryptedKeyBase64,
+          allowFailure: true,
         });
 
-        return decryptResponse.keyBase64;
+        if (decryptResponse.failed) {
+          if (decryptResponse.errorCode === 'BACKUP_LOCKED') {
+            backupPrivateKeyUnlockedRef.current = false;
+            clientLogger.debug('Account backup key is locked. Account envelope decryption is postponed.', {
+              stage: 'ACCOUNT_ENVELOPE' satisfies DecryptionStage,
+              ...buildMessageDiagnostics(message, activeAccountId, activeDeviceId),
+              errorCode: decryptResponse.errorCode,
+            }, {
+              dedupeKey: `account-backup-locked:${activeAccountId}`,
+              throttleMs: 60000,
+            });
+            return null;
+          }
+
+          clientLogger.warn('Account envelope decryption failed.', {
+            stage: 'ACCOUNT_ENVELOPE' satisfies DecryptionStage,
+            ...buildMessageDiagnostics(message, activeAccountId, activeDeviceId),
+            envelopeTargetAccountId: accountEnvelope.targetAccountId,
+            errorCode: decryptResponse.errorCode,
+            errorMessage: decryptResponse.errorMessage,
+          }, {
+            dedupeKey: `account-envelope-decryption:${message.messageId}:${activeAccountId}`,
+            throttleMs: 60000,
+          });
+          return null;
+        }
+
+        return decryptResponse.keyBase64 ?? null;
       }
       catch (error) {
-        let backupPrivateKeyUnlocked: boolean | null = null;
-
-        try {
-          backupPrivateKeyUnlocked = await activeVectorCrypto.hasUnlockedAccountBackupPrivateKey({ accountId: activeAccountId });
-        }
-        catch {
-          backupPrivateKeyUnlocked = null;
-        }
-
-        console.warn('Account envelope decryption failed.', {
+        clientLogger.warn('Account envelope decryption failed unexpectedly.', {
           stage: 'ACCOUNT_ENVELOPE' satisfies DecryptionStage,
           ...buildMessageDiagnostics(message, activeAccountId, activeDeviceId),
           envelopeTargetAccountId: accountEnvelope.targetAccountId,
-          backupPrivateKeyUnlocked,
+          backupPrivateKeyUnlocked: backupPrivateKeyUnlockedRef.current,
           error,
+        }, {
+          dedupeKey: `account-envelope-unexpected:${message.messageId}:${activeAccountId}`,
+          throttleMs: 60000,
         });
         return null;
       }
@@ -276,10 +346,13 @@ export function useMessageDecryptionController({
         return decryptResponse.plainText;
       }
       catch (error) {
-        console.warn('Content AES-GCM decryption failed.', {
+        clientLogger.warn('Content AES-GCM decryption failed.', {
           stage: 'CONTENT_AES_GCM' satisfies DecryptionStage,
           ...buildMessageDiagnostics(message, activeAccountId, activeDeviceId),
           error,
+        }, {
+          dedupeKey: `content-aes-gcm:${message.messageId}`,
+          throttleMs: 60000,
         });
         throw error;
       }
@@ -295,10 +368,13 @@ export function useMessageDecryptionController({
       }
       catch (error) {
         if (!isNotFoundError(error)) {
-          console.warn('Group epoch envelope fetch failed.', {
+          clientLogger.warn('Group epoch envelope fetch failed.', {
             stage: 'GROUP_ENVELOPE_FETCH' satisfies DecryptionStage,
             ...buildMessageDiagnostics(message, activeAccountId, activeDeviceId),
             error,
+          }, {
+            dedupeKey: `group-envelope-fetch:${message.chatId}:${message.groupKeyEpoch}:${activeAccountId}`,
+            throttleMs: 60000,
           });
         }
 
@@ -314,18 +390,63 @@ export function useMessageDecryptionController({
       const groupEpochEnvelope = await fetchCurrentAccountGroupEpochEnvelope(message);
 
       if (!groupEpochEnvelope || groupEpochEnvelope.targetAccountId !== activeAccountId) {
-        console.warn('Group epoch envelope is not available for current account.', {
+        clientLogger.debug('Group epoch envelope is not available for the current account.', {
           stage: 'GROUP_ENVELOPE_FETCH' satisfies DecryptionStage,
           ...buildMessageDiagnostics(message, activeAccountId, activeDeviceId),
+        }, {
+          dedupeKey: `group-envelope-missing:${message.chatId}:${message.groupKeyEpoch}:${activeAccountId}`,
+          throttleMs: 60000,
         });
         return false;
       }
 
       try {
+        const backupPrivateKeyUnlocked = await getBackupPrivateKeyUnlocked();
+
+        if (backupPrivateKeyUnlocked === false) {
+          clientLogger.debug('Account backup key is locked. Group epoch import is postponed.', {
+            stage: 'GROUP_ENVELOPE_DECRYPT' satisfies DecryptionStage,
+            ...buildMessageDiagnostics(message, activeAccountId, activeDeviceId),
+          }, {
+            dedupeKey: `group-backup-locked:${activeAccountId}:${message.chatId}:${message.groupKeyEpoch}`,
+            throttleMs: 60000,
+          });
+          return false;
+        }
+
         const decryptResponse = await activeVectorCrypto.decryptAccountKeyEnvelope({
           accountId: activeAccountId,
           encryptedKeyBase64: groupEpochEnvelope.encryptedKeyBase64,
+          allowFailure: true,
         });
+
+        if (decryptResponse.failed || !decryptResponse.keyBase64) {
+          if (decryptResponse.errorCode === 'BACKUP_LOCKED') {
+            backupPrivateKeyUnlockedRef.current = false;
+            clientLogger.debug('Account backup key is locked. Group epoch import is postponed.', {
+              stage: 'GROUP_ENVELOPE_DECRYPT' satisfies DecryptionStage,
+              ...buildMessageDiagnostics(message, activeAccountId, activeDeviceId),
+              errorCode: decryptResponse.errorCode,
+            }, {
+              dedupeKey: `group-backup-locked:${activeAccountId}:${message.chatId}:${message.groupKeyEpoch}`,
+              throttleMs: 60000,
+            });
+            return false;
+          }
+
+          clientLogger.warn('Group epoch envelope decryption failed.', {
+            stage: 'GROUP_ENVELOPE_DECRYPT' satisfies DecryptionStage,
+            ...buildMessageDiagnostics(message, activeAccountId, activeDeviceId),
+            envelopeTargetAccountId: groupEpochEnvelope.targetAccountId,
+            errorCode: decryptResponse.errorCode,
+            errorMessage: decryptResponse.errorMessage,
+          }, {
+            dedupeKey: `group-envelope-decryption:${message.chatId}:${message.groupKeyEpoch}:${activeAccountId}`,
+            throttleMs: 60000,
+          });
+          return false;
+        }
+
         await activeVectorCrypto.importGroupKeyFromBackupEnvelope({
           accountId: activeAccountId,
           chatId: message.chatId,
@@ -337,21 +458,15 @@ export function useMessageDecryptionController({
         return true;
       }
       catch (error) {
-        let backupPrivateKeyUnlocked: boolean | null = null;
-
-        try {
-          backupPrivateKeyUnlocked = await activeVectorCrypto.hasUnlockedAccountBackupPrivateKey({ accountId: activeAccountId });
-        }
-        catch {
-          backupPrivateKeyUnlocked = null;
-        }
-
-        console.warn('Group epoch envelope decrypt/import failed.', {
-          stage: 'GROUP_ENVELOPE_DECRYPT' satisfies DecryptionStage,
+        clientLogger.warn('Group epoch envelope import failed unexpectedly.', {
+          stage: 'GROUP_KEY_IMPORT' satisfies DecryptionStage,
           ...buildMessageDiagnostics(message, activeAccountId, activeDeviceId),
           envelopeTargetAccountId: groupEpochEnvelope.targetAccountId,
-          backupPrivateKeyUnlocked,
+          backupPrivateKeyUnlocked: backupPrivateKeyUnlockedRef.current,
           error,
+        }, {
+          dedupeKey: `group-envelope-import:${message.chatId}:${message.groupKeyEpoch}:${activeAccountId}`,
+          throttleMs: 60000,
         });
         return false;
       }
@@ -376,7 +491,34 @@ export function useMessageDecryptionController({
           encryptedPayload: message.encryptedPayload!,
           initializationVectorBase64: message.contentInitializationVectorBase64!,
           authenticationTagBase64: message.contentAuthenticationTagBase64!,
+          allowFailure: true,
         });
+
+        if (groupDecryptResponse.failed) {
+          if (groupDecryptResponse.errorCode === 'GROUP_KEY_MISSING') {
+            clientLogger.debug('Group message decryption is postponed because the group epoch key is not available locally.', {
+              stage: 'GROUP_AES_GCM' satisfies DecryptionStage,
+              ...buildMessageDiagnostics(message, activeAccountId, activeDeviceId),
+              errorCode: groupDecryptResponse.errorCode,
+            }, {
+              dedupeKey: `group-key-missing:${message.chatId}:${message.groupKeyEpoch}:${activeAccountId}`,
+              throttleMs: 60000,
+            });
+          }
+          else {
+            clientLogger.warn('Group AES-GCM decryption failed.', {
+              stage: 'GROUP_AES_GCM' satisfies DecryptionStage,
+              ...buildMessageDiagnostics(message, activeAccountId, activeDeviceId),
+              errorCode: groupDecryptResponse.errorCode,
+              errorMessage: groupDecryptResponse.errorMessage,
+            }, {
+              dedupeKey: `group-aes-gcm:${message.messageId}:${activeAccountId}`,
+              throttleMs: 60000,
+            });
+          }
+
+          throw new Error(groupDecryptResponse.errorCode ?? 'GROUP_DECRYPTION_FAILED');
+        }
 
         if (!groupDecryptResponse.plainText) {
           throw new Error('Group message content was decrypted to an empty value.');
@@ -385,10 +527,13 @@ export function useMessageDecryptionController({
         return groupDecryptResponse.plainText;
       }
       catch (error) {
-        console.warn('Group AES-GCM decryption failed.', {
+        clientLogger.warn('Group AES-GCM decryption failed unexpectedly.', {
           stage: 'GROUP_AES_GCM' satisfies DecryptionStage,
           ...buildMessageDiagnostics(message, activeAccountId, activeDeviceId),
           error,
+        }, {
+          dedupeKey: `group-aes-gcm-unexpected:${message.messageId}:${activeAccountId}`,
+          throttleMs: 60000,
         });
         throw error;
       }
@@ -432,11 +577,14 @@ export function useMessageDecryptionController({
         .catch((error) => {
           failedMessageIdsRef.current.add(messageId);
           scheduleDecryptionRetry(message);
-          console.warn('Message decryption failed.', {
+          clientLogger.debug('Message decryption is pending.', {
             ...buildMessageDiagnostics(message, activeAccountId, activeDeviceId),
             attempt: failedAttemptsByMessageIdRef.current.get(messageId) ?? 1,
             maxAttempts: MAX_DECRYPTION_ATTEMPTS,
             error,
+          }, {
+            dedupeKey: `message-decryption-pending:${message.chatId}:${message.encryptionType}:${message.groupKeyEpoch ?? 'none'}:${activeAccountId}`,
+            throttleMs: 60000,
           });
           setDecryptedMessagesById((previousValue) => ({
             ...previousValue,

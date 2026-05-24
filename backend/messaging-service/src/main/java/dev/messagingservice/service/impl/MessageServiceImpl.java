@@ -3,11 +3,14 @@ package dev.messagingservice.service.impl;
 import dev.messagingservice.exception.ChatAccessDeniedException;
 import dev.messagingservice.exception.ChatNotFoundException;
 import dev.messagingservice.exception.MessageNotFoundException;
+import dev.messagingservice.exception.MessagePayloadValidationException;
 import dev.messagingservice.model.dto.request.AccountKeyEnvelopeRequestDto;
 import dev.messagingservice.model.dto.request.DeviceMessagePayloadRequestDto;
 import dev.messagingservice.model.dto.request.MarkChatReadRequestDto;
 import dev.messagingservice.model.dto.request.SendMessageRequestDto;
+import dev.messagingservice.model.dto.request.SetMessageReactionRequestDto;
 import dev.messagingservice.model.dto.response.MessageResponseDto;
+import dev.messagingservice.model.dto.response.MessageReactionResponseDto;
 import dev.messagingservice.model.entity.ChatEntity;
 import dev.messagingservice.model.entity.ChatParticipantEntity;
 import dev.messagingservice.model.entity.ChatParticipantVisibilityWindowEntity;
@@ -16,6 +19,7 @@ import dev.messagingservice.model.entity.MessageAccountKeyEnvelopeEntity;
 import dev.messagingservice.model.entity.MessageDeliveryStateEntity;
 import dev.messagingservice.model.entity.MessageDevicePayloadEntity;
 import dev.messagingservice.model.entity.MessageEntity;
+import dev.messagingservice.model.entity.MessageReactionEntity;
 import dev.messagingservice.model.enumeration.ChatParticipantStatus;
 import dev.messagingservice.model.enumeration.ChatType;
 import dev.messagingservice.model.enumeration.MessageDeliveryStatus;
@@ -28,6 +32,7 @@ import dev.messagingservice.repository.MessageAccountKeyEnvelopeRepository;
 import dev.messagingservice.repository.MessageDeliveryStateRepository;
 import dev.messagingservice.repository.MessageDevicePayloadRepository;
 import dev.messagingservice.repository.MessageRepository;
+import dev.messagingservice.repository.MessageReactionRepository;
 import dev.messagingservice.service.MessageService;
 import dev.messagingservice.service.MessagingEventFactory;
 import dev.messagingservice.service.MessagingEventPublisher;
@@ -54,6 +59,7 @@ public class MessageServiceImpl implements MessageService {
     private final ChatParticipantRepository chatParticipantRepository;
     private final ChatParticipantVisibilityWindowRepository chatParticipantVisibilityWindowRepository;
     private final MessageRepository messageRepository;
+    private final MessageReactionRepository messageReactionRepository;
     private final MessageDeliveryStateRepository messageDeliveryStateRepository;
     private final MessageDevicePayloadRepository messageDevicePayloadRepository;
     private final MessageAccountKeyEnvelopeRepository messageAccountKeyEnvelopeRepository;
@@ -96,6 +102,7 @@ public class MessageServiceImpl implements MessageService {
                 filterAccountKeyEnvelopesForAccount(savedEnvelopeEntities, currentAccountId),
                 findGroupEpochEnvelope(savedMessageEntity, currentAccountId),
                 messageDeliveryStateRepository.findByMessageId(savedMessageEntity.getId()),
+                messageReactionRepository.findByMessageId(savedMessageEntity.getId()),
                 currentAccountId
         );
     }
@@ -120,6 +127,8 @@ public class MessageServiceImpl implements MessageService {
                 .findByMessageIdInAndTargetAccountId(messageIds, currentAccountId)
                 .stream()
                 .collect(Collectors.groupingBy(MessageAccountKeyEnvelopeEntity::getMessageId));
+        Map<UUID, List<MessageReactionEntity>> reactionsByMessageId = messageReactionRepository.findByMessageIdIn(messageIds).stream()
+                .collect(Collectors.groupingBy(MessageReactionEntity::getMessageId));
 
         return messageEntities.stream()
                 .map(messageEntity -> messageMapper.toMessageResponse(
@@ -128,6 +137,7 @@ public class MessageServiceImpl implements MessageService {
                         envelopesByMessageId.getOrDefault(messageEntity.getId(), List.of()),
                         findGroupEpochEnvelope(messageEntity, currentAccountId),
                         deliveryStatesByMessageId.getOrDefault(messageEntity.getId(), List.of()),
+                        reactionsByMessageId.getOrDefault(messageEntity.getId(), List.of()),
                         currentAccountId
                 ))
                 .toList();
@@ -185,6 +195,71 @@ public class MessageServiceImpl implements MessageService {
         log.debug("Chat marked as read. Chat ID: {}, account ID: {}, messages: {}.", chatId, currentAccountId, readMessageIds.size());
     }
 
+
+    @Override
+    @Transactional
+    public MessageReactionResponseDto setMessageReaction(UUID currentAccountId, UUID chatId, UUID messageId, SetMessageReactionRequestDto requestDto) {
+        ChatParticipantEntity currentParticipant = getKnownParticipant(chatId, currentAccountId);
+        MessageEntity messageEntity = getMessageInChat(chatId, messageId);
+
+        if (!isVisibleToParticipant(messageEntity, currentParticipant)) {
+            throw new MessageNotFoundException("Message with ID '" + messageId + "' was not found in this chat.");
+        }
+
+        String emoji = TextNormalizer.trimToNull(requestDto.emoji());
+
+        if (emoji == null) {
+            throw new MessagePayloadValidationException("Reaction emoji is required.");
+        }
+
+        OffsetDateTime now = OffsetDateTime.now();
+        MessageReactionEntity reactionEntity = messageReactionRepository.findByMessageIdAndAccountId(messageId, currentAccountId)
+                .map(existingReactionEntity -> updateReaction(existingReactionEntity, emoji, now))
+                .orElseGet(() -> createReaction(messageId, currentAccountId, emoji, now));
+        MessageReactionEntity savedReactionEntity = messageReactionRepository.save(reactionEntity);
+        publishMessageReactionUpdatedEvent(chatId, messageId, currentAccountId, emoji, savedReactionEntity.getUpdatedAt());
+        log.debug("Message reaction updated. Message ID: {}, account ID: {}, emoji: {}.", messageId, currentAccountId, emoji);
+        return messageMapper.toReactionResponse(savedReactionEntity);
+    }
+
+    @Override
+    @Transactional
+    public void removeMessageReaction(UUID currentAccountId, UUID chatId, UUID messageId) {
+        ChatParticipantEntity currentParticipant = getKnownParticipant(chatId, currentAccountId);
+        MessageEntity messageEntity = getMessageInChat(chatId, messageId);
+
+        if (!isVisibleToParticipant(messageEntity, currentParticipant)) {
+            return;
+        }
+
+        MessageReactionEntity reactionEntity = messageReactionRepository.findByMessageIdAndAccountId(messageId, currentAccountId)
+                .orElse(null);
+
+        if (reactionEntity == null) {
+            return;
+        }
+
+        messageReactionRepository.delete(reactionEntity);
+        publishMessageReactionUpdatedEvent(chatId, messageId, currentAccountId, null, OffsetDateTime.now());
+        log.debug("Message reaction removed. Message ID: {}, account ID: {}.", messageId, currentAccountId);
+    }
+
+    private MessageReactionEntity updateReaction(MessageReactionEntity reactionEntity, String emoji, OffsetDateTime now) {
+        reactionEntity.setEmoji(emoji);
+        reactionEntity.setUpdatedAt(now);
+        return reactionEntity;
+    }
+
+    private MessageReactionEntity createReaction(UUID messageId, UUID accountId, String emoji, OffsetDateTime now) {
+        return MessageReactionEntity.builder()
+                .messageId(messageId)
+                .accountId(accountId)
+                .emoji(emoji)
+                .createdAt(now)
+                .updatedAt(now)
+                .build();
+    }
+
     private ChatEntity getChatForMessaging(UUID currentAccountId, UUID chatId) {
         validateActiveParticipant(chatId, currentAccountId);
         ChatEntity chatEntity = chatRepository.findById(chatId)
@@ -223,6 +298,7 @@ public class MessageServiceImpl implements MessageService {
                 messageAccountKeyEnvelopeRepository.findByMessageId(existingMessageEntity.getId()),
                 findGroupEpochEnvelope(existingMessageEntity, currentAccountId),
                 messageDeliveryStateRepository.findByMessageId(existingMessageEntity.getId()),
+                messageReactionRepository.findByMessageId(existingMessageEntity.getId()),
                 currentAccountId
         );
     }
@@ -423,6 +499,22 @@ public class MessageServiceImpl implements MessageService {
                 payloadEntities,
                 accountKeyEnvelopeEntities,
                 null,
+                recipientAccountIds
+        ));
+    }
+
+
+    private void publishMessageReactionUpdatedEvent(UUID chatId, UUID messageId, UUID accountId, String emoji, OffsetDateTime updatedAt) {
+        List<UUID> recipientAccountIds = chatParticipantRepository.findByChatIdAndStatus(chatId, ChatParticipantStatus.ACTIVE)
+                .stream()
+                .map(ChatParticipantEntity::getAccountId)
+                .toList();
+        messagingEventPublisher.publish(messagingEventFactory.createMessageReactionUpdatedEvent(
+                chatId,
+                messageId,
+                accountId,
+                emoji,
+                updatedAt,
                 recipientAccountIds
         ));
     }

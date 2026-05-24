@@ -118,10 +118,15 @@ export type DecryptMessageResponse = {
   errorMessage?: string;
 };
 
+export type ExpectedCryptoErrorCode = 'BACKUP_LOCKED' | 'GROUP_KEY_MISSING' | 'CRYPTO_OPERATION_FAILED';
+
 export type DecryptGroupMessageResponse = {
   plainText: string | null;
   missingGroupKey?: boolean;
   fromCache?: boolean;
+  failed?: boolean;
+  errorCode?: ExpectedCryptoErrorCode;
+  errorMessage?: string;
 };
 
 export type ClearLocalVaultResponse = {
@@ -280,10 +285,14 @@ export type EncryptAccountKeyEnvelopeResponse = {
 export type DecryptAccountKeyEnvelopeRequest = {
   accountId: string;
   encryptedKeyBase64: string;
+  allowFailure?: boolean;
 };
 
 export type DecryptAccountKeyEnvelopeResponse = {
   keyBase64: string;
+  failed?: boolean;
+  errorCode?: ExpectedCryptoErrorCode;
+  errorMessage?: string;
 };
 
 export type EncryptGroupMessageV2Request = EncryptGroupMessageRequest & {
@@ -309,6 +318,7 @@ export type DecryptGroupMessageV2Request = {
   encryptedPayload: string;
   initializationVectorBase64: string;
   authenticationTagBase64: string;
+  allowFailure?: boolean;
 };
 
 export type GetOrCreateGroupEpochKeyRequest = {

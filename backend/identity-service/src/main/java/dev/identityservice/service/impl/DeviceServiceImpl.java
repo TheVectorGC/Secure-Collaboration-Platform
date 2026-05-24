@@ -112,6 +112,12 @@ public class DeviceServiceImpl implements DeviceService {
             return;
         }
 
+        long activeDeviceCount = deviceRepository.countByAccountIdAndStatus(accountEntity.getId(), DeviceStatus.ACTIVE);
+
+        if (activeDeviceCount <= 1) {
+            throw new DeviceRegistrationException("Cannot revoke the last active account device.");
+        }
+
         revokeDevice(deviceEntity);
         identityOutboxService.enqueueDeviceRevoked(accountEntity.getId(), deviceId);
         log.info("Device revoked. Device ID: {}, account ID: {}.", deviceId, accountEntity.getId());

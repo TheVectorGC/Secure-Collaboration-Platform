@@ -247,7 +247,12 @@ public class ChatServiceImpl implements ChatService {
                 .orElse(null);
 
         if (existingEnvelopeEntity != null) {
-            validateSameGroupEpochEnvelope(existingEnvelopeEntity, requestDto);
+            log.debug(
+                    "Group epoch key envelope already exists. Treating request as idempotent no-op. Chat ID: {}, epoch: {}, target account ID: {}.",
+                    chatId,
+                    requestDto.epoch(),
+                    requestDto.targetAccountId()
+            );
             return;
         }
 

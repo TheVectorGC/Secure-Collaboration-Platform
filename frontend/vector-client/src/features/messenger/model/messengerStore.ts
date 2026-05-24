@@ -35,6 +35,7 @@ type MessengerState = {
   upsertMessage: (message: MessageResponseDto) => void;
   applyMessageDelivered: (chatId: string, messageId: string, accountId: string, deliveredAt: string) => void;
   applyMessageRead: (chatId: string, lastReadMessageId: string, readMessageIds: string[], accountId: string, readAt: string) => void;
+  applyMessageReaction: (chatId: string, messageId: string, accountId: string, emoji: string | null, updatedAt: string) => void;
 };
 
 export const useMessengerStore = create<MessengerState>((set) => ({
@@ -196,6 +197,45 @@ export const useMessengerStore = create<MessengerState>((set) => ({
                   readAt,
                 };
               }),
+            };
+          }),
+        },
+      };
+    }),
+
+  applyMessageReaction: (chatId, messageId, accountId, emoji, updatedAt) =>
+    set((state) => {
+      const currentMessages = state.messagesByChatId[chatId] ?? [];
+
+      return {
+        messagesByChatId: {
+          ...state.messagesByChatId,
+          [chatId]: currentMessages.map((message) => {
+            if (message.messageId !== messageId) {
+              return message;
+            }
+
+            const reactionsWithoutAccount = (message.reactions ?? []).filter((reaction) => reaction.accountId !== accountId);
+
+            if (!emoji) {
+              return {
+                ...message,
+                reactions: reactionsWithoutAccount,
+              };
+            }
+
+            return {
+              ...message,
+              reactions: [
+                ...reactionsWithoutAccount,
+                {
+                  messageId,
+                  accountId,
+                  emoji,
+                  createdAt: updatedAt,
+                  updatedAt,
+                },
+              ],
             };
           }),
         },

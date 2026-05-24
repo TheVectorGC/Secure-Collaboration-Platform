@@ -13,6 +13,8 @@ export function MiniProfileModal({
   localAvatarDataUrl,
   onClose,
   onMessage,
+  isBlockedByCurrentAccount,
+  onUnblock,
 }: {
   profile: ProfileResponseDto | null;
   isCurrentAccount: boolean;
@@ -21,6 +23,8 @@ export function MiniProfileModal({
   localAvatarDataUrl: string | null;
   onClose: () => void;
   onMessage: (profile: ProfileResponseDto) => Promise<void>;
+  isBlockedByCurrentAccount: boolean;
+  onUnblock: (profile: ProfileResponseDto) => Promise<void>;
 }) {
   const [isOpeningChat, setIsOpeningChat] = useState(false);
 
@@ -36,6 +40,10 @@ export function MiniProfileModal({
     setIsOpeningChat(true);
 
     try {
+      if (isBlockedByCurrentAccount) {
+        await onUnblock(activeProfile);
+      }
+
       await onMessage(activeProfile);
       onClose();
     }
@@ -87,7 +95,7 @@ export function MiniProfileModal({
               className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-950/30 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isOpeningChat ? <LoaderCircle size={17} className="animate-spin" /> : <MessageSquare size={17} />}
-              Написать
+              {isBlockedByCurrentAccount ? 'Разблокировать и написать' : 'Написать'}
             </button>
           )}
         </div>

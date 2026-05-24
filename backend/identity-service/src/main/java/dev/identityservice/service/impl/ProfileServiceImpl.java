@@ -9,6 +9,7 @@ import dev.identityservice.model.enumeration.AvatarType;
 import dev.identityservice.model.enumeration.DeviceStatus;
 import dev.identityservice.repository.AccountRepository;
 import dev.identityservice.repository.DeviceRepository;
+import dev.identityservice.outbox.IdentityOutboxService;
 import dev.identityservice.repository.ProfileRepository;
 import dev.identityservice.service.MappingService;
 import dev.identityservice.service.ProfileService;
@@ -37,6 +38,7 @@ public class ProfileServiceImpl implements ProfileService {
     private final ProfileRepository profileRepository;
     private final MappingService mappingService;
     private final ProfileCacheService profileCacheService;
+    private final IdentityOutboxService identityOutboxService;
 
     @Override
     @Transactional(readOnly = true)
@@ -68,6 +70,7 @@ public class ProfileServiceImpl implements ProfileService {
         ProfileEntity savedProfileEntity = profileRepository.save(profileEntity);
         AccountProfileResponseDto responseDto = mappingService.mapToAccountProfileResponseDto(accountEntity, savedProfileEntity);
         profileCacheService.save(responseDto);
+        identityOutboxService.enqueueProfileUpdated(responseDto);
         return responseDto;
     }
 

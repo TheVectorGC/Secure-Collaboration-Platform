@@ -41,12 +41,15 @@ application:
     topics:
       messaging-events: ${MESSAGING_EVENTS_TOPIC:messaging.events}
       document-events: ${DOCUMENT_EVENTS_TOPIC:document.events}
+      identity-events: ${IDENTITY_EVENTS_TOPIC:identity.events}
   presence:
     redis-key-prefix: ${PRESENCE_REDIS_KEY_PREFIX:vector:presence}
     online-ttl: ${PRESENCE_ONLINE_TTL:90s}
   messaging-service:
     base-url: ${MESSAGING_SERVICE_BASE_URL:http://localhost:8087}
     chat-path: ${MESSAGING_SERVICE_CHAT_PATH:/api/v1/chats/{chatId}}
+  internal-api:
+    token: ${INTERNAL_API_TOKEN:local-dev-internal-token}
   typing:
     recipients-cache:
       redis-key-prefix: ${TYPING_RECIPIENTS_CACHE_REDIS_KEY_PREFIX:vector:realtime:typing-recipients}

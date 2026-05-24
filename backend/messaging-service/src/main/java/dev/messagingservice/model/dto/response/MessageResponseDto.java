@@ -58,5 +58,8 @@ public record MessageResponseDto(
     OffsetDateTime createdAt,
 
     @Schema(description = "Delivery states.")
-    List<MessageDeliveryStateResponseDto> deliveryStates
+    List<MessageDeliveryStateResponseDto> deliveryStates,
+
+    @Schema(description = "Message reactions.")
+    List<MessageReactionResponseDto> reactions
 ) {}

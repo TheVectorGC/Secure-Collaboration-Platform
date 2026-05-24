@@ -10,6 +10,7 @@ application:
       - /swagger-ui/**
       - /swagger-ui.html
       - /v3/api-docs/**
+      - /internal/**
   rate-limit:
     enabled: ${RATE_LIMIT_ENABLED:true}
     redis-key-prefix: ${RATE_LIMIT_REDIS_KEY_PREFIX:vector:messaging-service:rate-limit}

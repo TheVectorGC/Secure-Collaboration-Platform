@@ -110,6 +110,33 @@ public class MessagingEventFactoryImpl implements MessagingEventFactory {
         );
     }
 
+
+    @Override
+    public MessagingEventDto createMessageReactionUpdatedEvent(
+            UUID chatId,
+            UUID messageId,
+            UUID accountId,
+            String emoji,
+            OffsetDateTime updatedAt,
+            List<UUID> recipientAccountIds
+    ) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("chatId", chatId);
+        payload.put("messageId", messageId);
+        payload.put("accountId", accountId);
+        payload.put("emoji", emoji);
+        payload.put("updatedAt", updatedAt);
+
+        return createEvent(
+                MessagingEventType.MESSAGE_REACTION_UPDATED,
+                chatId,
+                messageId,
+                accountId,
+                recipientAccountIds,
+                payload
+        );
+    }
+
     @Override
     public MessagingEventDto createChatUpdatedEvent(ChatResponseDto chatResponseDto, List<UUID> recipientAccountIds) {
         Map<String, Object> payload = new LinkedHashMap<>();

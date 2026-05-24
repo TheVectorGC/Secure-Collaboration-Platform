@@ -1,11 +1,12 @@
 import { useMemo } from 'react';
 import type { ChatResponseDto, MessageResponseDto, ProfileResponseDto } from '../../../shared/types/api';
-import { getChatPresentation, getLastTimelineMessage } from '../lib/messengerCore';
+import { getChatPresentation, getLastTimelineMessage, type LocalChatState } from '../lib/messengerCore';
 
 type UseChatListsViewModelParams = {
   chats: ChatResponseDto[];
   messagesByChatId: Record<string, MessageResponseDto[]>;
   hiddenChatIdSet: Set<string>;
+  localChatState: LocalChatState;
   chatSearchQuery: string;
   forwardChatPickerQuery: string;
   currentProfile: ProfileResponseDto | null;
@@ -17,6 +18,7 @@ export function useChatListsViewModel(params: UseChatListsViewModelParams) {
     chats,
     messagesByChatId,
     hiddenChatIdSet,
+    localChatState,
     chatSearchQuery,
     forwardChatPickerQuery,
     currentProfile,
@@ -42,15 +44,39 @@ export function useChatListsViewModel(params: UseChatListsViewModelParams) {
       return true;
     });
 
+    const pinnedChatIdSet = new Set(localChatState.pinnedChatIds ?? []);
+    const sortedVisibleChats = [...visibleChats].sort((leftChat, rightChat) => {
+      if (leftChat.type === 'SELF' && rightChat.type !== 'SELF') {
+        return -1;
+      }
+
+      if (leftChat.type !== 'SELF' && rightChat.type === 'SELF') {
+        return 1;
+      }
+
+      const leftPinned = pinnedChatIdSet.has(leftChat.chatId);
+      const rightPinned = pinnedChatIdSet.has(rightChat.chatId);
+
+      if (leftPinned && !rightPinned) {
+        return -1;
+      }
+
+      if (!leftPinned && rightPinned) {
+        return 1;
+      }
+
+      return 0;
+    });
+
     if (!normalizedQuery) {
-      return visibleChats;
+      return sortedVisibleChats;
     }
 
-    return visibleChats.filter((chat) => {
+    return sortedVisibleChats.filter((chat) => {
       const presentation = getChatPresentation(chat, currentProfile, profilesById);
       return `${presentation.title} ${presentation.subtitle}`.toLowerCase().includes(normalizedQuery);
     });
-  }, [chatSearchQuery, chats, hiddenChatIdSet, messagesByChatId, currentProfile, profilesById]);
+  }, [chatSearchQuery, chats, hiddenChatIdSet, messagesByChatId, currentProfile, profilesById, localChatState.pinnedChatIds]);
 
   const forwardTargetChats = useMemo(() => {
     const normalizedQuery = forwardChatPickerQuery.trim().toLowerCase();

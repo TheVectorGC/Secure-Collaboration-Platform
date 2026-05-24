@@ -1,4 +1,4 @@
-import { Ban, Eraser, MoreVertical, ShieldCheck, Star, Trash2, Users } from 'lucide-react';
+import { Ban, Eraser, MoreVertical, Pin, PinOff, ShieldCheck, Star, Trash2, Users } from 'lucide-react';
 import { getAccountAvatarUrl, type ChatPresentation, UserAvatar } from '../../lib/messengerCore';
 import type { ChatResponseDto } from '../../../../shared/types/api';
 
@@ -7,9 +7,11 @@ type ChatHeaderProps = {
   selectedChatPresentation: ChatPresentation;
   selectedChatSubtitle: string;
   isChatActionsMenuOpen: boolean;
+  isPinned: boolean;
   onOpenGroupManagement: () => void;
   onOpenDirectProfile: () => void;
   onToggleChatActionsMenu: () => void;
+  onTogglePinned: () => void;
   onClearSelectedChatHistory: () => void;
   onOpenDeleteChatConfirm: () => void;
   onBlockDirectCompanion: () => void;
@@ -21,9 +23,11 @@ export function ChatHeader({
   selectedChatPresentation,
   selectedChatSubtitle,
   isChatActionsMenuOpen,
+  isPinned,
   onOpenGroupManagement,
   onOpenDirectProfile,
   onToggleChatActionsMenu,
+  onTogglePinned,
   onClearSelectedChatHistory,
   onOpenDeleteChatConfirm,
   onBlockDirectCompanion,
@@ -88,6 +92,16 @@ export function ChatHeader({
 
           {isChatActionsMenuOpen && (
             <div className="absolute right-0 top-12 z-[140] w-64 rounded-3xl border border-white/10 bg-[#171923] p-2 text-sm shadow-2xl shadow-black/60">
+              {selectedChat.type !== 'SELF' && (
+                <button
+                  type="button"
+                  onClick={onTogglePinned}
+                  className="flex min-h-12 w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-zinc-200 transition hover:bg-white/[0.06]"
+                >
+                  {isPinned ? <PinOff size={17} className="text-zinc-400" /> : <Pin size={17} className="text-zinc-400" />}
+                  {isPinned ? 'Открепить чат' : 'Закрепить чат'}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={onClearSelectedChatHistory}

@@ -4,11 +4,13 @@ import dev.messagingservice.model.dto.response.AccountKeyEnvelopeResponseDto;
 import dev.messagingservice.model.dto.response.MessageDeliveryStateResponseDto;
 import dev.messagingservice.model.dto.response.MessageDevicePayloadResponseDto;
 import dev.messagingservice.model.dto.response.MessageResponseDto;
+import dev.messagingservice.model.dto.response.MessageReactionResponseDto;
 import dev.messagingservice.model.entity.GroupEpochKeyEnvelopeEntity;
 import dev.messagingservice.model.entity.MessageAccountKeyEnvelopeEntity;
 import dev.messagingservice.model.entity.MessageDeliveryStateEntity;
 import dev.messagingservice.model.entity.MessageDevicePayloadEntity;
 import dev.messagingservice.model.entity.MessageEntity;
+import dev.messagingservice.model.entity.MessageReactionEntity;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
@@ -21,10 +23,14 @@ public class MessageMapper {
             List<MessageAccountKeyEnvelopeEntity> accountKeyEnvelopeEntities,
             GroupEpochKeyEnvelopeEntity groupEpochKeyEnvelopeEntity,
             List<MessageDeliveryStateEntity> deliveryStateEntities,
+            List<MessageReactionEntity> reactionEntities,
             UUID currentAccountId
     ) {
         List<MessageDeliveryStateResponseDto> deliveryStateResponses = deliveryStateEntities.stream()
                 .map(this::toDeliveryStateResponse)
+                .toList();
+        List<MessageReactionResponseDto> reactionResponses = reactionEntities.stream()
+                .map(this::toReactionResponse)
                 .toList();
         List<MessageDevicePayloadResponseDto> payloadResponses = payloadEntities.stream()
                 .filter(payloadEntity -> payloadEntity.getTargetAccountId().equals(currentAccountId))
@@ -52,7 +58,8 @@ public class MessageMapper {
                 accountKeyEnvelopeResponses,
                 groupEpochKeyEnvelopeEntity == null ? null : toGroupEpochKeyEnvelopeResponse(groupEpochKeyEnvelopeEntity),
                 messageEntity.getCreatedAt(),
-                deliveryStateResponses
+                deliveryStateResponses,
+                reactionResponses
         );
     }
 
@@ -80,6 +87,16 @@ public class MessageMapper {
                 envelopeEntity.getSenderDeviceId(),
                 envelopeEntity.getAlgorithm(),
                 envelopeEntity.getEncryptedKeyBase64()
+        );
+    }
+
+    public MessageReactionResponseDto toReactionResponse(MessageReactionEntity reactionEntity) {
+        return new MessageReactionResponseDto(
+                reactionEntity.getMessageId(),
+                reactionEntity.getAccountId(),
+                reactionEntity.getEmoji(),
+                reactionEntity.getCreatedAt(),
+                reactionEntity.getUpdatedAt()
         );
     }
 

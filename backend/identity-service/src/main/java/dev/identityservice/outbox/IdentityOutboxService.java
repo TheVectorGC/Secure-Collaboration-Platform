@@ -1,5 +1,6 @@
 package dev.identityservice.outbox;
 
+import dev.identityservice.model.dto.response.AccountProfileResponseDto;
 import java.util.UUID;
 
 public interface IdentityOutboxService {
@@ -8,4 +9,6 @@ public interface IdentityOutboxService {
     void enqueueAccountUnblocked(UUID blockerAccountId, UUID blockedAccountId);
 
     void enqueueDeviceRevoked(UUID accountId, UUID deviceId);
+
+    void enqueueProfileUpdated(AccountProfileResponseDto profileResponseDto);
 }

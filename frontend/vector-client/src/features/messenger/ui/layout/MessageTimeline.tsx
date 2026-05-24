@@ -28,7 +28,6 @@ type MessageTimelineProps = {
   decryptedMessagesById: Record<string, string>;
   readDetailsMessageId: string | null;
   highlightedMessageId: string | null;
-  localReactionsByMessageId: Record<string, string>;
   forwardSelectionSelectedMessageIds: string[] | null;
   selectedTypingText: string | null;
   messageElementRefs: MutableRefObject<Record<string, HTMLDivElement | null>>;
@@ -44,7 +43,7 @@ type MessageTimelineProps = {
   onDownloadAttachment: (attachment: FileAttachmentMessageContent | DocumentAttachmentMessageContent) => Promise<void>;
   onOpenProfile: (accountId: string) => void;
   onSetReadDetailsMessageId: (messageId: string | null) => void;
-  onSetLocalMessageReaction: (messageId: string, emoji: string) => void;
+  onSetMessageReaction: (messageId: string, emoji: string) => void;
 };
 
 export function MessageTimeline({
@@ -55,7 +54,6 @@ export function MessageTimeline({
   decryptedMessagesById,
   readDetailsMessageId,
   highlightedMessageId,
-  localReactionsByMessageId,
   forwardSelectionSelectedMessageIds,
   selectedTypingText,
   messageElementRefs,
@@ -71,7 +69,7 @@ export function MessageTimeline({
   onDownloadAttachment,
   onOpenProfile,
   onSetReadDetailsMessageId,
-  onSetLocalMessageReaction,
+  onSetMessageReaction,
 }: MessageTimelineProps) {
   const renderedMessages = visibleSelectedMessages;
 
@@ -121,7 +119,12 @@ export function MessageTimeline({
           const shouldShowGroupReadDetails = selectedChat.type === 'GROUP' && readDetailsMessageId === message.messageId;
           const shouldShowMessageReadReceipt = readReceiptDetails.totalCount > 0;
           const hasMessageBeenRead = readReceiptDetails.readCount > 0;
-          const localReaction = localReactionsByMessageId[message.messageId];
+          const currentAccountReaction = (message.reactions ?? []).find((reaction) => reaction.accountId === currentAccountId)?.emoji ?? null;
+          const reactionGroups = Array.from((message.reactions ?? []).reduce((reactionMap, reaction) => {
+            const currentCount = reactionMap.get(reaction.emoji) ?? 0;
+            reactionMap.set(reaction.emoji, currentCount + 1);
+            return reactionMap;
+          }, new Map<string, number>()));
           const isForwardSelectionActive = Boolean(forwardSelectionSelectedMessageIds);
           const isForwardSelected = Boolean(forwardSelectionSelectedMessageIds?.includes(message.messageId));
           const canSelectForForward = isForwardSelectionActive && isForwardableMessage(message);
@@ -276,17 +279,20 @@ export function MessageTimeline({
                         )}
                       </div>
                     </div>
-                    {localReaction && (
-                      <div className={`mt-1 flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
-                        <button
-                          type="button"
-                          onClick={() => onSetLocalMessageReaction(message.messageId, localReaction)}
-                          className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-sm shadow-sm transition ${isOwnMessage ? 'border-violet-200/25 bg-violet-950/35 text-white hover:bg-violet-900/45' : 'border-white/10 bg-white/[0.06] text-zinc-100 hover:bg-white/[0.1]'}`}
-                          title="Убрать реакцию"
-                        >
-                          <span>{localReaction}</span>
-                          <span className="text-[11px] opacity-70">1</span>
-                        </button>
+                    {reactionGroups.length > 0 && (
+                      <div className={`mt-1 flex flex-wrap gap-1.5 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
+                        {reactionGroups.map(([emoji, count]) => (
+                          <button
+                            type="button"
+                            key={emoji}
+                            onClick={() => onSetMessageReaction(message.messageId, emoji)}
+                            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-sm shadow-sm transition ${currentAccountReaction === emoji ? 'border-violet-200/35 bg-violet-500/25 text-white' : isOwnMessage ? 'border-violet-200/25 bg-violet-950/35 text-white hover:bg-violet-900/45' : 'border-white/10 bg-white/[0.06] text-zinc-100 hover:bg-white/[0.1]'}`}
+                            title={currentAccountReaction === emoji ? 'Убрать реакцию' : 'Поставить реакцию'}
+                          >
+                            <span>{emoji}</span>
+                            <span className="text-[11px] opacity-70">{count}</span>
+                          </button>
+                        ))}
                       </div>
                     )}
                     {shouldShowGroupReadDetails && (

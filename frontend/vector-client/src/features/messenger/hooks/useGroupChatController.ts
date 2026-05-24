@@ -1,8 +1,9 @@
 import { type Dispatch, type SetStateAction } from 'react';
 import { addGroupParticipant, createDirectChat, createGroupChat, getCurrentAccountGroupEpochKeyEnvelope, removeGroupParticipant, upsertGroupEpochKeyEnvelope } from '../../chats/api/chatsApi';
+import { unblockAccount } from '../../account-blocks/api/accountBlocksApi';
 import { getAccountBackupPublicKey } from '../../crypto/api/accountBackupProfileApi';
 import type { ChatResponseDto, ProfileResponseDto } from '../../../shared/types/api';
-import type { GroupHistoryAccessMode } from '../lib/messengerCore';
+import type { GroupHistoryAccessMode, LocalChatState } from '../lib/messengerCore';
 import { getActiveGroupParticipantAccountIds } from '../lib/messengerCore';
 
 type UseGroupChatControllerParams = {
@@ -16,6 +17,8 @@ type UseGroupChatControllerParams = {
   setIsCreateChatOpen: (isOpen: boolean) => void;
   setErrorMessage: (message: string | null) => void;
   clearTemporarilyMissingGroupKeys: () => void;
+  restoreChatLocally: (chatId: string) => void;
+  updateLocalChatState: (updater: (previousValue: LocalChatState) => LocalChatState) => void;
   setDecryptedMessagesById: Dispatch<SetStateAction<Record<string, string>>>;
 };
 
@@ -31,15 +34,33 @@ export function useGroupChatController(params: UseGroupChatControllerParams) {
     setIsCreateChatOpen,
     setErrorMessage,
     clearTemporarilyMissingGroupKeys,
+    restoreChatLocally,
+    updateLocalChatState,
     setDecryptedMessagesById,
   } = params;
 
   async function handleCreateDirectChat(profileToChat: ProfileResponseDto) {
-    const chat = await createDirectChat({ recipientAccountId: profileToChat.accountId });
-    upsertProfile(profileToChat);
-    upsertChat(chat);
-    selectChat(chat.chatId);
-    setIsCreateChatOpen(false);
+    try {
+      const chat = await createDirectChat({ recipientAccountId: profileToChat.accountId });
+      upsertProfile(profileToChat);
+      upsertChat(chat);
+      restoreChatLocally(chat.chatId);
+      selectChat(chat.chatId);
+      setIsCreateChatOpen(false);
+    }
+    catch (error) {
+      setErrorMessage('Не удалось открыть личный чат. Если пользователь заблокирован, сначала разблокируйте его.');
+      throw error;
+    }
+  }
+
+  async function handleUnblockProfile(profileToUnblock: ProfileResponseDto) {
+    await unblockAccount(profileToUnblock.accountId);
+    updateLocalChatState((previousValue) => ({
+      ...previousValue,
+      blockedAccountIds: (previousValue.blockedAccountIds ?? []).filter((accountId) => accountId !== profileToUnblock.accountId),
+    }));
+    setErrorMessage(null);
   }
 
   async function handleCreateGroupChat(groupName: string, profilesToChat: ProfileResponseDto[]) {
@@ -202,6 +223,7 @@ export function useGroupChatController(params: UseGroupChatControllerParams) {
 
   return {
     handleCreateDirectChat,
+    handleUnblockProfile,
     handleCreateGroupChat,
     handleAddGroupParticipant,
     handleRemoveGroupParticipant,

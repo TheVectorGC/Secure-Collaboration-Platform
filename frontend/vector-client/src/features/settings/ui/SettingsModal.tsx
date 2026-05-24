@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { LogOut, Monitor, RefreshCw, Settings, ShieldCheck, LockKeyhole, X } from 'lucide-react';
+import { LogOut, Monitor, RefreshCw, Settings, ShieldCheck, LockKeyhole, Trash2, X } from 'lucide-react';
 import { updateCurrentProfileAvatar } from '../../directory/api/profilesApi';
-import { getActiveAccountDevices } from '../../devices/api/devicesApi';
+import { getActiveAccountDevices, revokeCurrentAccountDevice } from '../../devices/api/devicesApi';
 import type { ActiveDeviceResponseDto, ProfileResponseDto } from '../../../shared/types/api';
 import { getDisplayName } from '../../../shared/lib/profile';
 import { createLocalAvatarDataUrl, getAccountAvatarUrl, getLocalAvatarStorageKey, UserAvatar } from '../../messenger/lib/messengerCore';
@@ -126,6 +126,8 @@ export function SettingsModal({
   const [devicesError, setDevicesError] = useState<string | null>(null);
   const [localAvatarDataUrl, setLocalAvatarDataUrl] = useState<string | null>(() => profile?.avatarDataUrl ?? localStorage.getItem(getLocalAvatarStorageKey(profile?.accountId)));
   const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [deviceActionError, setDeviceActionError] = useState<string | null>(null);
+  const [revokingDeviceId, setRevokingDeviceId] = useState<string | null>(null);
 
   async function handleLocalAvatarSelected(file: File | null | undefined) {
     if (!file || !profile?.accountId) {
@@ -170,6 +172,49 @@ export function SettingsModal({
     }
     finally {
       setIsLoadingDevices(false);
+    }
+  }
+
+
+  async function handleRevokeDevice(targetDeviceId: string) {
+    if (!targetDeviceId) {
+      return;
+    }
+
+    const activeDeviceCount = devices.filter((device) => device.status !== 'REVOKED').length;
+
+    if (activeDeviceCount <= 1) {
+      setDeviceActionError('Последнее устройство аккаунта удалить нельзя.');
+      return;
+    }
+
+    const confirmed = window.confirm(targetDeviceId === deviceId
+      ? 'Удалить текущее устройство? После этого вход будет завершён.'
+      : 'Удалить это устройство? На нём будет завершён вход.');
+
+    if (!confirmed) {
+      return;
+    }
+
+    setRevokingDeviceId(targetDeviceId);
+    setDeviceActionError(null);
+
+    try {
+      await revokeCurrentAccountDevice(targetDeviceId);
+
+      if (targetDeviceId === deviceId) {
+        await onLogout();
+        return;
+      }
+
+      await loadDevices();
+    }
+    catch (error) {
+      console.error(error);
+      setDeviceActionError('Не удалось удалить устройство. Попробуйте ещё раз.');
+    }
+    finally {
+      setRevokingDeviceId(null);
     }
   }
 
@@ -315,6 +360,10 @@ export function SettingsModal({
                   <div className="rounded-2xl border border-red-400/20 bg-red-500/10 p-4 text-sm text-red-200">{devicesError}</div>
                 )}
 
+                {deviceActionError && (
+                  <div className="rounded-2xl border border-red-400/20 bg-red-500/10 p-4 text-sm text-red-200">{deviceActionError}</div>
+                )}
+
                 <div className="space-y-3">
                   {isLoadingDevices && devices.length === 0 && (
                     <div className="rounded-[2rem] border border-white/10 bg-white/[0.025] p-8 text-center text-sm text-zinc-500">Загружаем устройства...</div>
@@ -350,6 +399,18 @@ export function SettingsModal({
                         <div className="mt-4 grid gap-3 text-xs text-zinc-500 sm:grid-cols-2">
                           <div className="rounded-2xl bg-black/15 p-3">Последняя активность: <span className="text-zinc-300">{formatDeviceTime(device.lastSeenAt)}</span></div>
                           <div className="rounded-2xl bg-black/15 p-3">Устройство: <span className="text-zinc-300">{isCurrentDevice ? 'текущее' : 'другое'}</span></div>
+                        </div>
+
+                        <div className="mt-4 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => void handleRevokeDevice(activeDeviceId)}
+                            disabled={revokingDeviceId === activeDeviceId || devices.length <= 1}
+                            className="inline-flex items-center gap-2 rounded-2xl border border-red-300/15 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-200 transition hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-45"
+                          >
+                            {revokingDeviceId === activeDeviceId ? <RefreshCw size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                            Удалить устройство
+                          </button>
                         </div>
                       </div>
                     );

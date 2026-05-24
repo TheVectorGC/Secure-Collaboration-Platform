@@ -42,12 +42,15 @@ spring:
 application:
   identity-service:
     base-url: ${IDENTITY_SERVICE_BASE_URL:http://localhost:8085}
+  internal-api:
+    token: ${INTERNAL_API_TOKEN:local-dev-internal-token}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
   security:
     public-paths:
       - /actuator/health
       - /actuator/info
+      - /internal/**
     jwt:
       issuer: ${JWT_ISSUER:identity-service}
       key-name: ${JWT_KEY_NAME:identity-service-jwt-ed25519}

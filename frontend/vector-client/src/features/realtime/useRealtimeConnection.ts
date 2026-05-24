@@ -7,8 +7,11 @@ import type {
   MessageCreatedPayload,
   MessageDeliveredPayload,
   MessageReadPayload,
+  MessageReactionUpdatedPayload,
   MessageResponseDto,
   PresenceSnapshotPayload,
+  ProfileUpdatedPayload,
+  DeviceRevokedPayload,
   RealtimeEventDto,
   TypingPayload,
   AccountPresencePayload,
@@ -19,6 +22,8 @@ import { getChatMessages } from '../messages/api/messagesApi';
 import { useAuthStore } from '../auth/model/authStore';
 import { useMessengerStore } from '../messenger/model/messengerStore';
 import { useRealtimeStore } from './model/realtimeStore';
+import { useDirectoryStore } from '../directory/model/directoryStore';
+import { clientLogger } from '../../shared/lib/clientLogger';
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const HEARTBEAT_TIMEOUT_MS = 10_000;
@@ -68,6 +73,21 @@ function isMessageReadPayload(payload: unknown): payload is MessageReadPayload {
     && typeof payload.readAt === 'string';
 }
 
+function isMessageReactionUpdatedPayload(payload: unknown): payload is MessageReactionUpdatedPayload {
+  return isObjectPayload(payload)
+    && typeof payload.chatId === 'string'
+    && typeof payload.messageId === 'string'
+    && typeof payload.accountId === 'string'
+    && (typeof payload.emoji === 'string' || payload.emoji === null)
+    && typeof payload.updatedAt === 'string';
+}
+
+function isDeviceRevokedPayload(payload: unknown): payload is DeviceRevokedPayload {
+  return isObjectPayload(payload)
+    && typeof payload.accountId === 'string'
+    && typeof payload.deviceId === 'string';
+}
+
 
 function isDocumentChangedPayload(payload: unknown): payload is DocumentChangedPayload {
   return isObjectPayload(payload)
@@ -108,6 +128,13 @@ function isPresenceSnapshotPayload(payload: unknown): payload is PresenceSnapsho
   return isObjectPayload(payload)
     && Array.isArray(payload.accounts)
     && payload.accounts.every(isAccountPresencePayload);
+}
+
+function isProfileUpdatedPayload(payload: unknown): payload is ProfileUpdatedPayload {
+  return isObjectPayload(payload)
+    && typeof payload.accountId === 'string'
+    && typeof payload.username === 'string'
+    && typeof payload.email === 'string';
 }
 
 function getAccessTokenExpirationTime(accessTokenExpiresAt: string | null): number | null {
@@ -157,12 +184,14 @@ export function useRealtimeConnection() {
   const touchChat = useMessengerStore((state) => state.touchChat);
   const applyMessageDelivered = useMessengerStore((state) => state.applyMessageDelivered);
   const applyMessageRead = useMessengerStore((state) => state.applyMessageRead);
+  const applyMessageReaction = useMessengerStore((state) => state.applyMessageReaction);
   const setStatus = useRealtimeStore((state) => state.setStatus);
   const setLastError = useRealtimeStore((state) => state.setLastError);
   const setTyping = useRealtimeStore((state) => state.setTyping);
   const setPresence = useRealtimeStore((state) => state.setPresence);
   const applyPresenceSnapshot = useRealtimeStore((state) => state.applyPresenceSnapshot);
   const setTypingSender = useRealtimeStore((state) => state.setTypingSender);
+  const upsertProfile = useDirectoryStore((state) => state.upsertProfile);
   const reconnectAttemptRef = useRef(0);
   const reconnectTimeoutRef = useRef<number | null>(null);
   const refreshTimeoutRef = useRef<number | null>(null);
@@ -263,7 +292,10 @@ export function useRealtimeConnection() {
         }));
       }
       catch (error) {
-        console.warn('Не удалось синхронизировать данные после переподключения realtime.', error);
+        clientLogger.warn('Realtime reconnect synchronization failed.', { error }, {
+          dedupeKey: 'realtime-reconnect-sync',
+          throttleMs: 30000,
+        });
       }
     }
 
@@ -289,6 +321,7 @@ export function useRealtimeConnection() {
           groupEpochKeyEnvelope: payload.groupEpochKeyEnvelope ?? null,
           createdAt: payload.createdAt,
           deliveryStates: [],
+          reactions: [],
         };
 
         upsertMessage(message);
@@ -318,6 +351,11 @@ export function useRealtimeConnection() {
         return;
       }
 
+      if (realtimeEvent.type === 'PROFILE_UPDATED' && isProfileUpdatedPayload(realtimeEvent.payload)) {
+        upsertProfile(realtimeEvent.payload);
+        return;
+      }
+
       if (realtimeEvent.type === 'MESSAGE_DELIVERED' && isMessageDeliveredPayload(realtimeEvent.payload)) {
         const payload = realtimeEvent.payload;
         applyMessageDelivered(payload.chatId, payload.messageId, payload.deliveredByAccountId, payload.deliveredAt);
@@ -327,6 +365,22 @@ export function useRealtimeConnection() {
       if (realtimeEvent.type === 'MESSAGE_READ' && isMessageReadPayload(realtimeEvent.payload)) {
         const payload = realtimeEvent.payload;
         applyMessageRead(payload.chatId, payload.lastReadMessageId, payload.readMessageIds, payload.readByAccountId, payload.readAt);
+        return;
+      }
+
+      if (realtimeEvent.type === 'MESSAGE_REACTION_UPDATED' && isMessageReactionUpdatedPayload(realtimeEvent.payload)) {
+        const payload = realtimeEvent.payload;
+        applyMessageReaction(payload.chatId, payload.messageId, payload.accountId, payload.emoji, payload.updatedAt);
+        return;
+      }
+
+      if (realtimeEvent.type === 'DEVICE_REVOKED' && isDeviceRevokedPayload(realtimeEvent.payload)) {
+        const currentDeviceId = useAuthStore.getState().deviceId;
+
+        if (realtimeEvent.payload.deviceId === currentDeviceId) {
+          useAuthStore.getState().clearAuthentication();
+        }
+
         return;
       }
 
@@ -348,7 +402,10 @@ export function useRealtimeConnection() {
         await refreshAuthenticationToken();
       }
       catch (error) {
-        console.error(error);
+        clientLogger.error('Realtime token refresh failed.', { error }, {
+          dedupeKey: 'realtime-token-refresh',
+          throttleMs: 30000,
+        });
         setLastError('Не удалось обновить realtime-сессию.');
       }
       finally {
@@ -387,7 +444,10 @@ export function useRealtimeConnection() {
           handleRealtimeEvent(realtimeEvent);
         }
         catch (error) {
-          console.error('Не удалось разобрать realtime-событие.', error);
+          clientLogger.error('Realtime event parsing failed.', { error, rawEvent: event.data }, {
+            dedupeKey: 'realtime-event-parse',
+            throttleMs: 30000,
+          });
           setLastError('Не удалось обработать realtime событие.');
         }
       };
@@ -435,7 +495,10 @@ export function useRealtimeConnection() {
           await refreshAuthenticationToken();
         }
         catch (error) {
-          console.error(error);
+          clientLogger.error('Scheduled realtime token refresh failed.', { error }, {
+            dedupeKey: 'realtime-scheduled-token-refresh',
+            throttleMs: 30000,
+          });
           setLastError('Не удалось обновить realtime-сессию.');
         }
       }, refreshDelay);
@@ -464,6 +527,7 @@ export function useRealtimeConnection() {
     accessTokenExpiresAt,
     applyMessageDelivered,
     applyMessageRead,
+    applyMessageReaction,
     applyPresenceSnapshot,
     setLastError,
     setChats,
@@ -474,5 +538,6 @@ export function useRealtimeConnection() {
     touchChat,
     upsertChat,
     upsertMessage,
+    upsertProfile,
   ]);
 }

@@ -30,7 +30,7 @@ import { ForwardChatPicker } from '../features/messenger/ui/layout/ForwardChatPi
 import { MessageContextMenu } from '../features/messenger/ui/layout/MessageContextMenu';
 import { ComposerDock } from '../features/messenger/ui/layout/ComposerDock';
 import { usePersistentLocalChatState } from '../features/messenger/hooks/usePersistentLocalChatState';
-import { useLocalMessageReactions } from '../features/messenger/hooks/useLocalMessageReactions';
+import { useMessageReactionsController } from '../features/messenger/hooks/useMessageReactionsController';
 import { useMessageContextMenuController } from '../features/messenger/hooks/useMessageContextMenuController';
 import { useReplyForwardController } from '../features/messenger/hooks/useReplyForwardController';
 import { useChatDragAndDrop } from '../features/messenger/hooks/useChatDragAndDrop';
@@ -72,6 +72,7 @@ export function MessengerPage() {
   const selectChat = useMessengerStore((state) => state.selectChat);
   const setMessages = useMessengerStore((state) => state.setMessages);
   const upsertMessage = useMessengerStore((state) => state.upsertMessage);
+  const applyMessageReaction = useMessengerStore((state) => state.applyMessageReaction);
 
   const profilesById = useDirectoryStore((state) => state.profilesById);
   const upsertProfile = useDirectoryStore((state) => state.upsertProfile);
@@ -90,7 +91,6 @@ export function MessengerPage() {
   const [isBlockUserConfirmOpen, setIsBlockUserConfirmOpen] = useState(false);
   const [isClearHistoryConfirmOpen, setIsClearHistoryConfirmOpen] = useState(false);
   const { localChatState, updateLocalChatState } = usePersistentLocalChatState(profile?.accountId);
-  const { localReactionsByMessageId, setLocalMessageReaction: updateLocalMessageReaction } = useLocalMessageReactions(profile?.accountId);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageElementRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -278,11 +278,6 @@ export function MessengerPage() {
     return () => window.clearTimeout(timeoutId);
   }, [errorMessage]);
 
-  function setLocalMessageReaction(messageId: string, emoji: string) {
-    updateLocalMessageReaction(messageId, emoji);
-    closeMessageContextMenu();
-  }
-
   const {
     filteredChats,
     forwardTargetChats,
@@ -290,6 +285,7 @@ export function MessengerPage() {
     chats,
     messagesByChatId,
     hiddenChatIdSet,
+    localChatState,
     chatSearchQuery,
     forwardChatPickerQuery,
     currentProfile: profile,
@@ -299,6 +295,8 @@ export function MessengerPage() {
   const {
     handleClearSelectedChatHistory,
     handleDeleteSelectedChatLocally,
+    handleToggleSelectedChatPinned,
+    restoreChatLocally,
   } = useLocalChatActions({
     selectedChatId,
     filteredChats,
@@ -390,6 +388,25 @@ export function MessengerPage() {
     setDecryptedMessagesById,
   });
 
+
+  const { setMessageReactionForChat } = useMessageReactionsController({
+    currentAccountId: profile?.accountId,
+    applyMessageReaction,
+    closeMessageContextMenu,
+    setErrorMessage,
+  });
+
+  function handleSetMessageReaction(messageId: string, emoji: string) {
+    const message = visibleSelectedMessages.find((visibleMessage) => visibleMessage.messageId === messageId) ?? null;
+
+    if (!message) {
+      return;
+    }
+
+    const currentReaction = (message.reactions ?? []).find((reaction) => reaction.accountId === profile?.accountId)?.emoji ?? null;
+    void setMessageReactionForChat(message.chatId, message.messageId, currentReaction, emoji);
+  }
+
   const {
     isDocumentsPanelOpen,
     setIsDocumentsPanelOpen,
@@ -463,6 +480,7 @@ export function MessengerPage() {
   const {
     handleCreateDirectChat,
     handleCreateGroupChat,
+    handleUnblockProfile,
     handleAddGroupParticipant,
     handleRemoveGroupParticipant,
   } = useGroupChatController({
@@ -477,6 +495,8 @@ export function MessengerPage() {
     setErrorMessage,
     clearTemporarilyMissingGroupKeys,
     setDecryptedMessagesById,
+    restoreChatLocally,
+    updateLocalChatState,
   });
 
   const handleUpdateGroupAvatar = useCallback(async (chatId: string, file: File | null) => {
@@ -508,6 +528,9 @@ export function MessengerPage() {
         onClose={() => setIsCreateChatOpen(false)}
         onCreateChat={handleCreateDirectChat}
         onCreateGroupChat={handleCreateGroupChat}
+        blockedAccountIds={localChatState.blockedAccountIds ?? []}
+        onUnblockProfile={handleUnblockProfile}
+        onOpenProfile={(foundProfile) => setMiniProfile(foundProfile)}
       />
 
       <SettingsModal
@@ -533,6 +556,8 @@ export function MessengerPage() {
         localAvatarDataUrl={localAvatarDataUrl}
         onClose={() => setMiniProfile(null)}
         onMessage={handleCreateDirectChat}
+        isBlockedByCurrentAccount={Boolean(miniProfile && (localChatState.blockedAccountIds ?? []).includes(miniProfile.accountId))}
+        onUnblock={handleUnblockProfile}
       />
 
       <GroupManagementModal
@@ -644,6 +669,8 @@ export function MessengerPage() {
               onOpenGroupManagement={() => setIsGroupManagementOpen(true)}
               onOpenDirectProfile={() => selectedChatPresentation.companionProfile && setMiniProfile(selectedChatPresentation.companionProfile)}
               onToggleChatActionsMenu={() => setIsChatActionsMenuOpen((previousValue) => !previousValue)}
+              isPinned={Boolean((localChatState.pinnedChatIds ?? []).includes(selectedChat.chatId))}
+              onTogglePinned={handleToggleSelectedChatPinned}
               onClearSelectedChatHistory={() => {
                 setIsChatActionsMenuOpen(false);
                 setIsClearHistoryConfirmOpen(true);
@@ -679,7 +706,6 @@ export function MessengerPage() {
               decryptedMessagesById={decryptedMessagesById}
               readDetailsMessageId={readDetailsMessageId}
               highlightedMessageId={highlightedMessageId}
-              localReactionsByMessageId={localReactionsByMessageId}
               forwardSelectionSelectedMessageIds={forwardSelection?.selectedMessageIds ?? null}
               selectedTypingText={selectedTypingText}
               messageElementRefs={messageElementRefs}
@@ -695,7 +721,7 @@ export function MessengerPage() {
               onDownloadAttachment={handleDownloadAttachment}
               onOpenProfile={openMiniProfileByAccountId}
               onSetReadDetailsMessageId={setReadDetailsMessageId}
-              onSetLocalMessageReaction={setLocalMessageReaction}
+              onSetMessageReaction={handleSetMessageReaction}
             />
 
             <ForwardChatPicker
@@ -714,7 +740,7 @@ export function MessengerPage() {
 
             {messageContextMenu && (() => {
               const contextMessage = visibleSelectedMessages.find((message) => message.messageId === messageContextMenu.messageId) ?? null;
-              const currentReaction = contextMessage ? localReactionsByMessageId[contextMessage.messageId] : null;
+              const currentReaction = contextMessage ? (contextMessage.reactions ?? []).find((reaction) => reaction.accountId === profile?.accountId)?.emoji ?? null : null;
               const contextDownloadableAttachment = contextMessage
                 ? getDownloadableAttachmentFromPlainText(decryptedMessagesById[contextMessage.messageId])
                 : null;
@@ -732,7 +758,7 @@ export function MessengerPage() {
                     closeMessageContextMenu();
                     void handleDownloadAttachment(attachment);
                   }}
-                  onReact={setLocalMessageReaction}
+                  onReact={handleSetMessageReaction}
                 />
               );
             })()}

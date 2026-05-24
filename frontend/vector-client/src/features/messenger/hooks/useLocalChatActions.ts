@@ -43,6 +43,37 @@ export function useLocalChatActions({
     setIsChatActionsMenuOpen(false);
   }
 
+  function restoreChatLocally(chatId: string) {
+    updateLocalChatState((previousValue) => ({
+      ...previousValue,
+      hiddenChatIds: previousValue.hiddenChatIds.filter((hiddenChatId) => hiddenChatId !== chatId),
+    }));
+  }
+
+  function handleToggleSelectedChatPinned() {
+    if (!selectedChatId) {
+      return;
+    }
+
+    updateLocalChatState((previousValue) => {
+      const pinnedChatIdSet = new Set(previousValue.pinnedChatIds ?? []);
+
+      if (pinnedChatIdSet.has(selectedChatId)) {
+        pinnedChatIdSet.delete(selectedChatId);
+      }
+      else {
+        pinnedChatIdSet.add(selectedChatId);
+      }
+
+      return {
+        ...previousValue,
+        pinnedChatIds: Array.from(pinnedChatIdSet),
+      };
+    });
+
+    setIsChatActionsMenuOpen(false);
+  }
+
   function handleDeleteSelectedChatLocally(options?: { blockedAccountId?: string | null }) {
     if (!selectedChatId) {
       return;
@@ -50,12 +81,12 @@ export function useLocalChatActions({
 
     const chatIdToHide = selectedChatId;
     const blockedAccountId = options?.blockedAccountId ?? null;
-
     const deletedAt = new Date().toISOString();
 
     updateLocalChatState((previousValue) => ({
       ...previousValue,
       hiddenChatIds: Array.from(new Set([...previousValue.hiddenChatIds, chatIdToHide])),
+      pinnedChatIds: (previousValue.pinnedChatIds ?? []).filter((pinnedChatId) => pinnedChatId !== chatIdToHide),
       clearedAtByChatId: {
         ...previousValue.clearedAtByChatId,
         [chatIdToHide]: deletedAt,
@@ -84,5 +115,7 @@ export function useLocalChatActions({
   return {
     handleClearSelectedChatHistory,
     handleDeleteSelectedChatLocally,
+    handleToggleSelectedChatPinned,
+    restoreChatLocally,
   };
 }

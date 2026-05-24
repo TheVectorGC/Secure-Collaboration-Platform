@@ -12,12 +12,18 @@ export function NewChatModal({
   onClose,
   onCreateChat,
   onCreateGroupChat,
+  blockedAccountIds,
+  onUnblockProfile,
+  onOpenProfile,
 }: {
   isOpen: boolean;
   currentAccountId: string | undefined;
   onClose: () => void;
   onCreateChat: (profile: ProfileResponseDto) => Promise<void>;
   onCreateGroupChat: (name: string, profiles: ProfileResponseDto[]) => Promise<void>;
+  blockedAccountIds: string[];
+  onUnblockProfile: (profile: ProfileResponseDto) => Promise<void>;
+  onOpenProfile: (profile: ProfileResponseDto) => void;
 }) {
   const upsertProfiles = useDirectoryStore((state) => state.upsertProfiles);
   const [query, setQuery] = useState('');
@@ -164,6 +170,7 @@ export function NewChatModal({
                   const displayName = getDisplayName(profile);
                   const isCreating = creatingAccountId === profile.accountId;
                   const isSelected = selectedProfiles.some((selectedProfile) => selectedProfile.accountId === profile.accountId);
+                  const isBlocked = blockedAccountIds.includes(profile.accountId);
 
                   return (
                     <div
@@ -178,12 +185,23 @@ export function NewChatModal({
                       >
                         {isSelected ? '✓' : '+'}
                       </button>
-                      <UserAvatar label={displayName} imageUrl={getAccountAvatarUrl(profile)} />
+                      <button
+                        type="button"
+                        onClick={() => onOpenProfile(profile)}
+                        className="rounded-2xl transition hover:brightness-110"
+                        title="Открыть профиль"
+                      >
+                        <UserAvatar label={displayName} imageUrl={getAccountAvatarUrl(profile)} />
+                      </button>
 
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-semibold text-zinc-100">{displayName}</div>
+                      <button
+                        type="button"
+                        onClick={() => onOpenProfile(profile)}
+                        className="min-w-0 flex-1 text-left"
+                      >
+                        <div className="truncate text-sm font-semibold text-zinc-100 transition hover:text-violet-100">{displayName}</div>
                         <div className="mt-1 truncate text-xs text-zinc-500">@{profile.username} · {profile.email}</div>
-                      </div>
+                      </button>
 
                       <button
                         type="button"
@@ -192,11 +210,15 @@ export function NewChatModal({
                           setErrorMessage(null);
 
                           try {
+                            if (isBlocked) {
+                              await onUnblockProfile(profile);
+                            }
+
                             await onCreateChat(profile);
                           }
                           catch (error) {
                             console.error(error);
-                            setErrorMessage('Не удалось открыть личный чат.');
+                            setErrorMessage(isBlocked ? 'Не удалось разблокировать пользователя и открыть чат.' : 'Не удалось открыть личный чат.');
                           }
                           finally {
                             setCreatingAccountId(null);
@@ -205,7 +227,7 @@ export function NewChatModal({
                         className="inline-flex items-center gap-2 rounded-2xl border border-violet-300/16 bg-violet-500/10 px-3 py-2 text-xs font-medium text-violet-100 transition hover:border-violet-300/30 hover:bg-violet-500/16"
                       >
                         {isCreating ? <LoaderCircle size={14} className="animate-spin" /> : <MessageCircle size={14} />}
-                        Написать
+                        {isBlocked ? 'Разблокировать и написать' : 'Написать'}
                       </button>
                     </div>
                   );

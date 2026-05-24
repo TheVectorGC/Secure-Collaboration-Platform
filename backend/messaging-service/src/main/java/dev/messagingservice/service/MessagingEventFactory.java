@@ -35,5 +35,14 @@ public interface MessagingEventFactory {
             List<UUID> recipientAccountIds
     );
 
+    MessagingEventDto createMessageReactionUpdatedEvent(
+            UUID chatId,
+            UUID messageId,
+            UUID accountId,
+            String emoji,
+            OffsetDateTime updatedAt,
+            List<UUID> recipientAccountIds
+    );
+
     MessagingEventDto createChatUpdatedEvent(ChatResponseDto chatResponseDto, List<UUID> recipientAccountIds);
 }

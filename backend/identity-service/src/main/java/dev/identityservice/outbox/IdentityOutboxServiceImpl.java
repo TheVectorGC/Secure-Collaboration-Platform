@@ -3,6 +3,7 @@ package dev.identityservice.outbox;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.identityservice.model.dto.response.AccountProfileResponseDto;
 import dev.identityservice.model.event.IdentityOutboxEventDto;
 import dev.identityservice.observability.RequestIdProvider;
 import dev.identityservice.model.entity.OutboxEventEntity;
@@ -23,6 +24,7 @@ public class IdentityOutboxServiceImpl implements IdentityOutboxService {
     private static final String ACCOUNT_BLOCKED_EVENT = "ACCOUNT_BLOCKED";
     private static final String ACCOUNT_UNBLOCKED_EVENT = "ACCOUNT_UNBLOCKED";
     private static final String DEVICE_REVOKED_EVENT = "DEVICE_REVOKED";
+    private static final String PROFILE_UPDATED_EVENT = "PROFILE_UPDATED";
 
     private final ObjectMapper objectMapper;
     private final OutboxEventRepository outboxEventRepository;
@@ -50,6 +52,13 @@ public class IdentityOutboxServiceImpl implements IdentityOutboxService {
         payload.put("accountId", accountId);
         payload.put("deviceId", deviceId);
         saveOutboxEvent(DEVICE_AGGREGATE, deviceId.toString(), DEVICE_REVOKED_EVENT, payload);
+    }
+
+    @Override
+    public void enqueueProfileUpdated(AccountProfileResponseDto profileResponseDto) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("profile", profileResponseDto);
+        saveOutboxEvent(ACCOUNT_AGGREGATE, profileResponseDto.accountId().toString(), PROFILE_UPDATED_EVENT, payload);
     }
 
     private void saveOutboxEvent(
