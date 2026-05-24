@@ -17,7 +17,6 @@ type TypingState = {
 
 type SendTypingEventRequest = {
   chatId: string;
-  recipientAccountIds: string[];
   isTyping: boolean;
 };
 

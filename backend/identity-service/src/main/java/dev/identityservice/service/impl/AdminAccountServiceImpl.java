@@ -18,6 +18,7 @@ import dev.identityservice.repository.AccountRepository;
 import dev.identityservice.repository.AuthSessionRepository;
 import dev.identityservice.repository.DeviceRepository;
 import dev.identityservice.service.AdminAccountService;
+import dev.identityservice.service.cache.ProfileCacheService;
 import dev.identityservice.util.HashUtils;
 import dev.identityservice.util.SecureTokenGenerator;
 import java.time.OffsetDateTime;
@@ -38,6 +39,7 @@ public class AdminAccountServiceImpl implements AdminAccountService {
     private final AccountRegistrationRepository accountRegistrationRepository;
     private final DeviceRepository deviceRepository;
     private final AuthSessionRepository authSessionRepository;
+    private final ProfileCacheService profileCacheService;
 
     @Override
     @Transactional
@@ -86,6 +88,7 @@ public class AdminAccountServiceImpl implements AdminAccountService {
         accountEntity.setStatus(AccountStatus.BLOCKED);
         accountEntity.setUpdatedAt(OffsetDateTime.now());
         accountRepository.save(accountEntity);
+        profileCacheService.evict(accountId);
 
         revokeAccountDevices(accountId);
         revokeAccountSessions(accountId);

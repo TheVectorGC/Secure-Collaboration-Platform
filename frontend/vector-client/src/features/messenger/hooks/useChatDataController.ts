@@ -185,30 +185,6 @@ export function useChatDataController(params: UseChatDataControllerParams) {
   }, [chats, localChatState.blockedAccountIds, localChatState.clearedAtByChatId, localChatState.hiddenChatIds, messagesByChatId, currentAccountId]);
 
   useEffect(() => {
-    if (!selectedChatId) {
-      return;
-    }
-
-    let isCancelled = false;
-
-    const refreshChat = async () => {
-      if (isCancelled) {
-        return;
-      }
-
-      await refreshSelectedChat({ silent: true });
-    };
-
-    void refreshChat();
-    const intervalId = window.setInterval(refreshChat, 2500);
-
-    return () => {
-      isCancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, [selectedChatId]);
-
-  useEffect(() => {
     setReadDetailsMessageId(null);
   }, [selectedChatId]);
 

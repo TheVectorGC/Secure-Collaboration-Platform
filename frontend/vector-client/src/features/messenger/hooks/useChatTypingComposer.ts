@@ -1,10 +1,8 @@
 import { KeyboardEvent, useEffect, useRef, useState } from 'react';
 import type { ChatResponseDto } from '../../../shared/types/api';
-import { getActiveGroupParticipantAccountIds } from '../lib/messengerCore';
 
 type SendTypingEventRequest = {
   chatId: string;
-  recipientAccountIds: string[];
   isTyping: boolean;
 };
 
@@ -36,15 +34,8 @@ export function useChatTypingComposer({
       return;
     }
 
-    const recipientAccountIds = getActiveGroupParticipantAccountIds(selectedChat).filter((participantAccountId) => participantAccountId !== currentAccountId);
-
-    if (recipientAccountIds.length === 0) {
-      return;
-    }
-
     sendTypingEvent({
       chatId: selectedChat.chatId,
-      recipientAccountIds,
       isTyping,
     });
   }

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { addDocumentObservers, cancelDocument, createDocument, getDocument, getDocuments, hideDocument, registerDocumentSigningKey, rejectDocument, restoreDocument, signDocument } from '../../documents/api/documentsApi';
+import { getAccountBackupPublicKey } from '../../crypto/api/accountBackupProfileApi';
 import { downloadEncryptedMediaFile, uploadEncryptedMediaFile } from '../../media/api/mediaApi';
 import { decryptDownloadedFile, encryptFileForUpload, parseDocumentAttachmentMessageContent } from '../../media/lib/fileCrypto';
-import type { DocumentAttachmentMessageContent, DocumentResponseDto, FileAttachmentMessageContent } from '../../../shared/types/api';
+import type { DocumentAttachmentMessageContent, DocumentKeyEnvelopeRequestDto, DocumentResponseDto, FileAttachmentMessageContent } from '../../../shared/types/api';
 import type { DocumentCreationDraft } from '../lib/messengerCore';
 
 type UseChatDocumentsControllerParams = {
@@ -38,8 +39,8 @@ function upsertDocument(documents: DocumentResponseDto[], documentItem: Document
 function hasUsableDocumentFileEncryption(documentItem: DocumentResponseDto): boolean {
   return Boolean(
     documentItem.fileEncryption
-    && documentItem.fileEncryption.keyBase64
-    && documentItem.fileEncryption.initializationVectorBase64,
+    && documentItem.fileEncryption.initializationVectorBase64
+    && documentItem.fileEncryption.keyEnvelopes.length > 0,
   );
 }
 
@@ -149,6 +150,65 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
     setPendingDocumentFile(null);
   }
 
+
+  async function buildDocumentKeyEnvelopes(fileKeyBase64: string, targetAccountIds: string[]): Promise<DocumentKeyEnvelopeRequestDto[]> {
+    if (!window.vectorCrypto) {
+      throw new Error('Локальное шифрование недоступно.');
+    }
+
+    const uniqueTargetAccountIds = Array.from(new Set(targetAccountIds));
+
+    return Promise.all(uniqueTargetAccountIds.map(async (targetAccountId) => {
+      const publicKey = await getAccountBackupPublicKey(targetAccountId);
+      const encryptedEnvelope = await window.vectorCrypto!.encryptAccountKeyEnvelope({
+        backupPublicKeyBase64: publicKey.backupPublicKeyBase64,
+        keyBase64: fileKeyBase64,
+      });
+
+      return {
+        targetAccountId,
+        targetDeviceId: null,
+        algorithm: encryptedEnvelope.algorithm,
+        encryptedKeyBase64: encryptedEnvelope.encryptedKeyBase64,
+      };
+    }));
+  }
+
+  async function buildAttachmentFromDocument(documentItem: DocumentResponseDto): Promise<DocumentAttachmentMessageContent | null> {
+    if (!currentAccountId || !window.vectorCrypto || !hasUsableDocumentFileEncryption(documentItem) || !documentItem.fileEncryption) {
+      return null;
+    }
+
+    const currentAccountEnvelope = documentItem.fileEncryption.keyEnvelopes.find((keyEnvelope) => keyEnvelope.targetAccountId === currentAccountId);
+
+    if (!currentAccountEnvelope) {
+      return null;
+    }
+
+    const decryptedEnvelope = await window.vectorCrypto.decryptAccountKeyEnvelope({
+      accountId: currentAccountId,
+      encryptedKeyBase64: currentAccountEnvelope.encryptedKeyBase64,
+    });
+
+    return {
+      kind: 'DOCUMENT_ATTACHMENT',
+      version: 1,
+      documentId: documentItem.documentId,
+      mediaFileId: documentItem.mediaFileId,
+      fileName: documentItem.fileName,
+      mimeType: documentItem.mimeType,
+      sizeBytes: documentItem.sizeBytes,
+      encryptedSizeBytes: 0,
+      plaintextSha256Base64: documentItem.plaintextSha256Base64,
+      encryptedSha256Base64: documentItem.encryptedSha256Base64,
+      fileEncryption: {
+        algorithm: 'AES-256-GCM',
+        keyBase64: decryptedEnvelope.keyBase64,
+        initializationVectorBase64: documentItem.fileEncryption.initializationVectorBase64,
+      },
+    };
+  }
+
   async function confirmDocumentCreation(draft: DocumentCreationDraft) {
     if (!currentAccountId || !deviceId) {
       setErrorMessage('Локальное устройство не готово к созданию документа.');
@@ -167,6 +227,7 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
     try {
       const accessAccountIds = Array.from(new Set([currentAccountId, ...draft.requiredSignerAccountIds, ...draft.observerAccountIds]));
       const encryptionResult = await encryptFileForUpload(draft.file);
+      const keyEnvelopes = await buildDocumentKeyEnvelopes(encryptionResult.keyBase64, accessAccountIds);
       const uploadedFile = await uploadEncryptedMediaFile(
         null,
         encryptionResult.encryptedBlob,
@@ -187,8 +248,8 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
         observerAccountIds: draft.observerAccountIds,
         fileEncryption: {
           algorithm: 'AES-256-GCM',
-          keyBase64: encryptionResult.keyBase64,
           initializationVectorBase64: encryptionResult.initializationVectorBase64,
+          keyEnvelopes,
         },
       });
 
@@ -242,31 +303,23 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
   }
 
   async function handleDownloadDocument(documentItem: DocumentResponseDto) {
-    const documentFileEncryption = documentItem.fileEncryption;
-    const attachmentFromDocument: DocumentAttachmentMessageContent | null = hasUsableDocumentFileEncryption(documentItem) && documentFileEncryption ? {
-      kind: 'DOCUMENT_ATTACHMENT',
-      version: 1,
-      documentId: documentItem.documentId,
-      mediaFileId: documentItem.mediaFileId,
-      fileName: documentItem.fileName,
-      mimeType: documentItem.mimeType,
-      sizeBytes: documentItem.sizeBytes,
-      encryptedSizeBytes: 0,
-      plaintextSha256Base64: documentItem.plaintextSha256Base64,
-      encryptedSha256Base64: documentItem.encryptedSha256Base64,
-      fileEncryption: documentFileEncryption,
-    } : null;
+    try {
+      const attachmentFromDocument = await buildAttachmentFromDocument(documentItem);
+      const matchingMessage = attachmentFromDocument ?? Object.entries(decryptedMessagesById)
+        .map(([, plainText]) => parseDocumentAttachmentMessageContent(plainText))
+        .find((attachment) => attachment?.documentId === documentItem.documentId) ?? null;
 
-    const matchingMessage = attachmentFromDocument ?? Object.entries(decryptedMessagesById)
-      .map(([, plainText]) => parseDocumentAttachmentMessageContent(plainText))
-      .find((attachment) => attachment?.documentId === documentItem.documentId) ?? null;
+      if (!matchingMessage) {
+        setErrorMessage('Ключ документа недоступен. Проверьте доступ к документу или обратитесь к автору.');
+        return;
+      }
 
-    if (!matchingMessage) {
-      setErrorMessage('Ключ документа недоступен. Проверьте доступ к документу или обратитесь к автору.');
-      return;
+      await handleDownloadAttachment(matchingMessage);
     }
-
-    await handleDownloadAttachment(matchingMessage);
+    catch (error) {
+      console.error(error);
+      setErrorMessage('Не удалось подготовить ключ документа.');
+    }
   }
 
   async function handleSignDocument(documentItem: DocumentResponseDto) {

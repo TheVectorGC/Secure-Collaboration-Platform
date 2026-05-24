@@ -27,7 +27,8 @@ public class WebSocketAuthenticationServiceImpl implements WebSocketAuthenticati
             throw new WebSocketAuthenticationException("WebSocket access token is missing.");
         }
 
-        return jwtTokenService.validateTokenAndGetPrincipal(token);
+        AccountPrincipal accountPrincipal = jwtTokenService.validateTokenAndGetPrincipal(token);
+        return new AccountPrincipal(accountPrincipal.accountId(), accountPrincipal.username(), accountPrincipal.roles(), token);
     }
 
     private String extractTokenFromQuery(URI uri) {

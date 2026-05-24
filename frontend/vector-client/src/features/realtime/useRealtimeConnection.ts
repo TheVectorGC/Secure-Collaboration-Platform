@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { serviceUrls } from '../../shared/config/serviceUrls';
+import { getChats } from '../chats/api/chatsApi';
 import type {
   ChatUpdatedPayload,
   DocumentChangedPayload,
@@ -149,10 +150,9 @@ function calculateRefreshDelay(accessTokenExpiresAt: string | null): number | nu
 export function useRealtimeConnection() {
   const accessToken = useAuthStore((state) => state.accessToken);
   const accessTokenExpiresAt = useAuthStore((state) => state.accessTokenExpiresAt);
-  const currentDeviceId = useAuthStore((state) => state.deviceId);
-  const selectedChatId = useMessengerStore((state) => state.selectedChatId);
   const upsertMessage = useMessengerStore((state) => state.upsertMessage);
   const upsertChat = useMessengerStore((state) => state.upsertChat);
+  const setChats = useMessengerStore((state) => state.setChats);
   const setMessages = useMessengerStore((state) => state.setMessages);
   const touchChat = useMessengerStore((state) => state.touchChat);
   const applyMessageDelivered = useMessengerStore((state) => state.applyMessageDelivered);
@@ -181,7 +181,6 @@ export function useRealtimeConnection() {
       webSocket.send(JSON.stringify({
         type: 'TYPING',
         chatId: request.chatId,
-        recipientAccountIds: request.recipientAccountIds,
         isTyping: request.isTyping,
       }));
     });
@@ -251,21 +250,27 @@ export function useRealtimeConnection() {
       }
     }
 
-    function refreshChatMessages(chatId: string) {
-      getChatMessages(chatId)
-        .then((messages) => {
-          setMessages(chatId, messages);
-        })
-        .catch((error) => {
-          console.warn('Failed to refresh chat messages after realtime update.', error);
-        });
+
+    async function synchronizeAfterReconnect() {
+      try {
+        const loadedChats = await getChats();
+        setChats(loadedChats);
+        const loadedChatIds = Object.keys(useMessengerStore.getState().messagesByChatId);
+
+        await Promise.all(loadedChatIds.map(async (chatId) => {
+          const loadedMessages = await getChatMessages(chatId);
+          setMessages(chatId, loadedMessages);
+        }));
+      }
+      catch (error) {
+        console.warn('Failed to synchronize after realtime reconnect.', error);
+      }
     }
 
     function handleRealtimeEvent(realtimeEvent: RealtimeEventDto) {
       if (realtimeEvent.type === 'MESSAGE_CREATED' && isMessageCreatedPayload(realtimeEvent.payload)) {
         const payload = realtimeEvent.payload;
         const devicePayloads = payload.devicePayloads ?? [];
-        const currentDevicePayload = devicePayloads.find((devicePayload) => devicePayload.targetDeviceId === currentDeviceId);
         const message: MessageResponseDto = {
           messageId: payload.messageId,
           chatId: payload.chatId,
@@ -289,17 +294,12 @@ export function useRealtimeConnection() {
         upsertMessage(message);
         touchChat(payload.chatId, payload.createdAt, payload.messageId);
 
-        if (selectedChatId === payload.chatId) {
-          refreshChatMessages(payload.chatId);
-        }
-
         return;
       }
 
       if (realtimeEvent.type === 'CHAT_UPDATED' && isChatUpdatedPayload(realtimeEvent.payload)) {
         const chat = realtimeEvent.payload.chat;
         upsertChat(chat);
-        refreshChatMessages(chat.chatId);
         return;
       }
 
@@ -365,10 +365,15 @@ export function useRealtimeConnection() {
       webSocketRef.current = webSocket;
 
       webSocket.onopen = () => {
+        const wasReconnect = reconnectAttemptRef.current > 0;
         reconnectAttemptRef.current = 0;
         setStatus('connected');
         setLastError(null);
         startHeartbeat();
+
+        if (wasReconnect) {
+          void synchronizeAfterReconnect();
+        }
       };
 
       webSocket.onmessage = (event) => {
@@ -457,12 +462,11 @@ export function useRealtimeConnection() {
   }, [
     accessToken,
     accessTokenExpiresAt,
-    currentDeviceId,
-    selectedChatId,
     applyMessageDelivered,
     applyMessageRead,
     applyPresenceSnapshot,
     setLastError,
+    setChats,
     setMessages,
     setPresence,
     setStatus,

@@ -12,8 +12,14 @@ import dev.identityservice.repository.DeviceRepository;
 import dev.identityservice.repository.ProfileRepository;
 import dev.identityservice.service.MappingService;
 import dev.identityservice.service.ProfileService;
+import dev.identityservice.service.cache.ProfileCacheService;
 import java.time.OffsetDateTime;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,6 +36,7 @@ public class ProfileServiceImpl implements ProfileService {
     private final DeviceRepository deviceRepository;
     private final ProfileRepository profileRepository;
     private final MappingService mappingService;
+    private final ProfileCacheService profileCacheService;
 
     @Override
     @Transactional(readOnly = true)
@@ -59,7 +66,9 @@ public class ProfileServiceImpl implements ProfileService {
 
         profileEntity.setUpdatedAt(OffsetDateTime.now());
         ProfileEntity savedProfileEntity = profileRepository.save(profileEntity);
-        return mappingService.mapToAccountProfileResponseDto(accountEntity, savedProfileEntity);
+        AccountProfileResponseDto responseDto = mappingService.mapToAccountProfileResponseDto(accountEntity, savedProfileEntity);
+        profileCacheService.save(responseDto);
+        return responseDto;
     }
 
     @Override
@@ -122,27 +131,48 @@ public class ProfileServiceImpl implements ProfileService {
             return List.of();
         }
 
+        Map<UUID, AccountProfileResponseDto> cachedProfilesByAccountId = profileCacheService.findByAccountIds(uniqueAccountIds);
+        List<UUID> missingAccountIds = uniqueAccountIds.stream()
+                .filter(accountId -> !cachedProfilesByAccountId.containsKey(accountId))
+                .toList();
+
+        Map<UUID, AccountProfileResponseDto> loadedProfilesByAccountId = loadProfilesByAccountIds(missingAccountIds);
+        loadedProfilesByAccountId.values().forEach(profileCacheService::save);
+
+        Map<UUID, AccountProfileResponseDto> profilesByAccountId = new LinkedHashMap<>();
+        profilesByAccountId.putAll(cachedProfilesByAccountId);
+        profilesByAccountId.putAll(loadedProfilesByAccountId);
+
+        return uniqueAccountIds.stream()
+                .map(profilesByAccountId::get)
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+
+    private Map<UUID, AccountProfileResponseDto> loadProfilesByAccountIds(List<UUID> accountIds) {
+        if (accountIds == null || accountIds.isEmpty()) {
+            return Map.of();
+        }
+
         Map<UUID, AccountEntity> accountById = new LinkedHashMap<>();
-        accountRepository.findAllById(uniqueAccountIds)
+        accountRepository.findAllById(accountIds)
                 .forEach(accountEntity -> accountById.put(accountEntity.getId(), accountEntity));
 
         Map<UUID, ProfileEntity> profileByAccountId = new LinkedHashMap<>();
-        profileRepository.findByAccountIdIn(uniqueAccountIds)
+        profileRepository.findByAccountIdIn(accountIds)
                 .forEach(profileEntity -> profileByAccountId.put(profileEntity.getAccountId(), profileEntity));
 
-        return uniqueAccountIds.stream()
-                .map(accountId -> {
-                    AccountEntity accountEntity = accountById.get(accountId);
-                    ProfileEntity profileEntity = profileByAccountId.get(accountId);
+        Map<UUID, AccountProfileResponseDto> result = new LinkedHashMap<>();
+        accountIds.forEach(accountId -> {
+            AccountEntity accountEntity = accountById.get(accountId);
+            ProfileEntity profileEntity = profileByAccountId.get(accountId);
 
-                    if (accountEntity == null || profileEntity == null) {
-                        return null;
-                    }
-
-                    return mappingService.mapToAccountProfileResponseDto(accountEntity, profileEntity);
-                })
-                .filter(Objects::nonNull)
-                .toList();
+            if (accountEntity != null && profileEntity != null) {
+                result.put(accountId, mappingService.mapToAccountProfileResponseDto(accountEntity, profileEntity));
+            }
+        });
+        return result;
     }
 
     private boolean hasActiveDevice(UUID accountId) {

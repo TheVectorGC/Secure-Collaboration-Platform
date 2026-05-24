@@ -271,6 +271,34 @@ export type FileEncryptionMetadata = {
   initializationVectorBase64: string;
 };
 
+export type DocumentKeyEnvelopeRequestDto = {
+  targetAccountId: string;
+  targetDeviceId: string | null;
+  algorithm: string;
+  encryptedKeyBase64: string;
+};
+
+export type DocumentKeyEnvelopeResponseDto = {
+  envelopeId: string;
+  documentId: string;
+  targetAccountId: string;
+  targetDeviceId: string | null;
+  algorithm: string;
+  encryptedKeyBase64: string;
+};
+
+export type DocumentFileEncryptionRequestDto = {
+  algorithm: 'AES-256-GCM';
+  initializationVectorBase64: string;
+  keyEnvelopes: DocumentKeyEnvelopeRequestDto[];
+};
+
+export type DocumentFileEncryptionResponseDto = {
+  algorithm: 'AES-256-GCM';
+  initializationVectorBase64: string;
+  keyEnvelopes: DocumentKeyEnvelopeResponseDto[];
+};
+
 export type FileAttachmentMessageContent = {
   kind: 'FILE_ATTACHMENT';
   version: 1;
@@ -311,7 +339,7 @@ export type CreateDocumentRequestDto = {
   encryptedSha256Base64: string;
   requiredSignerAccountIds: string[];
   observerAccountIds: string[];
-  fileEncryption: FileEncryptionMetadata;
+  fileEncryption: DocumentFileEncryptionRequestDto;
 };
 
 export type DocumentStatus = 'ACTIVE' | 'PENDING_SIGNATURES' | 'PARTIALLY_SIGNED' | 'FULLY_SIGNED' | 'REJECTED' | 'CANCELLED';
@@ -360,7 +388,7 @@ export type DocumentResponseDto = {
   sizeBytes: number;
   plaintextSha256Base64: string;
   encryptedSha256Base64: string;
-  fileEncryption: FileEncryptionMetadata | null;
+  fileEncryption: DocumentFileEncryptionResponseDto | null;
   status: DocumentStatus;
   rejectedByAccountId: string | null;
   rejectedAt: string | null;

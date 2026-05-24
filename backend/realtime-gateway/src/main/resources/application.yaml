@@ -44,6 +44,14 @@ application:
   presence:
     redis-key-prefix: ${PRESENCE_REDIS_KEY_PREFIX:vector:presence}
     online-ttl: ${PRESENCE_ONLINE_TTL:90s}
+  messaging-service:
+    base-url: ${MESSAGING_SERVICE_BASE_URL:http://localhost:8087}
+    chat-path: ${MESSAGING_SERVICE_CHAT_PATH:/api/v1/chats/{chatId}}
+  typing:
+    recipients-cache:
+      redis-key-prefix: ${TYPING_RECIPIENTS_CACHE_REDIS_KEY_PREFIX:vector:realtime:typing-recipients}
+      stable-chat-ttl: ${TYPING_RECIPIENTS_CACHE_STABLE_CHAT_TTL:12h}
+      group-chat-ttl: ${TYPING_RECIPIENTS_CACHE_GROUP_CHAT_TTL:45s}
 
 management:
   endpoints:

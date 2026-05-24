@@ -68,6 +68,10 @@ application:
     redis-key-prefix: ${RATE_LIMIT_REDIS_KEY_PREFIX:vector:identity-service:rate-limit}
     max-requests: ${RATE_LIMIT_MAX_REQUESTS:3000}
     window: ${RATE_LIMIT_WINDOW:60s}
+  profile-cache:
+    enabled: ${PROFILE_CACHE_ENABLED:true}
+    redis-key-prefix: ${PROFILE_CACHE_REDIS_KEY_PREFIX:vector:identity-service:profile}
+    ttl: ${PROFILE_CACHE_TTL:30m}
 
 management:
   endpoints:

@@ -97,7 +97,7 @@ public class VaultJwtTokenServiceImpl implements JwtTokenService {
         String username = String.valueOf(payload.get("sub"));
         UUID accountId = UUID.fromString(String.valueOf(payload.get("accountId")));
         List<String> roles = extractRoles(payload);
-        return new AccountPrincipal(accountId, username, roles);
+        return new AccountPrincipal(accountId, username, roles, null);
     }
 
     private List<String> extractRoles(Map<String, Object> payload) {

@@ -7,6 +7,7 @@ import dev.realtimegateway.model.enumeration.RealtimeEventType;
 import dev.realtimegateway.presence.PresenceAccountStatus;
 import dev.realtimegateway.security.AccountPrincipal;
 import dev.realtimegateway.service.WebSocketAuthenticationService;
+import dev.realtimegateway.typing.TypingRecipientsResolver;
 import dev.realtimegateway.session.ConnectionRegistry;
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
@@ -32,6 +33,7 @@ public class RealtimeWebSocketHandler extends TextWebSocketHandler {
     private final WebSocketAuthenticationService webSocketAuthenticationService;
     private final ConnectionRegistry connectionRegistry;
     private final ObjectMapper objectMapper;
+    private final TypingRecipientsResolver typingRecipientsResolver;
 
     @Override
     public void afterConnectionEstablished(WebSocketSession webSocketSession) throws Exception {
@@ -103,7 +105,13 @@ public class RealtimeWebSocketHandler extends TextWebSocketHandler {
                 return;
             }
 
-            if (clientTypingEventDto.chatId() == null || clientTypingEventDto.recipientAccountIds() == null) {
+            if (clientTypingEventDto.chatId() == null) {
+                return;
+            }
+
+            List<UUID> recipientAccountIds = typingRecipientsResolver.resolveRecipientAccountIds(clientTypingEventDto.chatId(), accountPrincipal);
+
+            if (recipientAccountIds.isEmpty()) {
                 return;
             }
 
@@ -118,7 +126,7 @@ public class RealtimeWebSocketHandler extends TextWebSocketHandler {
                             "isTyping", Boolean.TRUE.equals(clientTypingEventDto.isTyping())
                     ))
             );
-            connectionRegistry.sendToAccounts(clientTypingEventDto.recipientAccountIds(), realtimeEnvelopeDto);
+            connectionRegistry.sendToAccounts(recipientAccountIds, realtimeEnvelopeDto);
         }
         catch (Exception exception) {
             log.debug("Ignoring unsupported WebSocket client event.", exception);

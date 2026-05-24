@@ -3,6 +3,7 @@ package dev.realtimegateway.listener;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.realtimegateway.model.event.RealtimeDomainEventDto;
 import dev.realtimegateway.service.RealtimeDeliveryService;
+import dev.realtimegateway.typing.TypingRecipientsResolver;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.MDC;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +17,7 @@ public class MessagingEventKafkaListener {
     private static final String REQUEST_ID_MDC_KEY = "requestId";
     private final RealtimeDeliveryService realtimeDeliveryService;
     private final ObjectMapper objectMapper;
+    private final TypingRecipientsResolver typingRecipientsResolver;
 
     @KafkaListener(
             topics = "${application.kafka.topics.messaging-events}",
@@ -31,6 +33,10 @@ public class MessagingEventKafkaListener {
                     realtimeDomainEventDto.eventType(),
                     realtimeDomainEventDto.chatId()
             );
+            if ("CHAT_UPDATED".equals(realtimeDomainEventDto.eventType())) {
+                typingRecipientsResolver.invalidateChat(realtimeDomainEventDto.chatId());
+            }
+
             realtimeDeliveryService.deliverMessagingEvent(realtimeDomainEventDto);
         }
         catch (Exception exception) {
