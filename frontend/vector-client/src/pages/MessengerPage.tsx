@@ -1,31 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { logout as logoutRequest } from '../features/auth/api/authApi';
-import { blockAccount, unblockAccount } from '../features/account-blocks/api/accountBlocksApi';
 import { useAuthStore } from '../features/auth/model/authStore';
 import { useCryptoBootstrap } from '../features/crypto/useCryptoBootstrap';
 import { useCryptoStore } from '../features/crypto/model/cryptoStore';
 import { BackupUnlockModal } from '../features/crypto/ui/BackupUnlockModal';
 import { useDirectoryStore } from '../features/directory/model/directoryStore';
-import { getProfilesByAccountIds } from '../features/directory/api/profilesApi';
 import { updateGroupChatAvatar } from '../features/chats/api/chatsApi';
 import { useMessengerStore } from '../features/messenger/model/messengerStore';
 import { useRealtimeConnection } from '../features/realtime/useRealtimeConnection';
 import { useRealtimeStore } from '../features/realtime/model/realtimeStore';
-import { getDirectCompanionAccountId } from '../shared/lib/profile';
-import type { ProfileResponseDto } from '../shared/types/api';
 import {
   buildAccountLastActivityMap,
   createLocalAvatarDataUrl,
-  getAccountActivityLabel,
-  getActiveGroupParticipantAccountIds,
-  getChatPresentation,
   getDownloadableAttachmentFromPlainText,
-  getLastPeerActivityAt,
-  getLastTimelineMessage,
   getLocalAvatarStorageKey,
-  getVisibleChatMessages,
-  isCurrentAccountActiveInChat,
 } from '../features/messenger/lib/messengerCore';
 import { NewChatModal } from '../features/messenger/ui/modals/NewChatModal';
 import { SettingsModal } from '../features/settings/ui/SettingsModal';
@@ -55,6 +44,10 @@ import { useChatDocumentsController } from '../features/messenger/hooks/useChatD
 import { useGroupChatController } from '../features/messenger/hooks/useGroupChatController';
 import { useMessageNavigationController } from '../features/messenger/hooks/useMessageNavigationController';
 import { useChatViewportController } from '../features/messenger/hooks/useChatViewportController';
+import { useSelectedChatViewModel } from '../features/messenger/hooks/useSelectedChatViewModel';
+import { useMessengerDirectoryController } from '../features/messenger/hooks/useMessengerDirectoryController';
+import { useDirectChatBlockController } from '../features/messenger/hooks/useDirectChatBlockController';
+import { useChatListsViewModel } from '../features/messenger/hooks/useChatListsViewModel';
 
 export function MessengerPage() {
   const navigate = useNavigate();
@@ -65,7 +58,6 @@ export function MessengerPage() {
   const setProfile = useAuthStore((state) => state.setProfile);
   const realtimeStatus = useRealtimeStore((state) => state.status);
   const [localAvatarDataUrl, setLocalAvatarDataUrl] = useState<string | null>(() => profile?.avatarDataUrl ?? localStorage.getItem(getLocalAvatarStorageKey(profile?.accountId)));
-  const [miniProfile, setMiniProfile] = useState<ProfileResponseDto | null>(null);
   const typingByChatId = useRealtimeStore((state) => state.typingByChatId);
   const presenceByAccountId = useRealtimeStore((state) => state.presenceByAccountId);
   const sendTypingEvent = useRealtimeStore((state) => state.sendTypingEvent);
@@ -89,7 +81,6 @@ export function MessengerPage() {
   const [isCreateChatOpen, setIsCreateChatOpen] = useState(false);
   const [isDevToolsOpen, setIsDevToolsOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [, setIsAttachmentMenuOpen] = useState(false);
   const [isGroupManagementOpen, setIsGroupManagementOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [readDetailsMessageId, setReadDetailsMessageId] = useState<string | null>(null);
@@ -141,20 +132,29 @@ export function MessengerPage() {
     return () => window.removeEventListener('keydown', handleKeyboardShortcut);
   }, [profile?.username]);
 
-  const selectedChat = useMemo(
-    () => chats.find((chat) => chat.chatId === selectedChatId) ?? null,
-    [chats, selectedChatId],
-  );
+  const {
+    selectedChat,
+    visibleSelectedMessages,
+    loadedMessages,
+    hiddenChatIdSet,
+    selectedDirectCompanionAccountId,
+    isSelectedDirectChatBlockedByCurrentAccount,
+    isSelectedChatWritable,
+    selectedChatPresentation,
+    directBlockNotice,
+    selectedTypingText,
+    selectedChatSubtitle,
+  } = useSelectedChatViewModel({
+    chats,
+    selectedChatId,
+    messagesByChatId,
+    localChatState,
+    currentProfile: profile,
+    profilesById,
+    typingByChatId,
+    presenceByAccountId,
+  });
 
-  const selectedMessages = selectedChatId ? messagesByChatId[selectedChatId] ?? [] : [];
-  const visibleSelectedMessages = useMemo(
-    () => getVisibleChatMessages(selectedMessages, selectedChatId ? localChatState.clearedAtByChatId[selectedChatId] : null),
-    [localChatState.clearedAtByChatId, selectedChatId, selectedMessages],
-  );
-  const loadedMessages = useMemo(
-    () => Object.values(messagesByChatId).flat(),
-    [messagesByChatId],
-  );
   const {
     decryptedMessagesById,
     setDecryptedMessagesById,
@@ -170,23 +170,6 @@ export function MessengerPage() {
     () => buildAccountLastActivityMap(messagesByChatId),
     [messagesByChatId],
   );
-  const hiddenChatIdSet = useMemo(() => new Set(localChatState.hiddenChatIds), [localChatState.hiddenChatIds]);
-  const selectedChatActiveParticipantAccountIds = useMemo(
-    () => getActiveGroupParticipantAccountIds(selectedChat),
-    [selectedChat],
-  );
-  const selectedChatActiveParticipantAccountIdSet = useMemo(
-    () => new Set(selectedChatActiveParticipantAccountIds),
-    [selectedChatActiveParticipantAccountIds],
-  );
-  const selectedDirectCompanionAccountId = selectedChat?.type === 'DIRECT' ? getDirectCompanionAccountId(selectedChat, profile?.accountId) : null;
-  const isSelectedDirectChatBlockedByCurrentAccount = Boolean(selectedChat?.currentAccountBlockedCompanion);
-  const isSelectedDirectChatBlockedByCompanion = Boolean(selectedChat?.companionBlockedCurrentAccount);
-  const isSelectedDirectChatBlocked = selectedChat?.type === 'DIRECT' && (isSelectedDirectChatBlockedByCurrentAccount || isSelectedDirectChatBlockedByCompanion);
-  const isSelectedChatWritable = isCurrentAccountActiveInChat(selectedChat, profile?.accountId) && !isSelectedDirectChatBlocked;
-  const selectedTypingStates = selectedChatId
-    ? (typingByChatId[selectedChatId] ?? []).filter((typingState) => selectedChat?.type !== 'GROUP' || selectedChatActiveParticipantAccountIdSet.has(typingState.accountId))
-    : [];
 
   const {
     messageContextMenu,
@@ -281,48 +264,18 @@ export function MessengerPage() {
     closeMessageContextMenu();
   }
 
-  const filteredChats = useMemo(() => {
-    const normalizedQuery = chatSearchQuery.trim().toLowerCase();
-
-    const visibleChats = chats.filter((chat) => {
-      if (hiddenChatIdSet.has(chat.chatId)) {
-        return false;
-      }
-
-      if (chat.type === 'DIRECT') {
-        const chatMessages = messagesByChatId[chat.chatId] ?? [];
-        const hasTimelineMessage = Boolean(getLastTimelineMessage(chatMessages));
-
-        if (!chat.lastMessageId && !hasTimelineMessage) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-
-    if (!normalizedQuery) {
-      return visibleChats;
-    }
-
-    return visibleChats.filter((chat) => {
-      const presentation = getChatPresentation(chat, profile, profilesById);
-      return `${presentation.title} ${presentation.subtitle}`.toLowerCase().includes(normalizedQuery);
-    });
-  }, [chatSearchQuery, chats, hiddenChatIdSet, messagesByChatId, profile, profilesById]);
-
-  const forwardTargetChats = useMemo(() => {
-    const normalizedQuery = forwardChatPickerQuery.trim().toLowerCase();
-
-    return filteredChats.filter((chat) => {
-      if (!normalizedQuery) {
-        return true;
-      }
-
-      const presentation = getChatPresentation(chat, profile, profilesById);
-      return `${presentation.title} ${presentation.subtitle}`.toLowerCase().includes(normalizedQuery);
-    });
-  }, [filteredChats, forwardChatPickerQuery, profile, profilesById]);
+  const {
+    filteredChats,
+    forwardTargetChats,
+  } = useChatListsViewModel({
+    chats,
+    messagesByChatId,
+    hiddenChatIdSet,
+    chatSearchQuery,
+    forwardChatPickerQuery,
+    currentProfile: profile,
+    profilesById,
+  });
 
   const {
     handleClearSelectedChatHistory,
@@ -337,74 +290,19 @@ export function MessengerPage() {
     setIsClearHistoryConfirmOpen,
   });
 
-  async function handleDeleteSelectedChat(options?: { blockedAccountId?: string | null }) {
-    const blockedAccountId = options?.blockedAccountId ?? null;
-
-    if (blockedAccountId && selectedChat?.type === 'DIRECT') {
-      try {
-        await blockAccount({ blockedAccountId });
-        upsertChat({
-          ...selectedChat,
-          currentAccountBlockedCompanion: true,
-          companionBlockedCurrentAccount: selectedChat.companionBlockedCurrentAccount,
-        });
-      }
-      catch (error) {
-        console.error(error);
-        setErrorMessage('Не удалось заблокировать пользователя.');
-        return;
-      }
-    }
-
-    handleDeleteSelectedChatLocally(options);
-  }
-
-  async function handleBlockSelectedDirectChat() {
-    if (!selectedChat || selectedChat.type !== 'DIRECT' || !selectedDirectCompanionAccountId) {
-      return;
-    }
-
-    setErrorMessage(null);
-
-    try {
-      await blockAccount({ blockedAccountId: selectedDirectCompanionAccountId });
-      upsertChat({
-        ...selectedChat,
-        currentAccountBlockedCompanion: true,
-        companionBlockedCurrentAccount: selectedChat.companionBlockedCurrentAccount,
-      });
-      sendCurrentTypingState(false);
-    }
-    catch (error) {
-      console.error(error);
-      setErrorMessage('Не удалось заблокировать пользователя.');
-    }
-  }
-
-  async function handleUnblockSelectedDirectChat() {
-    if (!selectedChat || selectedChat.type !== 'DIRECT' || !selectedDirectCompanionAccountId) {
-      return;
-    }
-
-    setErrorMessage(null);
-
-    try {
-      await unblockAccount(selectedDirectCompanionAccountId);
-      upsertChat({
-        ...selectedChat,
-        currentAccountBlockedCompanion: false,
-        companionBlockedCurrentAccount: selectedChat.companionBlockedCurrentAccount,
-      });
-      updateLocalChatState((previousValue) => ({
-        ...previousValue,
-        blockedAccountIds: (previousValue.blockedAccountIds ?? []).filter((accountId) => accountId !== selectedDirectCompanionAccountId),
-      }));
-    }
-    catch (error) {
-      console.error(error);
-      setErrorMessage('Не удалось разблокировать пользователя.');
-    }
-  }
+  const {
+    handleDeleteSelectedChat,
+    handleBlockSelectedDirectChat,
+    handleUnblockSelectedDirectChat,
+  } = useDirectChatBlockController({
+    selectedChat,
+    selectedDirectCompanionAccountId,
+    upsertChat,
+    updateLocalChatState,
+    handleDeleteSelectedChatLocally,
+    sendCurrentTypingState,
+    setErrorMessage,
+  });
 
   const { refreshSelectedChat } = useChatDataController({
     selectedChatId,
@@ -425,7 +323,6 @@ export function MessengerPage() {
     setReadDetailsMessageId,
     deliveredMarkersRef,
   });
-
 
   const {
     timelineScrollContainerRef,
@@ -449,7 +346,6 @@ export function MessengerPage() {
     isSending,
     setIsSending,
     sendEncryptedChatContent,
-    buildEncryptedDevicePayloadsForAccounts,
     handleSendCurrentMessage,
   } = useMessageSendingController({
     selectedChatId,
@@ -506,82 +402,19 @@ export function MessengerPage() {
     setErrorMessage,
   });
 
-  useEffect(() => {
-    if (!profile?.accountId) {
-      return;
-    }
-
-    const accountIds = new Set<string>();
-    accountIds.add(profile.accountId);
-
-    chats.forEach((chat) => {
-      chat.participantAccountIds.forEach((accountId) => accountIds.add(accountId));
-      chat.participants.forEach((participant) => accountIds.add(participant.accountId));
-    });
-
-    Object.values(messagesByChatId).forEach((messages) => {
-      messages.forEach((message) => {
-        accountIds.add(message.senderAccountId);
-        message.deliveryStates.forEach((deliveryState) => accountIds.add(deliveryState.accountId));
-        message.devicePayloads.forEach((devicePayload) => accountIds.add(devicePayload.targetAccountId));
-      });
-    });
-
-    chatDocuments.forEach((documentItem) => {
-      accountIds.add(documentItem.ownerAccountId);
-      if (documentItem.rejectedByAccountId) {
-        accountIds.add(documentItem.rejectedByAccountId);
-      }
-      documentItem.signatures?.forEach((signature) => accountIds.add(signature.signerAccountId));
-    });
-
-    const missingAccountIds = Array.from(accountIds).filter((accountId) => !profilesById[accountId]);
-
-    if (missingAccountIds.length === 0) {
-      return;
-    }
-
-    let cancelled = false;
-
-    async function loadMissingProfiles() {
-      try {
-        const loadedProfiles = await getProfilesByAccountIds(missingAccountIds);
-
-        if (!cancelled && loadedProfiles.length > 0) {
-          upsertProfiles(loadedProfiles);
-        }
-      }
-      catch (error) {
-        console.warn('Unable to load account profiles.', error);
-      }
-    }
-
-    void loadMissingProfiles();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [chatDocuments, chats, messagesByChatId, profile?.accountId, profilesById, upsertProfiles]);
-
-
-  const documentContactAccountIds = useMemo(() => {
-    if (!profile?.accountId) {
-      return [];
-    }
-
-    return chats
-      .filter((chat) => chat.type === 'DIRECT')
-      .map((chat) => getDirectCompanionAccountId(chat, profile.accountId))
-      .filter((accountId): accountId is string => Boolean(accountId && profilesById[accountId]));
-  }, [chats, profile?.accountId, profilesById]);
-
-  function openMiniProfileByAccountId(accountId: string) {
-    const foundProfile = profilesById[accountId];
-
-    if (foundProfile) {
-      setMiniProfile(foundProfile);
-    }
-  }
+  const {
+    miniProfile,
+    setMiniProfile,
+    documentContactAccountIds,
+    openMiniProfileByAccountId,
+  } = useMessengerDirectoryController({
+    currentAccountId: profile?.accountId,
+    chats,
+    messagesByChatId,
+    chatDocuments,
+    profilesById,
+    upsertProfiles,
+  });
 
   async function handleLogout() {
     try {
@@ -598,7 +431,7 @@ export function MessengerPage() {
           await window.vectorCrypto.clearAccountBackupPassword({ accountId: profile.accountId });
         }
         catch (backupKeyError) {
-          console.warn('Unable to clear backup session key.', backupKeyError);
+          console.warn('Не удалось очистить ключ backup-сессии.', backupKeyError);
         }
       }
 
@@ -624,7 +457,6 @@ export function MessengerPage() {
     setErrorMessage,
     clearTemporarilyMissingGroupKeys,
     setDecryptedMessagesById,
-    buildEncryptedDevicePayloadsForAccounts,
   });
 
   const handleUpdateGroupAvatar = useCallback(async (chatId: string, file: File | null) => {
@@ -641,26 +473,6 @@ export function MessengerPage() {
       throw error;
     }
   }, [upsertChat]);
-
-  const selectedChatPresentation = selectedChat ? getChatPresentation(selectedChat, profile, profilesById) : null;
-  const directBlockNotice = selectedChat?.type === 'DIRECT' && isSelectedDirectChatBlockedByCompanion
-    ? 'Пользователь вас заблокировал. Отправка сообщений отключена.'
-    : selectedChat?.type === 'DIRECT' && isSelectedDirectChatBlockedByCurrentAccount
-      ? 'Вы заблокировали этого пользователя. Отправка сообщений отключена.'
-      : null;
-  const selectedTypingText = isSelectedChatWritable && selectedTypingStates.length > 0
-    ? selectedTypingStates.length === 1
-      ? `${selectedTypingStates[0].username || 'Пользователь'} печатает…`
-      : 'Несколько пользователей печатают…'
-    : null;
-  const selectedDirectLastActivityAt = getLastPeerActivityAt(visibleSelectedMessages, selectedDirectCompanionAccountId);
-  const selectedDirectPresence = selectedDirectCompanionAccountId ? presenceByAccountId[selectedDirectCompanionAccountId] : null;
-  const selectedChatSubtitle = selectedTypingText
-    ?? (selectedChat?.type === 'SELF'
-      ? 'Личный чат'
-      : selectedChat?.type === 'DIRECT'
-        ? getAccountActivityLabel(selectedDirectPresence, selectedDirectLastActivityAt)
-        : selectedChatPresentation?.subtitle ?? '');
 
   return (
     <div
@@ -692,8 +504,6 @@ export function MessengerPage() {
           setLocalAvatarDataUrl(updatedProfile.avatarDataUrl ?? null);
         }}
       />
-
-
 
       <MiniProfileModal
         profile={miniProfile}
@@ -741,7 +551,6 @@ export function MessengerPage() {
         onShowHiddenDocumentsChange={setIncludeHiddenDocuments}
         onOpenProfile={openMiniProfileByAccountId}
       />
-
 
       <DocumentCreationModal
         file={pendingDocumentFile}

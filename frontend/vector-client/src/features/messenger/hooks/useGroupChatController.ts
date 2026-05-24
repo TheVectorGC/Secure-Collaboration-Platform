@@ -1,7 +1,7 @@
 import { type Dispatch, type SetStateAction } from 'react';
 import { addGroupParticipant, createDirectChat, createGroupChat, getCurrentAccountGroupEpochKeyEnvelope, removeGroupParticipant, upsertGroupEpochKeyEnvelope } from '../../chats/api/chatsApi';
 import { getAccountBackupPublicKey } from '../../crypto/api/accountBackupProfileApi';
-import type { ChatResponseDto, DeviceMessagePayloadRequestDto, ProfileResponseDto } from '../../../shared/types/api';
+import type { ChatResponseDto, ProfileResponseDto } from '../../../shared/types/api';
 import type { GroupHistoryAccessMode } from '../lib/messengerCore';
 import { getActiveGroupParticipantAccountIds } from '../lib/messengerCore';
 
@@ -17,7 +17,6 @@ type UseGroupChatControllerParams = {
   setErrorMessage: (message: string | null) => void;
   clearTemporarilyMissingGroupKeys: () => void;
   setDecryptedMessagesById: Dispatch<SetStateAction<Record<string, string>>>;
-  buildEncryptedDevicePayloadsForAccounts: (plainText: string, targetAccountIds: string[]) => Promise<DeviceMessagePayloadRequestDto[]>;
 };
 
 export function useGroupChatController(params: UseGroupChatControllerParams) {

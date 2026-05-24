@@ -45,7 +45,7 @@ async function refreshAuthentication(): Promise<AuthenticationResponseDto> {
   }
 
   if (!refreshRequestPromise) {
-    refreshRequestPromise = refreshHttpClient
+    const nextRefreshRequestPromise = refreshHttpClient
       .post<AuthenticationResponseDto>('/api/v1/auth/refresh', { refreshToken })
       .then((response) => {
         useAuthStore.getState().setAuthentication(response.data);
@@ -54,9 +54,17 @@ async function refreshAuthentication(): Promise<AuthenticationResponseDto> {
       .finally(() => {
         refreshRequestPromise = null;
       });
+
+    refreshRequestPromise = nextRefreshRequestPromise;
   }
 
-  return refreshRequestPromise;
+  const activeRefreshRequestPromise = refreshRequestPromise;
+
+  if (!activeRefreshRequestPromise) {
+    throw new Error('Не удалось обновить сессию.');
+  }
+
+  return activeRefreshRequestPromise;
 }
 
 function attachAuthorizationHeader(config: InternalAxiosRequestConfig): InternalAxiosRequestConfig {

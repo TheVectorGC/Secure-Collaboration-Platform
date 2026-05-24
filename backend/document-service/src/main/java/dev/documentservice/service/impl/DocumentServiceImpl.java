@@ -332,12 +332,17 @@ public class DocumentServiceImpl implements DocumentService {
             .filter(Objects::nonNull)
             .collect(Collectors.toCollection(HashSet::new));
 
-        HashSet<UUID> envelopeAccountIds = keyEnvelopeRequestDtos.stream()
+        List<UUID> envelopeAccountIds = keyEnvelopeRequestDtos.stream()
             .map(DocumentKeyEnvelopeRequestDto::targetAccountId)
             .filter(Objects::nonNull)
-            .collect(Collectors.toCollection(HashSet::new));
+            .toList();
+        HashSet<UUID> uniqueEnvelopeAccountIds = new HashSet<>(envelopeAccountIds);
 
-        if (!envelopeAccountIds.equals(allowedAccountIds)) {
+        if (uniqueEnvelopeAccountIds.size() != envelopeAccountIds.size()) {
+            throw new DocumentValidationException("Document key envelopes must not contain duplicate target accounts.");
+        }
+
+        if (!uniqueEnvelopeAccountIds.equals(allowedAccountIds)) {
             throw new DocumentValidationException("Document key envelopes must exactly match document access accounts.");
         }
 

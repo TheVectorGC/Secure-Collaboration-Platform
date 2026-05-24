@@ -440,7 +440,6 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
   }
 
 
-
   async function handleRestoreDocument(documentItem: DocumentResponseDto) {
     setErrorMessage(null);
 
