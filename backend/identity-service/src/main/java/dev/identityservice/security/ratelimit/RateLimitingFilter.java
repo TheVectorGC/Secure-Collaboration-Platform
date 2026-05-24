@@ -1,25 +1,23 @@
 package dev.identityservice.security.ratelimit;
 
+import dev.identityservice.security.AccountPrincipal;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import lombok.RequiredArgsConstructor;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.stereotype.Component;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-@Component
-@RequiredArgsConstructor
-@ConditionalOnProperty(prefix = "application.rate-limit", name = "enabled", havingValue = "true")
 public class RateLimitingFilter extends OncePerRequestFilter {
-    private static final String FORWARDED_FOR_HEADER = "X-Forwarded-For";
-    private static final String REAL_IP_HEADER = "X-Real-IP";
-
     private final RedisRateLimiter redisRateLimiter;
+
+    public RateLimitingFilter(RedisRateLimiter redisRateLimiter) {
+        this.redisRateLimiter = redisRateLimiter;
+    }
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
@@ -48,18 +46,12 @@ public class RateLimitingFilter extends OncePerRequestFilter {
     }
 
     private String resolveClientKey(HttpServletRequest request) {
-        String forwardedFor = request.getHeader(FORWARDED_FOR_HEADER);
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
-        if (forwardedFor != null && !forwardedFor.isBlank()) {
-            return forwardedFor.split(",")[0].trim();
+        if (authentication != null && authentication.getPrincipal() instanceof AccountPrincipal accountPrincipal) {
+            return "account:" + accountPrincipal.getAccountId();
         }
 
-        String realIp = request.getHeader(REAL_IP_HEADER);
-
-        if (realIp != null && !realIp.isBlank()) {
-            return realIp.trim();
-        }
-
-        return request.getRemoteAddr();
+        return "ip:" + request.getRemoteAddr();
     }
 }

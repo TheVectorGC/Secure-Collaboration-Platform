@@ -1,22 +1,35 @@
 services:
-  media-db:
+  media-postgres:
     image: postgres:18
-    container_name: media-db
+    container_name: media-postgres
+    ports:
+      - "5436:5432"
     environment:
       POSTGRES_DB: media_db
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-    ports:
-      - "5436:5432"
     volumes:
-      - media-db-pg18-data:/var/lib/postgresql
+      - media-postgres-pg18-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d media_db"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    restart: unless-stopped
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  media-redis:
+    image: redis:8
+    container_name: media-redis
+    ports:
+      - "6384:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - media-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
 
 volumes:
-  media-db-pg18-data:
+  media-postgres-pg18-data:
+  media-redis-data:

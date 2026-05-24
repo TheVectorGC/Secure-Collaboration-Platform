@@ -3,8 +3,14 @@ package dev.mediaservice.config;
 import dev.mediaservice.properties.CorsProperties;
 import dev.mediaservice.properties.SecurityProperties;
 import dev.mediaservice.security.JwtAuthenticationFilter;
+import dev.mediaservice.security.RestAccessDeniedHandler;
+import dev.mediaservice.security.RestAuthenticationEntryPoint;
+import dev.mediaservice.security.ratelimit.RateLimitingFilter;
+import dev.mediaservice.security.ratelimit.RedisRateLimiter;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
@@ -27,11 +33,16 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 @RequiredArgsConstructor
 public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final RestAuthenticationEntryPoint restAuthenticationEntryPoint;
+    private final RestAccessDeniedHandler restAccessDeniedHandler;
     private final CorsProperties corsProperties;
     private final SecurityProperties securityProperties;
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) throws Exception {
+    public SecurityFilterChain securityFilterChain(
+        HttpSecurity httpSecurity,
+        ObjectProvider<RateLimitingFilter> rateLimitingFilterProvider
+    ) throws Exception {
         String[] publicPaths = securityProperties.publicPaths().toArray(String[]::new);
 
         httpSecurity
@@ -40,6 +51,10 @@ public class SecurityConfig {
             .formLogin(AbstractHttpConfigurer::disable)
             .httpBasic(AbstractHttpConfigurer::disable)
             .logout(AbstractHttpConfigurer::disable)
+            .exceptionHandling(exceptionHandlingConfigurer -> exceptionHandlingConfigurer
+                .authenticationEntryPoint(restAuthenticationEntryPoint)
+                .accessDeniedHandler(restAccessDeniedHandler)
+            )
             .authorizeHttpRequests(authorization -> authorization
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers(publicPaths).permitAll()
@@ -50,7 +65,17 @@ public class SecurityConfig {
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
+        rateLimitingFilterProvider.ifAvailable(rateLimitingFilter ->
+            httpSecurity.addFilterAfter(rateLimitingFilter, JwtAuthenticationFilter.class)
+        );
+
         return httpSecurity.build();
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "application.rate-limit", name = "enabled", havingValue = "true")
+    public RateLimitingFilter rateLimitingFilter(RedisRateLimiter redisRateLimiter) {
+        return new RateLimitingFilter(redisRateLimiter);
     }
 
     @Bean

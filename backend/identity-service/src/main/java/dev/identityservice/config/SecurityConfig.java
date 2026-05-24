@@ -5,8 +5,12 @@ import dev.identityservice.properties.SecurityProperties;
 import dev.identityservice.security.JwtAuthenticationFilter;
 import dev.identityservice.security.RestAccessDeniedHandler;
 import dev.identityservice.security.RestAuthenticationEntryPoint;
+import dev.identityservice.security.ratelimit.RateLimitingFilter;
+import dev.identityservice.security.ratelimit.RedisRateLimiter;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
@@ -42,7 +46,10 @@ public class SecurityConfig {
     private final RestAccessDeniedHandler restAccessDeniedHandler;
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) throws Exception {
+    public SecurityFilterChain securityFilterChain(
+        HttpSecurity httpSecurity,
+        ObjectProvider<RateLimitingFilter> rateLimitingFilterProvider
+    ) throws Exception {
         String[] publicPaths = securityProperties.publicPaths().toArray(String[]::new);
 
         httpSecurity
@@ -67,6 +74,10 @@ public class SecurityConfig {
             .authenticationManager(authenticationManager())
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
+        rateLimitingFilterProvider.ifAvailable(rateLimitingFilter ->
+            httpSecurity.addFilterAfter(rateLimitingFilter, JwtAuthenticationFilter.class)
+        );
+
         return httpSecurity.build();
     }
 
@@ -78,6 +89,12 @@ public class SecurityConfig {
     @Bean
     public AuthenticationManager authenticationManager() {
         return new ProviderManager(daoAuthenticationProvider());
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "application.rate-limit", name = "enabled", havingValue = "true")
+    public RateLimitingFilter rateLimitingFilter(RedisRateLimiter redisRateLimiter) {
+        return new RateLimitingFilter(redisRateLimiter);
     }
 
     @Bean

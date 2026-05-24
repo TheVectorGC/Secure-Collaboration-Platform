@@ -19,12 +19,20 @@ public class AuthenticationErrorResponseWriter {
     private final ObjectMapper objectMapper;
     private final RequestIdProvider requestIdProvider;
 
-    public void writeUnauthorized(HttpServletRequest request, HttpServletResponse response, String message) throws IOException {
-        writeErrorResponse(request, response, HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", message);
+    public void writeUnauthorized(
+        HttpServletRequest request,
+        HttpServletResponse response,
+        String message
+    ) throws IOException {
+        writeErrorResponse(request, response, HttpStatus.UNAUTHORIZED, "AUTHENTICATION_REQUIRED", message);
     }
 
-    public void writeForbidden(HttpServletRequest request, HttpServletResponse response, String message) throws IOException {
-        writeErrorResponse(request, response, HttpStatus.FORBIDDEN, "FORBIDDEN", message);
+    public void writeForbidden(
+        HttpServletRequest request,
+        HttpServletResponse response,
+        String message
+    ) throws IOException {
+        writeErrorResponse(request, response, HttpStatus.FORBIDDEN, "ACCESS_DENIED", message);
     }
 
     private void writeErrorResponse(

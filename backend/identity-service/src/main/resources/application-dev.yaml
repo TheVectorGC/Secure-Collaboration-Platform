@@ -19,7 +19,7 @@ application:
   initial-admin:
     enabled: ${INITIAL_ADMIN_ENABLED:true}
   outbox:
-    enabled: ${OUTBOX_ENABLED:false}
+    enabled: ${OUTBOX_ENABLED:true}
   rate-limit:
     enabled: ${RATE_LIMIT_ENABLED:true}
     redis-key-prefix: ${RATE_LIMIT_REDIS_KEY_PREFIX:vector:identity-service:rate-limit}

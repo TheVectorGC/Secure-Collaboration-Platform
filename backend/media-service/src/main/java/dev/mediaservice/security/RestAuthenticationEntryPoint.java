@@ -1,28 +1,28 @@
-package dev.identityservice.security;
+package dev.mediaservice.security;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.access.AccessDeniedException;
-import org.springframework.security.web.access.AccessDeniedHandler;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-public class RestAccessDeniedHandler implements AccessDeniedHandler {
+public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
     private final AuthenticationErrorResponseWriter authenticationErrorResponseWriter;
 
     @Override
-    public void handle(
+    public void commence(
         HttpServletRequest request,
         HttpServletResponse response,
-        AccessDeniedException accessDeniedException
+        AuthenticationException authenticationException
     ) throws IOException {
-        authenticationErrorResponseWriter.writeForbidden(
+        authenticationErrorResponseWriter.writeUnauthorized(
             request,
             response,
-            "You do not have permission to access this resource."
+            "Authentication is required or access token is invalid."
         );
     }
 }

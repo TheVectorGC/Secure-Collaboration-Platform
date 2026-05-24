@@ -2,11 +2,13 @@ package dev.realtimegateway.presence;
 
 import dev.realtimegateway.properties.PresenceProperties;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -16,6 +18,7 @@ import org.springframework.stereotype.Service;
 public class RedisPresenceService implements PresenceService {
     private static final String ONLINE_KEY_PART = "online";
     private static final String LAST_SEEN_KEY_PART = "last-seen";
+    private static final long PRESENCE_SCAN_COUNT = 100L;
 
     private final StringRedisTemplate stringRedisTemplate;
     private final PresenceProperties presenceProperties;
@@ -37,17 +40,17 @@ public class RedisPresenceService implements PresenceService {
 
     @Override
     public List<PresenceAccountStatus> getOnlineAccounts() {
-        Set<String> onlineKeys = stringRedisTemplate.keys(keyPrefix() + ":" + ONLINE_KEY_PART + ":*");
+        List<String> onlineKeys = scanOnlineKeys();
 
-        if (onlineKeys == null || onlineKeys.isEmpty()) {
+        if (onlineKeys.isEmpty()) {
             return List.of();
         }
 
         return onlineKeys.stream()
-                .map(this::accountIdFromOnlineKey)
-                .flatMap(java.util.Optional::stream)
-                .map(accountId -> new PresenceAccountStatus(accountId, true, null))
-                .toList();
+            .map(this::accountIdFromOnlineKey)
+            .flatMap(java.util.Optional::stream)
+            .map(accountId -> new PresenceAccountStatus(accountId, true, null))
+            .toList();
     }
 
     @Override
@@ -59,6 +62,20 @@ public class RedisPresenceService implements PresenceService {
         }
 
         return OffsetDateTime.parse(lastSeenAt);
+    }
+
+    private List<String> scanOnlineKeys() {
+        ScanOptions scanOptions = ScanOptions.scanOptions()
+            .match(keyPrefix() + ":" + ONLINE_KEY_PART + ":*")
+            .count(PRESENCE_SCAN_COUNT)
+            .build();
+        List<String> onlineKeys = new ArrayList<>();
+
+        try (Cursor<String> cursor = stringRedisTemplate.scan(scanOptions)) {
+            cursor.forEachRemaining(onlineKeys::add);
+        }
+
+        return onlineKeys;
     }
 
     private java.util.Optional<UUID> accountIdFromOnlineKey(String onlineKey) {

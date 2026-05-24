@@ -16,5 +16,20 @@ services:
       timeout: 3s
       retries: 30
 
+  messaging-redis:
+    image: redis:8
+    container_name: messaging-redis
+    ports:
+      - "6382:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - messaging-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
 volumes:
   messaging-postgres-pg18-data:
+  messaging-redis-data:

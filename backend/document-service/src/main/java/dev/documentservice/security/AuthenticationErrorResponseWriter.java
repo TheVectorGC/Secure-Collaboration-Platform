@@ -18,31 +18,46 @@ import org.springframework.stereotype.Component;
 public class AuthenticationErrorResponseWriter {
     private final ObjectMapper objectMapper;
     private final RequestIdProvider requestIdProvider;
-    private final HttpServletRequest httpServletRequest;
 
-    public void writeUnauthorized(HttpServletResponse response, String message) throws IOException {
-        writeErrorResponse(response, HttpStatus.UNAUTHORIZED, "AUTHENTICATION_REQUIRED", message);
+    public void writeUnauthorized(
+        HttpServletRequest request,
+        HttpServletResponse response,
+        String message
+    ) throws IOException {
+        writeErrorResponse(request, response, HttpStatus.UNAUTHORIZED, "AUTHENTICATION_REQUIRED", message);
     }
 
-    public void writeForbidden(HttpServletResponse response, String message) throws IOException {
-        writeErrorResponse(response, HttpStatus.FORBIDDEN, "ACCESS_DENIED", message);
+    public void writeForbidden(
+        HttpServletRequest request,
+        HttpServletResponse response,
+        String message
+    ) throws IOException {
+        writeErrorResponse(request, response, HttpStatus.FORBIDDEN, "ACCESS_DENIED", message);
     }
 
-    private void writeErrorResponse(HttpServletResponse response, HttpStatus httpStatus, String code, String message) throws IOException {
+    private void writeErrorResponse(
+        HttpServletRequest request,
+        HttpServletResponse response,
+        HttpStatus httpStatus,
+        String code,
+        String message
+    ) throws IOException {
         if (response.isCommitted()) {
             return;
         }
-        ApiErrorResponseDto errorResponseDto = new ApiErrorResponseDto(
+
+        ApiErrorResponseDto errorResponse = new ApiErrorResponseDto(
             OffsetDateTime.now(),
             requestIdProvider.getCurrentRequestId(),
             httpStatus.value(),
             code,
             message,
-            httpServletRequest.getRequestURI(),
+            request.getRequestURI(),
             List.of()
         );
+
         response.setStatus(httpStatus.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        objectMapper.writeValue(response.getOutputStream(), errorResponseDto);
+        objectMapper.writeValue(response.getOutputStream(), errorResponse);
     }
 }

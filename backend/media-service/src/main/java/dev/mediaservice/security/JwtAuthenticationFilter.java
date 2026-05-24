@@ -17,7 +17,6 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
-import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 @Slf4j
@@ -27,6 +26,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final JwtTokenService jwtTokenService;
+    private final AuthenticationErrorResponseWriter authenticationErrorResponseWriter;
 
     @Override
     protected void doFilterInternal(
@@ -35,29 +35,45 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         @NonNull FilterChain filterChain
     ) throws ServletException, IOException {
         String authorizationHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
-        if (!StringUtils.hasText(authorizationHeader) || !authorizationHeader.startsWith(BEARER_PREFIX)) {
+
+        if (authorizationHeader == null || !authorizationHeader.startsWith(BEARER_PREFIX)) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        String jwtToken = authorizationHeader.substring(BEARER_PREFIX.length());
+        String token = authorizationHeader.substring(BEARER_PREFIX.length());
+
         try {
-            if (SecurityContextHolder.getContext().getAuthentication() == null && jwtTokenService.validateToken(jwtToken)) {
-                AccountPrincipal accountPrincipal = buildAccountPrincipal(jwtTokenService.extractClaims(jwtToken));
-                UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(
-                    accountPrincipal,
-                    null,
-                    accountPrincipal.getAuthorities()
-                );
-                authenticationToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(authenticationToken);
-            }
+            authenticateRequestIfRequired(request, token);
         }
         catch (RuntimeException exception) {
-            log.warn("JWT token was rejected. reason={}", exception.getMessage());
+            log.warn("JWT authentication failed. path={}, reason={}", request.getRequestURI(), exception.getMessage());
+            SecurityContextHolder.clearContext();
+            authenticationErrorResponseWriter.writeUnauthorized(request, response, "Access token is invalid or expired.");
+            return;
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private void authenticateRequestIfRequired(HttpServletRequest request, String token) {
+        if (SecurityContextHolder.getContext().getAuthentication() != null) {
+            return;
+        }
+
+        if (!jwtTokenService.validateToken(token)) {
+            throw new IllegalArgumentException("Access token failed validation.");
+        }
+
+        Map<String, Object> claims = jwtTokenService.extractClaims(token);
+        AccountPrincipal accountPrincipal = buildAccountPrincipal(claims);
+        UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(
+            accountPrincipal,
+            null,
+            accountPrincipal.getAuthorities()
+        );
+        authenticationToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+        SecurityContextHolder.getContext().setAuthentication(authenticationToken);
     }
 
     private AccountPrincipal buildAccountPrincipal(Map<String, Object> claims) {
@@ -67,6 +83,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         List<String> roles = rolesClaim instanceof List<?> roleList
             ? roleList.stream().map(String::valueOf).toList()
             : List.of();
+
         return new AccountPrincipal(accountId, username, roles);
     }
 }

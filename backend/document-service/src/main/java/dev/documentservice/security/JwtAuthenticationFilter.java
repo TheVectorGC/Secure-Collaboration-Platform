@@ -44,7 +44,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             if (SecurityContextHolder.getContext().getAuthentication() == null) {
                 if (!jwtTokenService.validateToken(jwtToken)) {
                     SecurityContextHolder.clearContext();
-                    authenticationErrorResponseWriter.writeUnauthorized(response, "Access token is invalid or expired.");
+                    authenticationErrorResponseWriter.writeUnauthorized(request, response, "Access token is invalid or expired.");
                     return;
                 }
 
@@ -62,7 +62,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         catch (RuntimeException exception) {
             log.warn("JWT token is invalid: {}.", exception.getMessage());
             SecurityContextHolder.clearContext();
-            authenticationErrorResponseWriter.writeUnauthorized(response, "Access token is invalid or expired.");
+            authenticationErrorResponseWriter.writeUnauthorized(request, response, "Access token is invalid or expired.");
             return;
         }
 

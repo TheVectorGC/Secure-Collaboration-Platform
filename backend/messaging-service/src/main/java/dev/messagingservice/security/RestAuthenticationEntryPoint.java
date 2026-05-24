@@ -15,10 +15,14 @@ public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
 
     @Override
     public void commence(
-            HttpServletRequest request,
-            HttpServletResponse response,
-            AuthenticationException authException
+        HttpServletRequest request,
+        HttpServletResponse response,
+        AuthenticationException authenticationException
     ) throws IOException {
-        authenticationErrorResponseWriter.writeUnauthorized(request, response, "Authentication is required.");
+        authenticationErrorResponseWriter.writeUnauthorized(
+            request,
+            response,
+            "Authentication is required or access token is invalid."
+        );
     }
 }

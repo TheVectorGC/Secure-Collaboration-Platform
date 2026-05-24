@@ -1,4 +1,4 @@
-package dev.identityservice.security;
+package dev.mediaservice.security;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;

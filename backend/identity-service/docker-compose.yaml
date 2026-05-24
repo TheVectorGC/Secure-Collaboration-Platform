@@ -16,9 +16,78 @@ services:
       timeout: 3s
       retries: 30
 
-  identity-vault:
+  identity-redis:
+    image: redis:8
+    container_name: identity-redis
+    ports:
+      - "6380:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - identity-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  kafka-backend:
+    image: apache/kafka:3.9.1
+    container_name: kafka-backend
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka-backend:9093
+      KAFKA_LISTENERS: INTERNAL://:29092,EXTERNAL://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka-backend:29092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    volumes:
+      - kafka-backend-data:/tmp/kraft-combined-logs
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  kafka-backend-init:
+    image: apache/kafka:3.9.1
+    container_name: kafka-backend-init
+    depends_on:
+      kafka-backend:
+        condition: service_healthy
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        set -eu
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka-backend:29092 --create --if-not-exists --topic identity.events --partitions 1 --replication-factor 1
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka-backend:29092 --create --if-not-exists --topic messaging.events --partitions 1 --replication-factor 1
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka-backend:29092 --create --if-not-exists --topic document.events --partitions 1 --replication-factor 1
+
+  kafka-ui-backend:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui-backend
+    ports:
+      - "9090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: backend-local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka-backend:29092
+    depends_on:
+      kafka-backend-init:
+        condition: service_completed_successfully
+
+  vault-backend:
     image: hashicorp/vault:1.17
-    container_name: identity-vault
+    container_name: vault-backend
     ports:
       - "8200:8200"
     environment:
@@ -33,14 +102,14 @@ services:
       timeout: 3s
       retries: 30
 
-  identity-vault-init:
+  vault-backend-init:
     image: hashicorp/vault:1.17
-    container_name: identity-vault-init
+    container_name: vault-backend-init
     depends_on:
-      identity-vault:
+      vault-backend:
         condition: service_healthy
     environment:
-      VAULT_ADDR: http://identity-vault:8200
+      VAULT_ADDR: http://vault-backend:8200
       VAULT_TOKEN: root
       JWT_TRANSIT_KEY_NAME: identity-service-jwt-ed25519
     entrypoint: /bin/sh
@@ -57,3 +126,5 @@ services:
 
 volumes:
   identity-postgres-pg18-data:
+  identity-redis-data:
+  kafka-backend-data:

@@ -5,8 +5,12 @@ import dev.documentservice.properties.SecurityProperties;
 import dev.documentservice.security.JwtAuthenticationFilter;
 import dev.documentservice.security.RestAccessDeniedHandler;
 import dev.documentservice.security.RestAuthenticationEntryPoint;
+import dev.documentservice.security.ratelimit.RateLimitingFilter;
+import dev.documentservice.security.ratelimit.RedisRateLimiter;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
@@ -35,7 +39,10 @@ public class SecurityConfig {
     private final SecurityProperties securityProperties;
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) throws Exception {
+    public SecurityFilterChain securityFilterChain(
+        HttpSecurity httpSecurity,
+        ObjectProvider<RateLimitingFilter> rateLimitingFilterProvider
+    ) throws Exception {
         String[] publicPaths = securityProperties.publicPaths().toArray(String[]::new);
 
         httpSecurity
@@ -58,7 +65,17 @@ public class SecurityConfig {
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
+        rateLimitingFilterProvider.ifAvailable(rateLimitingFilter ->
+            httpSecurity.addFilterAfter(rateLimitingFilter, JwtAuthenticationFilter.class)
+        );
+
         return httpSecurity.build();
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "application.rate-limit", name = "enabled", havingValue = "true")
+    public RateLimitingFilter rateLimitingFilter(RedisRateLimiter redisRateLimiter) {
+        return new RateLimitingFilter(redisRateLimiter);
     }
 
     @Bean
