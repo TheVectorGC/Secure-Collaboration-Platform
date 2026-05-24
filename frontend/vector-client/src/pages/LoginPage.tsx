@@ -106,7 +106,7 @@ export function LoginPage() {
     }
     catch (error) {
       console.error(error);
-      setErrorMessage('Не удалось войти. Проверь логин, пароль и запущенные backend сервисы.');
+      setErrorMessage('Не удалось войти. Проверьте логин, пароль и запущенные серверные сервисы.');
     }
     finally {
       setIsLoading(false);
@@ -120,7 +120,7 @@ export function LoginPage() {
       <section className="relative hidden flex-1 flex-col justify-between border-r border-white/10 bg-white/[0.025] p-14 lg:flex">
         <div>
           <div className="inline-flex items-center gap-3 rounded-full border border-violet-300/18 bg-violet-400/10 px-4 py-2 text-sm text-violet-100">
-            Secure desktop messenger
+            Защищённый desktop-мессенджер
           </div>
 
           <div className="mt-24 max-w-2xl">

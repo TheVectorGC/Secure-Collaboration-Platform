@@ -15,10 +15,7 @@
     "electron:admin": "wait-on http://localhost:5173 && cross-env VECTOR_PROFILE=admin-device VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
     "electron:ivan": "wait-on http://localhost:5173 && cross-env VECTOR_PROFILE=ivan-device VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
     "electron:petr": "wait-on http://localhost:5173 && cross-env VECTOR_PROFILE=petr-device VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
-    "electron:prod": "npm run build && cross-env NODE_ENV=production electron .",
-    "pack:win": "npm run build && electron-builder --win dir --x64",
-    "installer:win": "npm run build && electron-builder --win nsis --x64",
-    "installer:win:clean": "powershell -ExecutionPolicy Bypass -File scripts/build-installer.ps1"
+    "electron:prod": "npm run build && cross-env NODE_ENV=production electron ."
   },
   "dependencies": {
     "@signalapp/libsignal-client": "^0.74.1",
@@ -45,53 +42,6 @@
     "typescript": "~5.9.3",
     "vite": "^7.2.7",
     "wait-on": "^9.0.3",
-    "electron-builder": "^26.0.12",
     "@vitejs/plugin-react": "^5.1.1"
-  },
-  "build": {
-    "appId": "dev.vector.messenger.desktop",
-    "productName": "Vector",
-    "copyright": "Copyright © 2026 Vector",
-    "directories": {
-      "output": "release",
-      "buildResources": "resources"
-    },
-    "files": [
-      "dist/**/*",
-      "electron/**/*",
-      "resources/**/*",
-      "package.json"
-    ],
-    "asar": true,
-    "asarUnpack": [
-      "node_modules/better-sqlite3-multiple-ciphers/**/*",
-      "node_modules/@signalapp/libsignal-client/**/*"
-    ],
-    "artifactName": "${productName}-Setup-${version}-${arch}.${ext}",
-    "win": {
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        }
-      ],
-      "icon": "resources/icon.ico"      
-    },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": false,
-      "allowElevation": true,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "Vector",
-      "installerIcon": "resources/icon.ico",
-      "uninstallerIcon": "resources/icon.ico",
-      "installerSidebar": "resources/installer-sidebar.bmp",
-      "uninstallerSidebar": "resources/installer-sidebar.bmp",
-      "deleteAppDataOnUninstall": false
-    }
   }
 }

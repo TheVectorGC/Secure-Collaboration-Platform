@@ -52,7 +52,7 @@ export function ChatSidebar({
   onOpenDocumentsWorkspace,
   pendingDocumentCount,
 }: ChatSidebarProps) {
-  const currentUserDisplayName = currentProfile ? getDisplayName(currentProfile) : 'Vector user';
+  const currentUserDisplayName = currentProfile ? getDisplayName(currentProfile) : 'Пользователь Vector';
 
   return (
     <aside className="vector-panel relative z-10 flex w-[398px] shrink-0 flex-col border-y-0 border-l-0 shadow-2xl shadow-black/35">
@@ -189,7 +189,7 @@ export function ChatSidebar({
             <button
               onClick={onOpenDevTools}
               className="rounded-2xl border border-white/10 bg-white/[0.04] p-2 text-zinc-400 transition hover:border-violet-300/30 hover:text-zinc-100"
-              title="Dev tools"
+              title="Инструменты разработки"
             >
               <Wrench size={16} />
             </button>

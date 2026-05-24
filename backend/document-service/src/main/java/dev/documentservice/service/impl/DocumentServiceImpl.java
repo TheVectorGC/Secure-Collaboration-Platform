@@ -56,6 +56,8 @@ import org.springframework.util.StringUtils;
 @Service
 @RequiredArgsConstructor
 public class DocumentServiceImpl implements DocumentService {
+    private static final String DOCUMENT_KEY_ENVELOPE_ALGORITHM = "RSA-OAEP-SHA256";
+
     private final DocumentRepository documentRepository;
     private final DocumentSignatureRepository documentSignatureRepository;
     private final DocumentSignerRepository documentSignerRepository;
@@ -320,12 +322,25 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     private List<DocumentKeyEnvelopeEntity> createKeyEnvelopeEntities(UUID documentId, List<DocumentKeyEnvelopeRequestDto> keyEnvelopeRequestDtos, Collection<UUID> accessAccountIds, OffsetDateTime now) {
-        Map<UUID, List<DocumentKeyEnvelopeRequestDto>> keyEnvelopesByAccountId = keyEnvelopeRequestDtos.stream()
-            .collect(Collectors.groupingBy(DocumentKeyEnvelopeRequestDto::targetAccountId));
-        List<UUID> missingAccountIds = accessAccountIds.stream().filter(accountId -> !keyEnvelopesByAccountId.containsKey(accountId)).toList();
-        if (!missingAccountIds.isEmpty()) {
-            throw new DocumentValidationException("Document key envelopes must cover owner, required signers and observers.");
+        if (keyEnvelopeRequestDtos == null || keyEnvelopeRequestDtos.isEmpty()) {
+            throw new DocumentValidationException("Document key envelopes are required.");
         }
+
+        validateKeyEnvelopeRequests(keyEnvelopeRequestDtos);
+
+        HashSet<UUID> allowedAccountIds = accessAccountIds.stream()
+            .filter(Objects::nonNull)
+            .collect(Collectors.toCollection(HashSet::new));
+
+        HashSet<UUID> envelopeAccountIds = keyEnvelopeRequestDtos.stream()
+            .map(DocumentKeyEnvelopeRequestDto::targetAccountId)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toCollection(HashSet::new));
+
+        if (!envelopeAccountIds.equals(allowedAccountIds)) {
+            throw new DocumentValidationException("Document key envelopes must exactly match document access accounts.");
+        }
+
         return keyEnvelopeRequestDtos.stream()
             .map(keyEnvelope -> DocumentKeyEnvelopeEntity.builder()
                 .id(UUID.randomUUID())
@@ -337,6 +352,18 @@ public class DocumentServiceImpl implements DocumentService {
                 .createdAt(now)
                 .build())
             .toList();
+    }
+
+    private void validateKeyEnvelopeRequests(List<DocumentKeyEnvelopeRequestDto> keyEnvelopeRequestDtos) {
+        boolean hasInvalidEnvelope = keyEnvelopeRequestDtos.stream()
+            .anyMatch(keyEnvelopeRequestDto -> keyEnvelopeRequestDto == null
+                || keyEnvelopeRequestDto.targetAccountId() == null
+                || !DOCUMENT_KEY_ENVELOPE_ALGORITHM.equals(keyEnvelopeRequestDto.algorithm())
+                || !StringUtils.hasText(keyEnvelopeRequestDto.encryptedKeyBase64()));
+
+        if (hasInvalidEnvelope) {
+            throw new DocumentValidationException("Document key envelopes contain invalid data.");
+        }
     }
 
     private DocumentEntity getDocumentEntity(UUID documentId) {

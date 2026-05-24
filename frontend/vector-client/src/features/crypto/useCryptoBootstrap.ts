@@ -141,7 +141,7 @@ export function useCryptoBootstrap() {
         console.error(error);
 
         if (!cancelled) {
-          setError(error instanceof Error ? error.message : 'Failed to initialize crypto storage.');
+          setError(error instanceof Error ? error.message : 'Не удалось подготовить локальное хранилище ключей.');
         }
       }
     }

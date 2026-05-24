@@ -273,7 +273,7 @@ export type EncryptAccountKeyEnvelopeRequest = {
 };
 
 export type EncryptAccountKeyEnvelopeResponse = {
-  algorithm: string;
+  algorithm: 'RSA-OAEP-SHA256';
   encryptedKeyBase64: string;
 };
 

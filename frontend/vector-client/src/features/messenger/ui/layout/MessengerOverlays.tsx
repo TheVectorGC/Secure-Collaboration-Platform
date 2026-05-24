@@ -197,7 +197,7 @@ export function MessengerOverlays({
           <div className="vector-surface-card w-full max-w-lg p-6">
             <div className="mb-5 flex items-center justify-between gap-4">
               <div>
-                <div className="text-xl font-semibold text-zinc-50">Dev tools</div>
+                <div className="text-xl font-semibold text-zinc-50">Инструменты разработки</div>
                 <div className="mt-1 text-sm text-zinc-500">
                   Спрятано из основного интерфейса. Открывается по кнопке или Ctrl + Shift + D.
                 </div>

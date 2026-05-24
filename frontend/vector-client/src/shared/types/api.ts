@@ -288,7 +288,7 @@ export type FileEncryptionMetadata = {
 export type DocumentKeyEnvelopeRequestDto = {
   targetAccountId: string;
   targetDeviceId: string | null;
-  algorithm: string;
+  algorithm: 'RSA-OAEP-SHA256';
   encryptedKeyBase64: string;
 };
 
@@ -297,7 +297,7 @@ export type DocumentKeyEnvelopeResponseDto = {
   documentId: string;
   targetAccountId: string;
   targetDeviceId: string | null;
-  algorithm: string;
+  algorithm: 'RSA-OAEP-SHA256';
   encryptedKeyBase64: string;
 };
 

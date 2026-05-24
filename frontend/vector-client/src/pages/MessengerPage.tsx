@@ -644,9 +644,9 @@ export function MessengerPage() {
 
   const selectedChatPresentation = selectedChat ? getChatPresentation(selectedChat, profile, profilesById) : null;
   const directBlockNotice = selectedChat?.type === 'DIRECT' && isSelectedDirectChatBlockedByCompanion
-    ? 'Пользователь вас заблокировал. Отправка сообщений и typing отключены.'
+    ? 'Пользователь вас заблокировал. Отправка сообщений отключена.'
     : selectedChat?.type === 'DIRECT' && isSelectedDirectChatBlockedByCurrentAccount
-      ? 'Вы заблокировали этого пользователя. Отправка сообщений и typing отключены.'
+      ? 'Вы заблокировали этого пользователя. Отправка сообщений отключена.'
       : null;
   const selectedTypingText = isSelectedChatWritable && selectedTypingStates.length > 0
     ? selectedTypingStates.length === 1

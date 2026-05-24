@@ -44,6 +44,11 @@ public class RedisTypingRecipientsResolver implements TypingRecipientsResolver {
         }
 
         TypingRecipientsRoute route = loadRoute(chatId, accountPrincipal);
+
+        if (route == null) {
+            return List.of();
+        }
+
         cacheRoute(route);
         return recipientAccountIdsFor(route, accountPrincipal.accountId());
     }
@@ -86,7 +91,7 @@ public class RedisTypingRecipientsResolver implements TypingRecipientsResolver {
                     .body(MessagingChatResponseDto.class);
 
             if (chatResponseDto == null || chatResponseDto.participantAccountIds() == null) {
-                return new TypingRecipientsRoute(chatId, "UNKNOWN", List.of());
+                return null;
             }
 
             List<UUID> participantAccountIds = chatResponseDto.participantAccountIds().stream()
@@ -98,7 +103,7 @@ public class RedisTypingRecipientsResolver implements TypingRecipientsResolver {
         }
         catch (RestClientException | IllegalStateException exception) {
             log.debug("Failed to resolve typing recipients. chatId={}, accountId={}", chatId, accountPrincipal.accountId(), exception);
-            return new TypingRecipientsRoute(chatId, "UNKNOWN", List.of());
+            return null;
         }
     }
 

@@ -263,7 +263,7 @@ export function useRealtimeConnection() {
         }));
       }
       catch (error) {
-        console.warn('Failed to synchronize after realtime reconnect.', error);
+        console.warn('Не удалось синхронизировать данные после переподключения realtime.', error);
       }
     }
 
@@ -349,7 +349,7 @@ export function useRealtimeConnection() {
       }
       catch (error) {
         console.error(error);
-        setLastError('Failed to refresh realtime token.');
+        setLastError('Не удалось обновить realtime-сессию.');
       }
       finally {
         isRefreshingBeforeConnect = false;
@@ -387,13 +387,13 @@ export function useRealtimeConnection() {
           handleRealtimeEvent(realtimeEvent);
         }
         catch (error) {
-          console.error('Failed to parse realtime event.', error);
+          console.error('Не удалось разобрать realtime-событие.', error);
           setLastError('Не удалось обработать realtime событие.');
         }
       };
 
       webSocket.onerror = () => {
-        setLastError('Realtime connection error.');
+        setLastError('Ошибка realtime-соединения.');
       };
 
       webSocket.onclose = (event) => {
@@ -436,7 +436,7 @@ export function useRealtimeConnection() {
         }
         catch (error) {
           console.error(error);
-          setLastError('Failed to refresh realtime token.');
+          setLastError('Не удалось обновить realtime-сессию.');
         }
       }, refreshDelay);
     }

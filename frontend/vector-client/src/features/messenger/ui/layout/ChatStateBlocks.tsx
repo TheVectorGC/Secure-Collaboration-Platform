@@ -41,7 +41,7 @@ export function ChatAlerts({
 
       {isGroupChatReadOnly && (
         <div className="border-b border-amber-300/20 bg-amber-500/10 px-7 py-3 text-sm text-amber-100 shadow-lg shadow-amber-950/10">
-          Вы исключены из группы. Вы можете читать доступную историю, но отправка сообщений, файлов, документов и typing отключены.
+          Вы исключены из группы. Вы можете читать доступную историю, но отправка сообщений, файлов и документов отключена.
         </div>
       )}
 

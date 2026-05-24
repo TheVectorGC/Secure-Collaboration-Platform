@@ -12,8 +12,8 @@ export function DevAccountPanel() {
   const defaultUsername = useMemo(() => `user${Math.floor(Math.random() * 10000)}`, []);
   const [username, setUsername] = useState(defaultUsername);
   const [email, setEmail] = useState(`${defaultUsername}@company.local`);
-  const [firstName, setFirstName] = useState('Test');
-  const [lastName, setLastName] = useState('User');
+  const [firstName, setFirstName] = useState('Тест');
+  const [lastName, setLastName] = useState('Пользователь');
   const [password, setPassword] = useState('UserPassword123!');
   const [isLoading, setIsLoading] = useState(false);
   const [createdAccount, setCreatedAccount] = useState<CreatedDevAccount | null>(null);
@@ -45,7 +45,7 @@ export function DevAccountPanel() {
     }
     catch (error) {
       console.error(error);
-      setErrorMessage('Не удалось создать тестового пользователя. Проверь права admin и уникальность username/email.');
+      setErrorMessage('Не удалось создать тестового пользователя. Проверьте права администратора и уникальность логина/почты.');
     }
     finally {
       setIsLoading(false);
@@ -55,7 +55,7 @@ export function DevAccountPanel() {
   return (
     <div className="rounded-3xl border border-white/10 bg-white/[0.035] p-4">
       <div className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
-        Dev user
+        Тестовый пользователь
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-2">
@@ -66,13 +66,13 @@ export function DevAccountPanel() {
             setEmail(`${event.target.value}@company.local`);
           }}
           className="w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-zinc-200 outline-none focus:border-violet-400/50"
-          placeholder="username"
+          placeholder="Логин"
         />
         <input
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           className="w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-zinc-200 outline-none focus:border-violet-400/50"
-          placeholder="email"
+          placeholder="Почта"
         />
         <input
           value={firstName}
@@ -90,20 +90,20 @@ export function DevAccountPanel() {
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           className="w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-zinc-200 outline-none focus:border-violet-400/50"
-          placeholder="password"
+          placeholder="Пароль"
         />
         <button
           disabled={isLoading}
           className="w-full rounded-2xl bg-violet-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isLoading ? 'Creating...' : 'Create test user'}
+          {isLoading ? 'Создание…' : 'Создать тестового пользователя'}
         </button>
       </form>
 
       {createdAccount && (
         <div className="mt-3 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-3 text-xs text-emerald-100">
-          <div>Created: {createdAccount.username}</div>
-          <div>Password: {createdAccount.password}</div>
+          <div>Создан: {createdAccount.username}</div>
+          <div>Пароль: {createdAccount.password}</div>
         </div>
       )}
 

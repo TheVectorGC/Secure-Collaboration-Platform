@@ -150,7 +150,6 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
     setPendingDocumentFile(null);
   }
 
-
   async function buildDocumentKeyEnvelopes(fileKeyBase64: string, targetAccountIds: string[]): Promise<DocumentKeyEnvelopeRequestDto[]> {
     if (!window.vectorCrypto) {
       throw new Error('Локальное шифрование недоступно.');
