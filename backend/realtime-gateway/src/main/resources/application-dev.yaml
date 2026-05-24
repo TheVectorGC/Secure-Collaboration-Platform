@@ -3,30 +3,14 @@ spring:
     activate:
       on-profile: dev
 
-application:
-  security:
-    public-paths:
-      - /ws/**
-      - /api/v1/realtime/info
-      - /actuator/**
-      - /swagger-ui/**
-      - /swagger-ui.html
-      - /v3/api-docs/**
-
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus,env,beans,loggers
+        include: health
   endpoint:
     health:
       show-details: always
-
-springdoc:
-  api-docs:
-    enabled: true
-  swagger-ui:
-    enabled: true
 
 logging:
   level:

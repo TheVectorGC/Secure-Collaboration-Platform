@@ -66,6 +66,7 @@ public class RealtimeWebSocketHandler extends TextWebSocketHandler {
         String payload = textMessage.getPayload();
 
         if (PING_MESSAGE.equalsIgnoreCase(payload)) {
+            connectionRegistry.refreshPresence(webSocketSession);
             sendPongIfOpen(webSocketSession);
             return;
         }

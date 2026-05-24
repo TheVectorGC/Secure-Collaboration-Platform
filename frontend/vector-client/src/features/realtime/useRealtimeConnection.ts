@@ -12,11 +12,15 @@ import type {
   TypingPayload,
   AccountPresencePayload,
 } from '../../shared/types/api';
+
 import { refreshAuthenticationToken } from '../auth/api/authApi';
 import { getChatMessages } from '../messages/api/messagesApi';
 import { useAuthStore } from '../auth/model/authStore';
 import { useMessengerStore } from '../messenger/model/messengerStore';
 import { useRealtimeStore } from './model/realtimeStore';
+
+const HEARTBEAT_INTERVAL_MS = 30_000;
+const HEARTBEAT_TIMEOUT_MS = 10_000;
 
 function isObjectPayload(payload: unknown): payload is Record<string, unknown> {
   return Boolean(payload) && typeof payload === 'object';
@@ -163,6 +167,8 @@ export function useRealtimeConnection() {
   const reconnectTimeoutRef = useRef<number | null>(null);
   const refreshTimeoutRef = useRef<number | null>(null);
   const webSocketRef = useRef<WebSocket | null>(null);
+  const heartbeatIntervalRef = useRef<number | null>(null);
+  const heartbeatTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     setTypingSender((request) => {
@@ -199,6 +205,49 @@ export function useRealtimeConnection() {
       if (reconnectTimeoutRef.current !== null) {
         window.clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;
+      }
+    }
+
+    function clearHeartbeatTimers() {
+      if (heartbeatIntervalRef.current !== null) {
+        window.clearInterval(heartbeatIntervalRef.current);
+        heartbeatIntervalRef.current = null;
+      }
+
+      if (heartbeatTimeoutRef.current !== null) {
+        window.clearTimeout(heartbeatTimeoutRef.current);
+        heartbeatTimeoutRef.current = null;
+      }
+    }
+
+    function sendHeartbeatPing() {
+      if (!webSocket || webSocket.readyState !== WebSocket.OPEN) {
+        return;
+      }
+
+      webSocket.send('ping');
+
+      if (heartbeatTimeoutRef.current !== null) {
+        window.clearTimeout(heartbeatTimeoutRef.current);
+      }
+
+      heartbeatTimeoutRef.current = window.setTimeout(() => {
+        if (webSocket && webSocket.readyState === WebSocket.OPEN) {
+          webSocket.close();
+        }
+      }, HEARTBEAT_TIMEOUT_MS);
+    }
+
+    function startHeartbeat() {
+      clearHeartbeatTimers();
+      sendHeartbeatPing();
+      heartbeatIntervalRef.current = window.setInterval(sendHeartbeatPing, HEARTBEAT_INTERVAL_MS);
+    }
+
+    function markHeartbeatPongReceived() {
+      if (heartbeatTimeoutRef.current !== null) {
+        window.clearTimeout(heartbeatTimeoutRef.current);
+        heartbeatTimeoutRef.current = null;
       }
     }
 
@@ -319,11 +368,12 @@ export function useRealtimeConnection() {
         reconnectAttemptRef.current = 0;
         setStatus('connected');
         setLastError(null);
-        webSocket?.send('ping');
+        startHeartbeat();
       };
 
       webSocket.onmessage = (event) => {
         if (event.data === 'pong') {
+          markHeartbeatPongReceived();
           return;
         }
 
@@ -345,6 +395,8 @@ export function useRealtimeConnection() {
         if (webSocketRef.current === webSocket) {
           webSocketRef.current = null;
         }
+
+        clearHeartbeatTimers();
 
         if (isClosedByEffect) {
           setStatus('disconnected');
@@ -387,6 +439,7 @@ export function useRealtimeConnection() {
     return () => {
       isClosedByEffect = true;
       clearReconnectTimeout();
+      clearHeartbeatTimers();
 
       if (refreshTimeoutRef.current !== null) {
         window.clearTimeout(refreshTimeoutRef.current);

@@ -17,31 +17,17 @@ spring:
       token: ${VAULT_TOKEN}
 
 application:
-  cors:
-    allowed-origins: ${CORS_ALLOWED_ORIGINS}
   websocket:
     allowed-origins: ${WEBSOCKET_ALLOWED_ORIGINS}
-  security:
-    public-paths:
-      - /ws/**
-      - /api/v1/realtime/info
-      - /actuator/health
-      - /actuator/info
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health
   endpoint:
     health:
       show-details: never
-
-springdoc:
-  api-docs:
-    enabled: false
-  swagger-ui:
-    enabled: false
 
 logging:
   level:

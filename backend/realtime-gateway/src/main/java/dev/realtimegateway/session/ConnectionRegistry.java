@@ -74,6 +74,16 @@ public class ConnectionRegistry {
         return false;
     }
 
+    public void refreshPresence(WebSocketSession webSocketSession) {
+        AccountPrincipal accountPrincipal = getAccountPrincipal(webSocketSession);
+
+        if (accountPrincipal == null) {
+            return;
+        }
+
+        presenceService.markOnline(accountPrincipal.accountId());
+    }
+
     public void sendToAccount(UUID accountId, RealtimeEnvelopeDto realtimeEnvelopeDto) {
         Set<WebSocketSession> sessions = sessionsByAccountId.get(accountId);
 

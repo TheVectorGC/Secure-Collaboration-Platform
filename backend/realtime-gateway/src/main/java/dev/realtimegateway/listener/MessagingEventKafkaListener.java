@@ -3,7 +3,6 @@ package dev.realtimegateway.listener;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.realtimegateway.model.event.RealtimeDomainEventDto;
 import dev.realtimegateway.service.RealtimeDeliveryService;
-import dev.realtimegateway.observability.RequestIdFilter;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.MDC;
 import lombok.extern.slf4j.Slf4j;
@@ -14,6 +13,7 @@ import org.springframework.stereotype.Component;
 @Component
 @RequiredArgsConstructor
 public class MessagingEventKafkaListener {
+    private static final String REQUEST_ID_MDC_KEY = "requestId";
     private final RealtimeDeliveryService realtimeDeliveryService;
     private final ObjectMapper objectMapper;
 
@@ -38,13 +38,13 @@ public class MessagingEventKafkaListener {
             log.debug("Invalid messaging event payload: {}.", serializedMessagingEvent);
         }
         finally {
-            MDC.remove(RequestIdFilter.REQUEST_ID_MDC_KEY);
+            MDC.remove(REQUEST_ID_MDC_KEY);
         }
     }
 
     private void putRequestId(RealtimeDomainEventDto realtimeDomainEventDto) {
         if (realtimeDomainEventDto.requestId() != null && !realtimeDomainEventDto.requestId().isBlank()) {
-            MDC.put(RequestIdFilter.REQUEST_ID_MDC_KEY, realtimeDomainEventDto.requestId());
+            MDC.put(REQUEST_ID_MDC_KEY, realtimeDomainEventDto.requestId());
         }
     }
 }
