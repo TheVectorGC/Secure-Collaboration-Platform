@@ -51,9 +51,19 @@ export function useLocalChatActions({
     const chatIdToHide = selectedChatId;
     const blockedAccountId = options?.blockedAccountId ?? null;
 
+    const deletedAt = new Date().toISOString();
+
     updateLocalChatState((previousValue) => ({
       ...previousValue,
       hiddenChatIds: Array.from(new Set([...previousValue.hiddenChatIds, chatIdToHide])),
+      clearedAtByChatId: {
+        ...previousValue.clearedAtByChatId,
+        [chatIdToHide]: deletedAt,
+      },
+      readAtByChatId: {
+        ...previousValue.readAtByChatId,
+        [chatIdToHide]: deletedAt,
+      },
       blockedAccountIds: blockedAccountId
         ? Array.from(new Set([...(previousValue.blockedAccountIds ?? []), blockedAccountId]))
         : previousValue.blockedAccountIds ?? [],

@@ -77,7 +77,7 @@ export function MessageTimeline({
 
   return (
     <div className="relative min-h-0 flex-1">
-      <div ref={timelineScrollContainerRef} onScroll={onTimelineScroll} className="relative h-full overflow-y-auto px-8 py-7">
+      <div ref={timelineScrollContainerRef} onScroll={onTimelineScroll} className="relative h-full overflow-y-auto px-8 py-7 [scrollbar-gutter:stable]">
         <div className="relative mx-auto flex max-w-4xl flex-col gap-3">
         {visibleSelectedMessages.length === 0 && (
           <div className="rounded-[1.8rem] border border-dashed border-white/10 bg-white/[0.035] p-8 text-center text-sm text-zinc-500 shadow-2xl shadow-black/15 backdrop-blur-xl">

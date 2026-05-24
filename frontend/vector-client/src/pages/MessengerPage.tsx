@@ -87,6 +87,7 @@ export function MessengerPage() {
   const [, setOpenedChatMenuId] = useState<string | null>(null);
   const [isChatActionsMenuOpen, setIsChatActionsMenuOpen] = useState(false);
   const [isDeleteChatConfirmOpen, setIsDeleteChatConfirmOpen] = useState(false);
+  const [isBlockUserConfirmOpen, setIsBlockUserConfirmOpen] = useState(false);
   const [isClearHistoryConfirmOpen, setIsClearHistoryConfirmOpen] = useState(false);
   const { localChatState, updateLocalChatState } = usePersistentLocalChatState(profile?.accountId);
   const { localReactionsByMessageId, setLocalMessageReaction: updateLocalMessageReaction } = useLocalMessageReactions(profile?.accountId);
@@ -264,6 +265,8 @@ export function MessengerPage() {
     setReadDetailsMessageId(null);
     closeMessageContextMenu();
     setIsChatActionsMenuOpen(false);
+    setIsDeleteChatConfirmOpen(false);
+    setIsBlockUserConfirmOpen(false);
   }, [selectedChatId]);
 
   useEffect(() => {
@@ -583,6 +586,7 @@ export function MessengerPage() {
         selectedChat={selectedChat}
         currentAccountId={profile?.accountId}
         isDeleteChatConfirmOpen={isDeleteChatConfirmOpen}
+        isBlockUserConfirmOpen={isBlockUserConfirmOpen}
         isClearHistoryConfirmOpen={isClearHistoryConfirmOpen}
         droppedImageFiles={droppedImageFiles}
         isDraggingFileOverChat={isDraggingFileOverChat}
@@ -590,9 +594,11 @@ export function MessengerPage() {
         isDevToolsOpen={isDevToolsOpen}
         isAdmin={profile?.username === 'admin'}
         onCloseDeleteChatConfirm={() => setIsDeleteChatConfirmOpen(false)}
+        onCloseBlockUserConfirm={() => setIsBlockUserConfirmOpen(false)}
         onCloseClearHistoryConfirm={() => setIsClearHistoryConfirmOpen(false)}
         onClearSelectedChatHistory={handleClearSelectedChatHistory}
         onDeleteSelectedChatLocally={(options) => void handleDeleteSelectedChat(options)}
+        onBlockDirectCompanion={() => void handleBlockSelectedDirectChat()}
         onSendDroppedImages={(attachmentDisplayMode) => void sendDroppedImages(attachmentDisplayMode)}
         onClearDroppedImageFiles={() => setDroppedImageFiles([])}
         onCloseDraggingFileOverlay={() => setIsDraggingFileOverChat(false)}
@@ -648,7 +654,7 @@ export function MessengerPage() {
               }}
               onBlockDirectCompanion={() => {
                 setIsChatActionsMenuOpen(false);
-                void handleBlockSelectedDirectChat();
+                setIsBlockUserConfirmOpen(true);
               }}
               onUnblockDirectCompanion={() => {
                 setIsChatActionsMenuOpen(false);

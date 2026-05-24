@@ -9,6 +9,7 @@ type MessengerOverlaysProps = {
   selectedChat: ChatResponseDto | null;
   currentAccountId: string | undefined;
   isDeleteChatConfirmOpen: boolean;
+  isBlockUserConfirmOpen: boolean;
   isClearHistoryConfirmOpen: boolean;
   droppedImageFiles: File[];
   isDraggingFileOverChat: boolean;
@@ -16,9 +17,11 @@ type MessengerOverlaysProps = {
   isDevToolsOpen: boolean;
   isAdmin: boolean;
   onCloseDeleteChatConfirm: () => void;
+  onCloseBlockUserConfirm: () => void;
   onCloseClearHistoryConfirm: () => void;
   onClearSelectedChatHistory: () => void;
   onDeleteSelectedChatLocally: (options?: { blockedAccountId?: string | null }) => void | Promise<void>;
+  onBlockDirectCompanion: () => void | Promise<void>;
   onSendDroppedImages: (attachmentDisplayMode: ChatAttachmentDisplayMode) => void;
   onClearDroppedImageFiles: () => void;
   onCloseDraggingFileOverlay: () => void;
@@ -29,6 +32,7 @@ export function MessengerOverlays({
   selectedChat,
   currentAccountId,
   isDeleteChatConfirmOpen,
+  isBlockUserConfirmOpen,
   isClearHistoryConfirmOpen,
   droppedImageFiles,
   isDraggingFileOverChat,
@@ -36,9 +40,11 @@ export function MessengerOverlays({
   isDevToolsOpen,
   isAdmin,
   onCloseDeleteChatConfirm,
+  onCloseBlockUserConfirm,
   onCloseClearHistoryConfirm,
   onClearSelectedChatHistory,
   onDeleteSelectedChatLocally,
+  onBlockDirectCompanion,
   onSendDroppedImages,
   onClearDroppedImageFiles,
   onCloseDraggingFileOverlay,
@@ -57,6 +63,11 @@ export function MessengerOverlays({
       blockedAccountId: shouldBlockUser ? directCompanionAccountId : null,
     });
     setShouldBlockUser(false);
+  }
+
+  function confirmBlockUser() {
+    void onBlockDirectCompanion();
+    onCloseBlockUserConfirm();
   }
 
   return (
@@ -82,6 +93,34 @@ export function MessengerOverlays({
                 className="rounded-2xl bg-violet-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-400"
               >
                 Очистить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
+      {isBlockUserConfirmOpen && selectedChat?.type === 'DIRECT' && (
+        <div className="absolute inset-0 z-[110] flex items-center justify-center bg-black/60 p-4 backdrop-blur-md">
+          <div className="vector-surface-card w-full max-w-md p-5">
+            <div className="text-lg font-semibold text-white">Заблокировать пользователя?</div>
+            <div className="mt-2 text-sm leading-6 text-zinc-400">
+              Пользователь не сможет писать вам в этот личный чат. Разблокировать его можно будет из меню чата.
+            </div>
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={onCloseBlockUserConfirm}
+                className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-zinc-300 transition hover:bg-white/[0.06] hover:text-white"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                onClick={confirmBlockUser}
+                className="rounded-2xl bg-amber-500/90 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-400"
+              >
+                Заблокировать
               </button>
             </div>
           </div>

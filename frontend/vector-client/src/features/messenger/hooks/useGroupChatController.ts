@@ -172,11 +172,19 @@ export function useGroupChatController(params: UseGroupChatControllerParams) {
     upsertProfile(profileToAdd);
     upsertChat(updatedChat);
 
-    if (historyAccessMode === 'FULL_HISTORY') {
-      await shareHistoricalGroupKeysWithParticipant(profileToAdd.accountId);
-    }
-
     await shareCurrentGroupEpochKeyWithAccounts(updatedChat, getActiveGroupParticipantAccountIds(updatedChat));
+    clearTemporarilyMissingGroupKeys();
+
+    if (historyAccessMode === 'FULL_HISTORY') {
+      try {
+        await shareHistoricalGroupKeysWithParticipant(profileToAdd.accountId);
+        clearTemporarilyMissingGroupKeys();
+      }
+      catch (error) {
+        console.warn('Historical group keys were not fully shared with the new participant.', error);
+        setErrorMessage('Участник добавлен, но часть истории пока недоступна. Проверьте, что у вас открыт доступ к резервному ключу, и повторите добавление истории позже.');
+      }
+    }
   }
 
   async function handleRemoveGroupParticipant(participantAccountId: string) {

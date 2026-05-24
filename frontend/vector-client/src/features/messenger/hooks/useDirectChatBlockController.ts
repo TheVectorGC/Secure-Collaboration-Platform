@@ -4,20 +4,43 @@ import type { ChatResponseDto } from '../../../shared/types/api';
 import type { LocalChatState } from '../lib/messengerCore';
 
 
+function getErrorResponseMessage(error: unknown): string | null {
+  if (!axios.isAxiosError(error)) {
+    return null;
+  }
+
+  const responseData = error.response?.data as { message?: string; error?: string } | string | undefined;
+
+  if (typeof responseData === 'string') {
+    return responseData.trim() || null;
+  }
+
+  return responseData?.message ?? responseData?.error ?? null;
+}
+
 function getBlockErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
     const status = error.response?.status;
+    const responseMessage = getErrorResponseMessage(error);
 
     if (status === 400) {
-      return 'Не удалось заблокировать пользователя. Проверьте, что выбран не ваш собственный чат.';
+      return responseMessage ?? 'Не удалось заблокировать пользователя. Проверьте, что выбран не ваш собственный чат.';
+    }
+
+    if (status === 401 || status === 403) {
+      return 'Сессия не подтверждена. Войдите заново и повторите блокировку.';
     }
 
     if (status === 404) {
-      return 'Не удалось заблокировать пользователя: профиль не найден.';
+      return responseMessage ?? 'Не удалось заблокировать пользователя: профиль не найден.';
     }
 
     if (status === 429) {
       return 'Слишком много действий подряд. Подождите немного и повторите попытку.';
+    }
+
+    if (responseMessage) {
+      return responseMessage;
     }
   }
 
@@ -67,6 +90,10 @@ export function useDirectChatBlockController(params: UseDirectChatBlockControlle
           currentAccountBlockedCompanion: true,
           companionBlockedCurrentAccount: selectedChat.companionBlockedCurrentAccount,
         });
+        updateLocalChatState((previousValue) => ({
+          ...previousValue,
+          blockedAccountIds: Array.from(new Set([...(previousValue.blockedAccountIds ?? []), blockedAccountId])),
+        }));
       }
       catch (error) {
         console.error(error);
@@ -97,6 +124,10 @@ export function useDirectChatBlockController(params: UseDirectChatBlockControlle
         currentAccountBlockedCompanion: true,
         companionBlockedCurrentAccount: selectedChat.companionBlockedCurrentAccount,
       });
+      updateLocalChatState((previousValue) => ({
+        ...previousValue,
+        blockedAccountIds: Array.from(new Set([...(previousValue.blockedAccountIds ?? []), selectedDirectCompanionAccountId])),
+      }));
       sendCurrentTypingState(false);
     }
     catch (error) {

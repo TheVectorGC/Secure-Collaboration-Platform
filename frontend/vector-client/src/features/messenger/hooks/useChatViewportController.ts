@@ -77,7 +77,18 @@ export function useChatViewportController(params: UseChatViewportControllerParam
 
   const scrollTimelineToBottom = useCallback((behavior: ScrollBehavior) => {
     window.requestAnimationFrame(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior, block: 'end' });
+      const timelineScrollContainer = timelineScrollContainerRef.current;
+
+      if (timelineScrollContainer) {
+        timelineScrollContainer.scrollTo({
+          top: timelineScrollContainer.scrollHeight,
+          behavior,
+        });
+      }
+      else {
+        messagesEndRef.current?.scrollIntoView({ behavior, block: 'end' });
+      }
+
       window.requestAnimationFrame(refreshTimelineAtBottomState);
     });
   }, [messagesEndRef, refreshTimelineAtBottomState]);
