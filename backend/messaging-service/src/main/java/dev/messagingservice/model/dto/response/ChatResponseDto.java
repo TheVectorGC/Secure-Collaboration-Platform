@@ -39,5 +39,11 @@ public record ChatResponseDto(
     OffsetDateTime createdAt,
 
     @Schema(description = "Chat update datetime.")
-    OffsetDateTime updatedAt
+    OffsetDateTime updatedAt,
+
+    @Schema(description = "Whether current account has blocked the direct chat companion.")
+    boolean currentAccountBlockedCompanion,
+
+    @Schema(description = "Whether direct chat companion has blocked current account.")
+    boolean companionBlockedCurrentAccount
 ) {}

@@ -27,8 +27,13 @@ public class AccountBlockServiceImpl implements AccountBlockService {
     @Override
     @Transactional(readOnly = true)
     public boolean isBlockedInEitherDirection(UUID firstAccountId, UUID secondAccountId) {
-        return accountBlockProjectionRepository.existsByBlockerAccountIdAndBlockedAccountId(firstAccountId, secondAccountId)
-                || accountBlockProjectionRepository.existsByBlockerAccountIdAndBlockedAccountId(secondAccountId, firstAccountId);
+        return isBlockedBy(firstAccountId, secondAccountId) || isBlockedBy(secondAccountId, firstAccountId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean isBlockedBy(UUID blockerAccountId, UUID blockedAccountId) {
+        return accountBlockProjectionRepository.existsByBlockerAccountIdAndBlockedAccountId(blockerAccountId, blockedAccountId);
     }
 
     @Override

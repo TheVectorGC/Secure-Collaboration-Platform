@@ -79,7 +79,7 @@ public class ChatServiceImpl implements ChatService {
         accountBlockService.ensureDirectMessagingAllowed(currentAccountId, requestDto.recipientAccountId());
         String directChatKey = createDirectChatKey(currentAccountId, requestDto.recipientAccountId());
         return chatRepository.findByDirectChatKey(directChatKey)
-                .map(chatEntity -> chatMapper.toChatResponse(chatEntity, loadActiveParticipants(chatEntity.getId())))
+                .map(chatEntity -> withDirectBlockState(currentAccountId, chatMapper.toChatResponse(chatEntity, loadActiveParticipants(chatEntity.getId()))))
                 .orElseGet(() -> createDirectChat(currentAccountId, requestDto.recipientAccountId(), directChatKey));
     }
 
@@ -105,7 +105,7 @@ public class ChatServiceImpl implements ChatService {
             log.info("Self chat created. Chat ID: {}, account ID: {}.", chatEntity.getId(), currentAccountId);
         }
 
-        return chatMapper.toChatResponse(chatEntity, loadActiveParticipants(chatEntity.getId()));
+        return withDirectBlockState(currentAccountId, chatMapper.toChatResponse(chatEntity, loadActiveParticipants(chatEntity.getId())));
     }
 
     @Override
@@ -296,7 +296,7 @@ public class ChatServiceImpl implements ChatService {
                 .map(ChatParticipantEntity::getChatId)
                 .map(chatId -> chatRepository.findById(chatId)
                         .orElseThrow(() -> new ChatNotFoundException("Chat with ID '" + chatId + "' not found.")))
-                .map(chatEntity -> chatMapper.toChatResponse(chatEntity, loadParticipantsForResponse(chatEntity.getId())))
+                .map(chatEntity -> withDirectBlockState(currentAccountId, chatMapper.toChatResponse(chatEntity, loadParticipantsForResponse(chatEntity.getId()))))
                 .sorted((firstChat, secondChat) -> secondChat.updatedAt().compareTo(firstChat.updatedAt()))
                 .toList();
     }
@@ -307,7 +307,7 @@ public class ChatServiceImpl implements ChatService {
         validateKnownParticipant(chatId, currentAccountId);
         ChatEntity chatEntity = chatRepository.findById(chatId)
                 .orElseThrow(() -> new ChatNotFoundException("Chat with ID '" + chatId + "' not found."));
-        return chatMapper.toChatResponse(chatEntity, loadParticipantsForResponse(chatId));
+        return withDirectBlockState(currentAccountId, chatMapper.toChatResponse(chatEntity, loadParticipantsForResponse(chatId)));
     }
 
     private ChatResponseDto createDirectChat(UUID currentAccountId, UUID recipientAccountId, String directChatKey) {
@@ -325,7 +325,7 @@ public class ChatServiceImpl implements ChatService {
             log.info("Direct chat created. Chat ID: {}, first account ID: {}, second account ID: {}.", chatEntity.getId(), currentAccountId, recipientAccountId);
         }
 
-        return chatMapper.toChatResponse(chatEntity, loadActiveParticipants(chatEntity.getId()));
+        return withDirectBlockState(currentAccountId, chatMapper.toChatResponse(chatEntity, loadActiveParticipants(chatEntity.getId())));
     }
 
     private void publishInitialMemberAddedMessages(
@@ -587,6 +587,40 @@ public class ChatServiceImpl implements ChatService {
         if (!sameEnvelope) {
             throw new MessagePayloadValidationException("Existing group epoch key envelope can't be overwritten.");
         }
+    }
+
+    private ChatResponseDto withDirectBlockState(UUID currentAccountId, ChatResponseDto chatResponseDto) {
+        if (chatResponseDto.type() != ChatType.DIRECT || currentAccountId == null) {
+            return chatResponseDto;
+        }
+
+        UUID companionAccountId = chatResponseDto.participantAccountIds().stream()
+                .filter(accountId -> !accountId.equals(currentAccountId))
+                .findFirst()
+                .orElse(null);
+
+        if (companionAccountId == null) {
+            return chatResponseDto;
+        }
+
+        boolean currentAccountBlockedCompanion = accountBlockService.isBlockedBy(currentAccountId, companionAccountId);
+        boolean companionBlockedCurrentAccount = accountBlockService.isBlockedBy(companionAccountId, currentAccountId);
+
+        return new ChatResponseDto(
+                chatResponseDto.chatId(),
+                chatResponseDto.type(),
+                chatResponseDto.name(),
+                chatResponseDto.avatarDataUrl(),
+                chatResponseDto.currentKeyEpoch(),
+                chatResponseDto.participantAccountIds(),
+                chatResponseDto.participants(),
+                chatResponseDto.lastMessageId(),
+                chatResponseDto.lastMessageCreatedAt(),
+                chatResponseDto.createdAt(),
+                chatResponseDto.updatedAt(),
+                currentAccountBlockedCompanion,
+                companionBlockedCurrentAccount
+        );
     }
 
     private void publishChatUpdatedEvent(ChatResponseDto chatResponseDto, List<UUID> recipientAccountIds) {

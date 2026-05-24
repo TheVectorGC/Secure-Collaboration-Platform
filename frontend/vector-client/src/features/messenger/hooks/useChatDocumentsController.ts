@@ -394,10 +394,30 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
   }
 
   async function handleAddDocumentObservers(documentItem: DocumentResponseDto, observerAccountIds: string[]) {
+    if (!currentAccountId || !window.vectorCrypto || !hasUsableDocumentFileEncryption(documentItem) || !documentItem.fileEncryption) {
+      setErrorMessage('Ключ документа недоступен. Наблюдателей добавить нельзя.');
+      return;
+    }
+
+    const currentAccountEnvelope = documentItem.fileEncryption.keyEnvelopes.find((keyEnvelope) => keyEnvelope.targetAccountId === currentAccountId);
+
+    if (!currentAccountEnvelope) {
+      setErrorMessage('Ключ документа недоступен. Наблюдателей добавить нельзя.');
+      return;
+    }
+
     setErrorMessage(null);
 
     try {
-      const updatedDocument = await addDocumentObservers(documentItem.documentId, { observerAccountIds });
+      const decryptedEnvelope = await window.vectorCrypto.decryptAccountKeyEnvelope({
+        accountId: currentAccountId,
+        encryptedKeyBase64: currentAccountEnvelope.encryptedKeyBase64,
+      });
+      const keyEnvelopes = await buildDocumentKeyEnvelopes(decryptedEnvelope.keyBase64, observerAccountIds);
+      const updatedDocument = await addDocumentObservers(documentItem.documentId, {
+        observerAccountIds,
+        keyEnvelopes,
+      });
       setChatDocuments((previousDocuments) => upsertDocument(previousDocuments, updatedDocument));
     }
     catch (error) {

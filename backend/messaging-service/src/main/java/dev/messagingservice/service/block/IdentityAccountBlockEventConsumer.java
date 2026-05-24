@@ -17,6 +17,7 @@ import org.springframework.stereotype.Component;
 public class IdentityAccountBlockEventConsumer {
     private final ObjectMapper objectMapper;
     private final AccountBlockService accountBlockService;
+    private final AccountBlockChatUpdatePublisher accountBlockChatUpdatePublisher;
 
     @KafkaListener(topics = "${application.kafka.topics.identity-events}", groupId = "${spring.kafka.consumer.group-id}")
     public void consumeIdentityEvent(String eventJson) {
@@ -51,10 +52,12 @@ public class IdentityAccountBlockEventConsumer {
 
             if ("ACCOUNT_BLOCKED".equals(normalizedEventType)) {
                 accountBlockService.applyAccountBlocked(blockerAccountId, blockedAccountId, occurredAt);
+                accountBlockChatUpdatePublisher.publishDirectChatUpdate(blockerAccountId, blockedAccountId);
                 return;
             }
 
             accountBlockService.applyAccountUnblocked(blockerAccountId, blockedAccountId);
+            accountBlockChatUpdatePublisher.publishDirectChatUpdate(blockerAccountId, blockedAccountId);
         }
         catch (Exception exception) {
             log.warn("Identity account block event could not be processed: {}.", exception.getMessage());

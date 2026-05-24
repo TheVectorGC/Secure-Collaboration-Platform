@@ -44,7 +44,9 @@ public class ChatMapper {
                 lastMessageEntity == null ? null : lastMessageEntity.getId(),
                 lastMessageEntity == null ? null : lastMessageEntity.getCreatedAt(),
                 chatEntity.getCreatedAt(),
-                chatEntity.getUpdatedAt()
+                chatEntity.getUpdatedAt(),
+                false,
+                false
         );
     }
 

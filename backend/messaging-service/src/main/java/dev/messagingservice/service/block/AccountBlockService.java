@@ -8,6 +8,8 @@ public interface AccountBlockService {
 
     boolean isBlockedInEitherDirection(UUID firstAccountId, UUID secondAccountId);
 
+    boolean isBlockedBy(UUID blockerAccountId, UUID blockedAccountId);
+
     void applyAccountBlocked(UUID blockerAccountId, UUID blockedAccountId, OffsetDateTime occurredAt);
 
     void applyAccountUnblocked(UUID blockerAccountId, UUID blockedAccountId);

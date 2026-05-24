@@ -230,8 +230,11 @@ public class DocumentServiceImpl implements DocumentService {
             .map(accountId -> createObserverEntity(documentId, accountId, now))
             .toList();
         if (!newObserverEntities.isEmpty()) {
+            List<UUID> newObserverAccountIds = newObserverEntities.stream().map(DocumentObserverEntity::getObserverAccountId).toList();
+            List<DocumentKeyEnvelopeEntity> keyEnvelopeEntities = createKeyEnvelopeEntities(documentId, requestDto.keyEnvelopes(), newObserverAccountIds, now);
             documentObserverRepository.saveAll(newObserverEntities);
-            mediaAccessClient.grantMediaAccess(documentEntity.getMediaFileId(), newObserverEntities.stream().map(DocumentObserverEntity::getObserverAccountId).toList());
+            documentKeyEnvelopeRepository.saveAll(keyEnvelopeEntities);
+            mediaAccessClient.grantMediaAccess(documentEntity.getMediaFileId(), newObserverAccountIds);
         }
         List<DocumentObserverEntity> observerEntities = documentObserverRepository.findByDocumentId(documentId);
         DocumentResponseDto responseDto = toResponseDto(currentAccountId, documentEntity);

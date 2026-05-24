@@ -36,7 +36,8 @@ public class IdentityDeviceClientImpl implements IdentityDeviceClient {
                         throw new ExternalServiceException("Identity-service is unavailable.");
                     })
                     .body(InternalDeviceResponseDto.class);
-        } catch (RestClientException exception) {
+        }
+        catch (RestClientException exception) {
             log.warn("Failed to request device from identity-service. Device ID: {}.", deviceId, exception);
             throw new ExternalServiceException("Failed to request device from identity-service.", exception);
         }

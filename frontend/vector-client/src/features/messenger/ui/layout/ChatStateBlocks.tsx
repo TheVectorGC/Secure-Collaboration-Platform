@@ -19,9 +19,18 @@ export function EmptyChatState() {
 type ChatAlertsProps = {
   errorMessage: string | null;
   isGroupChatReadOnly: boolean;
+  directBlockNotice?: string | null;
+  canUnblockDirectChat?: boolean;
+  onUnblockDirectChat?: () => void;
 };
 
-export function ChatAlerts({ errorMessage, isGroupChatReadOnly }: ChatAlertsProps) {
+export function ChatAlerts({
+  errorMessage,
+  isGroupChatReadOnly,
+  directBlockNotice,
+  canUnblockDirectChat = false,
+  onUnblockDirectChat,
+}: ChatAlertsProps) {
   return (
     <>
       {errorMessage && (
@@ -33,6 +42,21 @@ export function ChatAlerts({ errorMessage, isGroupChatReadOnly }: ChatAlertsProp
       {isGroupChatReadOnly && (
         <div className="border-b border-amber-300/20 bg-amber-500/10 px-7 py-3 text-sm text-amber-100 shadow-lg shadow-amber-950/10">
           Вы исключены из группы. Вы можете читать доступную историю, но отправка сообщений, файлов, документов и typing отключены.
+        </div>
+      )}
+
+      {directBlockNotice && (
+        <div className="flex items-center justify-between gap-4 border-b border-amber-300/20 bg-amber-500/10 px-7 py-3 text-sm text-amber-100 shadow-lg shadow-amber-950/10">
+          <span>{directBlockNotice}</span>
+          {canUnblockDirectChat && onUnblockDirectChat && (
+            <button
+              type="button"
+              onClick={onUnblockDirectChat}
+              className="rounded-2xl border border-amber-200/20 px-3 py-1.5 text-xs font-semibold text-amber-50 transition hover:bg-amber-200/10"
+            >
+              Разблокировать
+            </button>
+          )}
         </div>
       )}
     </>

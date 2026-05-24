@@ -40,7 +40,8 @@ public class MessagingAccessClientImpl implements MessagingAccessClient {
                         throw new ExternalServiceException("Messaging-service is unavailable for document access validation.");
                     })
                     .body(InternalChatResponseDto.class);
-        } catch (RestClientException exception) {
+        }
+        catch (RestClientException exception) {
             log.warn("Failed to validate document chat access. Chat ID: {}.", chatId, exception);
             throw new ExternalServiceException("Failed to validate document chat access.", exception);
         }

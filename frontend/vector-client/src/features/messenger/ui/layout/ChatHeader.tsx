@@ -1,4 +1,4 @@
-import { Eraser, MoreVertical, Star, Trash2, Users } from 'lucide-react';
+import { Ban, Eraser, MoreVertical, ShieldCheck, Star, Trash2, Users } from 'lucide-react';
 import { getAccountAvatarUrl, type ChatPresentation, UserAvatar } from '../../lib/messengerCore';
 import type { ChatResponseDto } from '../../../../shared/types/api';
 
@@ -12,6 +12,8 @@ type ChatHeaderProps = {
   onToggleChatActionsMenu: () => void;
   onClearSelectedChatHistory: () => void;
   onOpenDeleteChatConfirm: () => void;
+  onBlockDirectCompanion: () => void;
+  onUnblockDirectCompanion: () => void;
 };
 
 export function ChatHeader({
@@ -24,6 +26,8 @@ export function ChatHeader({
   onToggleChatActionsMenu,
   onClearSelectedChatHistory,
   onOpenDeleteChatConfirm,
+  onBlockDirectCompanion,
+  onUnblockDirectCompanion,
 }: ChatHeaderProps) {
   function handleOpenChatInfo() {
     if (selectedChat.type === 'GROUP') {
@@ -92,6 +96,26 @@ export function ChatHeader({
                 <Eraser size={17} className="text-zinc-400" />
                 Очистить историю
               </button>
+              {selectedChat.type === 'DIRECT' && !selectedChat.currentAccountBlockedCompanion && (
+                <button
+                  type="button"
+                  onClick={onBlockDirectCompanion}
+                  className="flex min-h-12 w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-amber-100 transition hover:bg-amber-500/10"
+                >
+                  <Ban size={17} />
+                  Заблокировать пользователя
+                </button>
+              )}
+              {selectedChat.type === 'DIRECT' && selectedChat.currentAccountBlockedCompanion && (
+                <button
+                  type="button"
+                  onClick={onUnblockDirectCompanion}
+                  className="flex min-h-12 w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-emerald-100 transition hover:bg-emerald-500/10"
+                >
+                  <ShieldCheck size={17} />
+                  Разблокировать пользователя
+                </button>
+              )}
               {selectedChat.type !== 'SELF' && (
                 <button
                   type="button"

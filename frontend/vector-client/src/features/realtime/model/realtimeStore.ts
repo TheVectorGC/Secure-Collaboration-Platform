@@ -33,6 +33,7 @@ type RealtimeState = {
   applyPresenceSnapshot: (accounts: AccountPresencePayload[]) => void;
   sendTypingEvent: (request: SendTypingEventRequest) => void;
   setTypingSender: (sender: ((request: SendTypingEventRequest) => void) | null) => void;
+  clearSessionState: () => void;
 };
 
 const PRESENCE_STORAGE_KEY = 'vector.presenceByAccountId';
@@ -157,5 +158,15 @@ export const useRealtimeStore = create<RealtimeState>((set, get) => ({
   setTypingSender: (sender) => {
     typingSender = sender;
     get().setLastError(get().lastError);
+  },
+
+  clearSessionState: () => {
+    localStorage.removeItem(PRESENCE_STORAGE_KEY);
+    set({
+      status: 'disconnected',
+      lastError: null,
+      typingByChatId: {},
+      presenceByAccountId: {},
+    });
   },
 }));

@@ -7,6 +7,7 @@ type ComposerDockProps = {
   isSending: boolean;
   isUploadingFile: boolean;
   isWritable: boolean;
+  lockedPlaceholder?: string;
   forwardSelection: ForwardSelectionState | null;
   forwardDraftItems: ForwardedMessageSnapshot[];
   replyDraft: ReplyDraft | null;
@@ -29,6 +30,7 @@ export function ComposerDock({
   isSending,
   isUploadingFile,
   isWritable,
+  lockedPlaceholder,
   forwardSelection,
   forwardDraftItems,
   replyDraft,
@@ -77,7 +79,7 @@ export function ComposerDock({
   return (
     <ChatComposer
       messageText={messageText}
-      placeholder={isWritable ? 'Напишите сообщение…' : 'Вы исключены из группы'}
+      placeholder={isWritable ? 'Напишите сообщение…' : lockedPlaceholder ?? 'Вы исключены из группы'}
       isSending={isSending}
       isUploadingFile={isUploadingFile}
       isWritable={isWritable}

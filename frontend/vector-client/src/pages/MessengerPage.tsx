@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { logout as logoutRequest } from '../features/auth/api/authApi';
+import { blockAccount, unblockAccount } from '../features/account-blocks/api/accountBlocksApi';
 import { useAuthStore } from '../features/auth/model/authStore';
 import { useCryptoBootstrap } from '../features/crypto/useCryptoBootstrap';
 import { useCryptoStore } from '../features/crypto/model/cryptoStore';
@@ -68,6 +69,7 @@ export function MessengerPage() {
   const typingByChatId = useRealtimeStore((state) => state.typingByChatId);
   const presenceByAccountId = useRealtimeStore((state) => state.presenceByAccountId);
   const sendTypingEvent = useRealtimeStore((state) => state.sendTypingEvent);
+  const clearRealtimeSessionState = useRealtimeStore((state) => state.clearSessionState);
   const cryptoStatus = useCryptoStore((state) => state.status);
 
   const chats = useMessengerStore((state) => state.chats);
@@ -102,9 +104,20 @@ export function MessengerPage() {
   const messageElementRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const deliveredMarkersRef = useRef<Set<string>>(new Set());
   const readMarkersRef = useRef<Set<string>>(new Set());
+  const previousRealtimeAccountIdRef = useRef<string | null>(profile?.accountId ?? null);
   const { highlightedMessageId, scrollToMessage } = useMessageNavigationController(messageElementRefs);
   useRealtimeConnection();
   useCryptoBootstrap();
+
+  useEffect(() => {
+    const previousAccountId = previousRealtimeAccountIdRef.current;
+    const nextAccountId = profile?.accountId ?? null;
+
+    if (previousAccountId !== nextAccountId) {
+      clearRealtimeSessionState();
+      previousRealtimeAccountIdRef.current = nextAccountId;
+    }
+  }, [clearRealtimeSessionState, profile?.accountId]);
 
   useEffect(() => {
     if (profile) {
@@ -166,7 +179,11 @@ export function MessengerPage() {
     () => new Set(selectedChatActiveParticipantAccountIds),
     [selectedChatActiveParticipantAccountIds],
   );
-  const isSelectedChatWritable = isCurrentAccountActiveInChat(selectedChat, profile?.accountId);
+  const selectedDirectCompanionAccountId = selectedChat?.type === 'DIRECT' ? getDirectCompanionAccountId(selectedChat, profile?.accountId) : null;
+  const isSelectedDirectChatBlockedByCurrentAccount = Boolean(selectedChat?.currentAccountBlockedCompanion);
+  const isSelectedDirectChatBlockedByCompanion = Boolean(selectedChat?.companionBlockedCurrentAccount);
+  const isSelectedDirectChatBlocked = selectedChat?.type === 'DIRECT' && (isSelectedDirectChatBlockedByCurrentAccount || isSelectedDirectChatBlockedByCompanion);
+  const isSelectedChatWritable = isCurrentAccountActiveInChat(selectedChat, profile?.accountId) && !isSelectedDirectChatBlocked;
   const selectedTypingStates = selectedChatId
     ? (typingByChatId[selectedChatId] ?? []).filter((typingState) => selectedChat?.type !== 'GROUP' || selectedChatActiveParticipantAccountIdSet.has(typingState.accountId))
     : [];
@@ -319,6 +336,75 @@ export function MessengerPage() {
     setIsDeleteChatConfirmOpen,
     setIsClearHistoryConfirmOpen,
   });
+
+  async function handleDeleteSelectedChat(options?: { blockedAccountId?: string | null }) {
+    const blockedAccountId = options?.blockedAccountId ?? null;
+
+    if (blockedAccountId && selectedChat?.type === 'DIRECT') {
+      try {
+        await blockAccount({ blockedAccountId });
+        upsertChat({
+          ...selectedChat,
+          currentAccountBlockedCompanion: true,
+          companionBlockedCurrentAccount: selectedChat.companionBlockedCurrentAccount,
+        });
+      }
+      catch (error) {
+        console.error(error);
+        setErrorMessage('Не удалось заблокировать пользователя.');
+        return;
+      }
+    }
+
+    handleDeleteSelectedChatLocally(options);
+  }
+
+  async function handleBlockSelectedDirectChat() {
+    if (!selectedChat || selectedChat.type !== 'DIRECT' || !selectedDirectCompanionAccountId) {
+      return;
+    }
+
+    setErrorMessage(null);
+
+    try {
+      await blockAccount({ blockedAccountId: selectedDirectCompanionAccountId });
+      upsertChat({
+        ...selectedChat,
+        currentAccountBlockedCompanion: true,
+        companionBlockedCurrentAccount: selectedChat.companionBlockedCurrentAccount,
+      });
+      sendCurrentTypingState(false);
+    }
+    catch (error) {
+      console.error(error);
+      setErrorMessage('Не удалось заблокировать пользователя.');
+    }
+  }
+
+  async function handleUnblockSelectedDirectChat() {
+    if (!selectedChat || selectedChat.type !== 'DIRECT' || !selectedDirectCompanionAccountId) {
+      return;
+    }
+
+    setErrorMessage(null);
+
+    try {
+      await unblockAccount(selectedDirectCompanionAccountId);
+      upsertChat({
+        ...selectedChat,
+        currentAccountBlockedCompanion: false,
+        companionBlockedCurrentAccount: selectedChat.companionBlockedCurrentAccount,
+      });
+      updateLocalChatState((previousValue) => ({
+        ...previousValue,
+        blockedAccountIds: (previousValue.blockedAccountIds ?? []).filter((accountId) => accountId !== selectedDirectCompanionAccountId),
+      }));
+    }
+    catch (error) {
+      console.error(error);
+      setErrorMessage('Не удалось разблокировать пользователя.');
+    }
+  }
 
   const { refreshSelectedChat } = useChatDataController({
     selectedChatId,
@@ -557,12 +643,16 @@ export function MessengerPage() {
   }, [upsertChat]);
 
   const selectedChatPresentation = selectedChat ? getChatPresentation(selectedChat, profile, profilesById) : null;
+  const directBlockNotice = selectedChat?.type === 'DIRECT' && isSelectedDirectChatBlockedByCompanion
+    ? 'Пользователь вас заблокировал. Отправка сообщений и typing отключены.'
+    : selectedChat?.type === 'DIRECT' && isSelectedDirectChatBlockedByCurrentAccount
+      ? 'Вы заблокировали этого пользователя. Отправка сообщений и typing отключены.'
+      : null;
   const selectedTypingText = isSelectedChatWritable && selectedTypingStates.length > 0
     ? selectedTypingStates.length === 1
       ? `${selectedTypingStates[0].username || 'Пользователь'} печатает…`
       : 'Несколько пользователей печатают…'
     : null;
-  const selectedDirectCompanionAccountId = selectedChat?.type === 'DIRECT' ? getDirectCompanionAccountId(selectedChat, profile?.accountId) : null;
   const selectedDirectLastActivityAt = getLastPeerActivityAt(visibleSelectedMessages, selectedDirectCompanionAccountId);
   const selectedDirectPresence = selectedDirectCompanionAccountId ? presenceByAccountId[selectedDirectCompanionAccountId] : null;
   const selectedChatSubtitle = selectedTypingText
@@ -675,7 +765,7 @@ export function MessengerPage() {
         onCloseDeleteChatConfirm={() => setIsDeleteChatConfirmOpen(false)}
         onCloseClearHistoryConfirm={() => setIsClearHistoryConfirmOpen(false)}
         onClearSelectedChatHistory={handleClearSelectedChatHistory}
-        onDeleteSelectedChatLocally={handleDeleteSelectedChatLocally}
+        onDeleteSelectedChatLocally={(options) => void handleDeleteSelectedChat(options)}
         onSendDroppedImages={(attachmentDisplayMode) => void sendDroppedImages(attachmentDisplayMode)}
         onClearDroppedImageFiles={() => setDroppedImageFiles([])}
         onCloseDraggingFileOverlay={() => setIsDraggingFileOverChat(false)}
@@ -729,11 +819,22 @@ export function MessengerPage() {
                 setIsChatActionsMenuOpen(false);
                 setIsDeleteChatConfirmOpen(true);
               }}
+              onBlockDirectCompanion={() => {
+                setIsChatActionsMenuOpen(false);
+                void handleBlockSelectedDirectChat();
+              }}
+              onUnblockDirectCompanion={() => {
+                setIsChatActionsMenuOpen(false);
+                void handleUnblockSelectedDirectChat();
+              }}
             />
 
             <ChatAlerts
               errorMessage={errorMessage}
               isGroupChatReadOnly={selectedChat.type === 'GROUP' && !isSelectedChatWritable}
+              directBlockNotice={directBlockNotice}
+              canUnblockDirectChat={isSelectedDirectChatBlockedByCurrentAccount}
+              onUnblockDirectChat={() => void handleUnblockSelectedDirectChat()}
             />
 
             <MessageTimeline
@@ -807,6 +908,7 @@ export function MessengerPage() {
               isSending={isSending}
               isUploadingFile={isUploadingFile}
               isWritable={Boolean(selectedChat && isSelectedChatWritable)}
+              lockedPlaceholder={directBlockNotice ?? undefined}
               forwardSelection={forwardSelection}
               forwardDraftItems={forwardDraftItems}
               replyDraft={replyDraft}

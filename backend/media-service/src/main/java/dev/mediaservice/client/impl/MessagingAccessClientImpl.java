@@ -41,7 +41,8 @@ public class MessagingAccessClientImpl implements MessagingAccessClient {
                 throw new MediaDependencyUnavailableException("Messaging-service returned empty chat access response.");
             }
             return chatResponseDto;
-        } catch (RestClientException exception) {
+        }
+        catch (RestClientException exception) {
             log.warn("Failed to validate media chat access. chatId={}", chatId, exception);
             throw new MediaDependencyUnavailableException("Failed to validate media chat access.", exception);
         }

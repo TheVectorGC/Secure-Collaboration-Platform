@@ -30,7 +30,7 @@ export function useChatTypingComposer({
       return;
     }
 
-    if (!isChatWritable) {
+    if (!isChatWritable && isTyping) {
       return;
     }
 

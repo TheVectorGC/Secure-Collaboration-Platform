@@ -86,6 +86,18 @@ export type ProfileResponseDto = {
   avatarDataUrl?: string | null;
 };
 
+
+export type BlockAccountRequestDto = {
+  blockedAccountId: string;
+};
+
+export type AccountBlockResponseDto = {
+  blockId: string;
+  blockerAccountId: string;
+  blockedAccountId: string;
+  createdAt: string;
+};
+
 export type UpdateProfileAvatarRequestDto = {
   avatarDataUrl: string | null;
 };
@@ -175,6 +187,8 @@ export type ChatResponseDto = {
   lastMessageCreatedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  currentAccountBlockedCompanion: boolean;
+  companionBlockedCurrentAccount: boolean;
 };
 
 export type MessageCiphertextType = 'PRE_KEY' | 'SIGNAL' | 'LOCAL';
@@ -410,6 +424,7 @@ export type RejectDocumentRequestDto = {
 
 export type AddDocumentObserversRequestDto = {
   observerAccountIds: string[];
+  keyEnvelopes: DocumentKeyEnvelopeRequestDto[];
 };
 
 export type RegisterDocumentSigningKeyRequestDto = {

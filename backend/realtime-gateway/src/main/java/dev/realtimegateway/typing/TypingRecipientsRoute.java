@@ -6,5 +6,5 @@ import java.util.UUID;
 public record TypingRecipientsRoute(
         UUID chatId,
         String chatType,
-        List<UUID> recipientAccountIds
+        List<UUID> participantAccountIds
 ) {}

@@ -40,12 +40,12 @@ public class RedisTypingRecipientsResolver implements TypingRecipientsResolver {
         TypingRecipientsRoute cachedRoute = findCachedRoute(chatId);
 
         if (cachedRoute != null) {
-            return cachedRoute.recipientAccountIds();
+            return recipientAccountIdsFor(cachedRoute, accountPrincipal.accountId());
         }
 
         TypingRecipientsRoute route = loadRoute(chatId, accountPrincipal);
         cacheRoute(route);
-        return route.recipientAccountIds();
+        return recipientAccountIdsFor(route, accountPrincipal.accountId());
     }
 
     @Override
@@ -89,18 +89,25 @@ public class RedisTypingRecipientsResolver implements TypingRecipientsResolver {
                 return new TypingRecipientsRoute(chatId, "UNKNOWN", List.of());
             }
 
-            List<UUID> recipientAccountIds = chatResponseDto.participantAccountIds().stream()
+            List<UUID> participantAccountIds = chatResponseDto.participantAccountIds().stream()
                     .filter(Objects::nonNull)
-                    .filter(accountId -> !accountId.equals(accountPrincipal.accountId()))
                     .distinct()
                     .toList();
 
-            return new TypingRecipientsRoute(chatId, chatResponseDto.type(), recipientAccountIds);
+            return new TypingRecipientsRoute(chatId, chatResponseDto.type(), participantAccountIds);
         }
         catch (RestClientException | IllegalStateException exception) {
             log.debug("Failed to resolve typing recipients. chatId={}, accountId={}", chatId, accountPrincipal.accountId(), exception);
             return new TypingRecipientsRoute(chatId, "UNKNOWN", List.of());
         }
+    }
+
+    private List<UUID> recipientAccountIdsFor(TypingRecipientsRoute route, UUID senderAccountId) {
+        return route.participantAccountIds().stream()
+                .filter(Objects::nonNull)
+                .filter(accountId -> !accountId.equals(senderAccountId))
+                .distinct()
+                .toList();
     }
 
     private void cacheRoute(TypingRecipientsRoute route) {

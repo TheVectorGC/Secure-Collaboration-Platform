@@ -18,7 +18,7 @@ type MessengerOverlaysProps = {
   onCloseDeleteChatConfirm: () => void;
   onCloseClearHistoryConfirm: () => void;
   onClearSelectedChatHistory: () => void;
-  onDeleteSelectedChatLocally: (options?: { blockedAccountId?: string | null }) => void;
+  onDeleteSelectedChatLocally: (options?: { blockedAccountId?: string | null }) => void | Promise<void>;
   onSendDroppedImages: (attachmentDisplayMode: ChatAttachmentDisplayMode) => void;
   onClearDroppedImageFiles: () => void;
   onCloseDraggingFileOverlay: () => void;
@@ -53,7 +53,7 @@ export function MessengerOverlays({
   }
 
   function confirmDeleteChat() {
-    onDeleteSelectedChatLocally({
+    void onDeleteSelectedChatLocally({
       blockedAccountId: shouldBlockUser ? directCompanionAccountId : null,
     });
     setShouldBlockUser(false);
