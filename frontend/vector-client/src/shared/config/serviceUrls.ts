@@ -3,6 +3,6 @@ export const serviceUrls = {
   messagingBaseUrl: import.meta.env.VITE_MESSAGING_BASE_URL ?? 'http://localhost:8087',
   cryptoBaseUrl: import.meta.env.VITE_CRYPTO_BASE_URL ?? 'http://localhost:8086',
   mediaBaseUrl: import.meta.env.VITE_MEDIA_BASE_URL ?? 'http://localhost:8089',
-  documentBaseUrl: import.meta.env.VITE_DOCUMENT_BASE_URL ?? 'http://localhost:8091',
+  documentBaseUrl: import.meta.env.VITE_DOCUMENT_BASE_URL ?? 'http://localhost:8090',
   realtimeWebSocketUrl: import.meta.env.VITE_REALTIME_WS_URL ?? 'ws://localhost:8088/ws',
 } as const;

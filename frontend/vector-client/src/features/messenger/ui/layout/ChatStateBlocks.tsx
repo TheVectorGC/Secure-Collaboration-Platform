@@ -1,4 +1,4 @@
-import { MessageCircle } from 'lucide-react';
+import { MessageCircle, X } from 'lucide-react';
 
 export function EmptyChatState() {
   return (
@@ -22,6 +22,7 @@ type ChatAlertsProps = {
   directBlockNotice?: string | null;
   canUnblockDirectChat?: boolean;
   onUnblockDirectChat?: () => void;
+  onDismissError?: () => void;
 };
 
 export function ChatAlerts({
@@ -30,12 +31,23 @@ export function ChatAlerts({
   directBlockNotice,
   canUnblockDirectChat = false,
   onUnblockDirectChat,
+  onDismissError,
 }: ChatAlertsProps) {
   return (
     <>
       {errorMessage && (
-        <div className="border-b border-red-400/20 bg-red-500/10 px-7 py-3 text-sm text-red-100 shadow-lg shadow-red-950/10">
-          {errorMessage}
+        <div className="flex items-center justify-between gap-4 border-b border-red-400/20 bg-red-500/10 px-7 py-3 text-sm text-red-100 shadow-lg shadow-red-950/10">
+          <span>{errorMessage}</span>
+          {onDismissError && (
+            <button
+              type="button"
+              onClick={onDismissError}
+              className="rounded-full p-1 text-red-100/70 transition hover:bg-red-100/10 hover:text-red-50"
+              title="Скрыть уведомление"
+            >
+              <X size={15} />
+            </button>
+          )}
         </div>
       )}
 

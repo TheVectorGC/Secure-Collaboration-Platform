@@ -51,6 +51,8 @@ export function useMessengerDirectoryController(params: UseMessengerDirectoryCon
         accountIds.add(documentItem.rejectedByAccountId);
       }
 
+      documentItem.signers?.forEach((signer) => accountIds.add(signer.signerAccountId));
+      documentItem.observers?.forEach((observer) => accountIds.add(observer.observerAccountId));
       documentItem.signatures?.forEach((signature) => accountIds.add(signature.signerAccountId));
     });
 

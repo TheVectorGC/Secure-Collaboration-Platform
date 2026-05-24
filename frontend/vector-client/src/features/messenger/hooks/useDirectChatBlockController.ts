@@ -1,6 +1,28 @@
+import axios from 'axios';
 import { blockAccount, unblockAccount } from '../../account-blocks/api/accountBlocksApi';
 import type { ChatResponseDto } from '../../../shared/types/api';
 import type { LocalChatState } from '../lib/messengerCore';
+
+
+function getBlockErrorMessage(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    const status = error.response?.status;
+
+    if (status === 400) {
+      return 'Не удалось заблокировать пользователя. Проверьте, что выбран не ваш собственный чат.';
+    }
+
+    if (status === 404) {
+      return 'Не удалось заблокировать пользователя: профиль не найден.';
+    }
+
+    if (status === 429) {
+      return 'Слишком много действий подряд. Подождите немного и повторите попытку.';
+    }
+  }
+
+  return 'Не удалось заблокировать пользователя.';
+}
 
 type DeleteSelectedChatOptions = {
   blockedAccountId?: string | null;
@@ -8,6 +30,7 @@ type DeleteSelectedChatOptions = {
 
 type UseDirectChatBlockControllerParams = {
   selectedChat: ChatResponseDto | null;
+  currentAccountId: string | undefined;
   selectedDirectCompanionAccountId: string | null;
   upsertChat: (chat: ChatResponseDto) => void;
   updateLocalChatState: (updater: (previousValue: LocalChatState) => LocalChatState) => void;
@@ -19,6 +42,7 @@ type UseDirectChatBlockControllerParams = {
 export function useDirectChatBlockController(params: UseDirectChatBlockControllerParams) {
   const {
     selectedChat,
+    currentAccountId,
     selectedDirectCompanionAccountId,
     upsertChat,
     updateLocalChatState,
@@ -31,6 +55,11 @@ export function useDirectChatBlockController(params: UseDirectChatBlockControlle
     const blockedAccountId = options?.blockedAccountId ?? null;
 
     if (blockedAccountId && selectedChat?.type === 'DIRECT') {
+      if (currentAccountId && blockedAccountId === currentAccountId) {
+        setErrorMessage('Нельзя заблокировать собственный профиль.');
+        return;
+      }
+
       try {
         await blockAccount({ blockedAccountId });
         upsertChat({
@@ -41,7 +70,7 @@ export function useDirectChatBlockController(params: UseDirectChatBlockControlle
       }
       catch (error) {
         console.error(error);
-        setErrorMessage('Не удалось заблокировать пользователя.');
+        setErrorMessage(getBlockErrorMessage(error));
         return;
       }
     }
@@ -51,6 +80,11 @@ export function useDirectChatBlockController(params: UseDirectChatBlockControlle
 
   async function handleBlockSelectedDirectChat() {
     if (!selectedChat || selectedChat.type !== 'DIRECT' || !selectedDirectCompanionAccountId) {
+      return;
+    }
+
+    if (currentAccountId && selectedDirectCompanionAccountId === currentAccountId) {
+      setErrorMessage('Нельзя заблокировать собственный профиль.');
       return;
     }
 
@@ -67,7 +101,7 @@ export function useDirectChatBlockController(params: UseDirectChatBlockControlle
     }
     catch (error) {
       console.error(error);
-      setErrorMessage('Не удалось заблокировать пользователя.');
+      setErrorMessage(getBlockErrorMessage(error));
     }
   }
 

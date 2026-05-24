@@ -154,7 +154,7 @@ export function LoginPage() {
 
         <div className="flex max-w-xl items-center gap-3 rounded-[1.5rem] border border-white/10 bg-black/15 px-4 py-3 text-sm text-zinc-500">
           <ShieldCheck size={17} className="shrink-0 text-violet-200" />
-          <span>Вход выполняется на этом устройстве. Ключи сообщений открываются локально.</span>
+          <span>Вход выполняется на этом устройстве. Доступ защищён вашей учётной записью.</span>
         </div>
       </section>
 

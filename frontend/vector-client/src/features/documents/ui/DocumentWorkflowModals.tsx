@@ -67,6 +67,7 @@ type AccountPickerProps = {
   contactAccountIds: string[];
   profilesById: Record<string, ProfileResponseDto>;
   onToggle: (accountId: string) => void;
+  onProfilesFound?: (profiles: ProfileResponseDto[]) => void;
 };
 
 function AccountPicker({
@@ -77,6 +78,7 @@ function AccountPicker({
   contactAccountIds,
   profilesById,
   onToggle,
+  onProfilesFound,
 }: AccountPickerProps) {
   const [query, setQuery] = useState('');
   const [searchedProfiles, setSearchedProfiles] = useState<ProfileResponseDto[]>([]);
@@ -97,10 +99,23 @@ function AccountPicker({
       setIsSearching(true);
 
       try {
-        const profiles = await searchProfiles(trimmedQuery);
+        const queryVariants = Array.from(new Set([
+          trimmedQuery,
+          trimmedQuery.replaceAll('ё', 'е').replaceAll('Ё', 'Е'),
+          trimmedQuery.replaceAll('е', 'ё').replaceAll('Е', 'Ё'),
+        ]));
+        const profileGroups = await Promise.all(queryVariants.map((queryVariant) => searchProfiles(queryVariant)));
+        const profilesByAccountId = new Map<string, ProfileResponseDto>();
+
+        profileGroups.flat().forEach((profile) => {
+          profilesByAccountId.set(profile.accountId, profile);
+        });
+
+        const profiles = Array.from(profilesByAccountId.values());
 
         if (!isCancelled) {
           setSearchedProfiles(profiles);
+          onProfilesFound?.(profiles);
         }
       }
       catch (error) {
@@ -123,7 +138,7 @@ function AccountPicker({
       isCancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [query]);
+  }, [onProfilesFound, query]);
 
   const mergedProfilesById = useMemo(() => {
     const nextProfilesById = { ...profilesById };
@@ -201,6 +216,7 @@ export function DocumentCreationModal({
   contactAccountIds,
   onClose,
   onConfirm,
+  onProfilesFound,
 }: {
   file: File | null;
   currentAccountId: string | undefined;
@@ -208,6 +224,7 @@ export function DocumentCreationModal({
   contactAccountIds: string[];
   onClose: () => void;
   onConfirm: (draft: DocumentCreationDraft) => Promise<void>;
+  onProfilesFound?: (profiles: ProfileResponseDto[]) => void;
 }) {
   const [title, setTitle] = useState(file?.name ?? '');
   const [description, setDescription] = useState('');
@@ -245,7 +262,7 @@ export function DocumentCreationModal({
           <div className="flex items-start justify-between gap-4">
             <div>
               <div className="text-xl font-semibold text-zinc-50">Создание документа</div>
-              <div className="mt-1 text-sm text-zinc-500">Документ создаётся в общем workspace и доступен автору, подписантам и наблюдателям.</div>
+              <div className="mt-1 text-sm text-zinc-500">Документ создаётся в общем разделе документов и доступен автору, подписантам и наблюдателям.</div>
             </div>
             <button onClick={onClose} className="rounded-2xl border border-white/10 bg-white/[0.04] p-2 text-zinc-400 transition hover:text-zinc-100">
               <X size={18} />
@@ -291,11 +308,12 @@ export function DocumentCreationModal({
           <div className="mt-5 grid gap-4 xl:grid-cols-2">
             <AccountPicker
               title="Подписанты"
-              hint="Сначала показаны ваши direct-контакты, поиск нужен для сотрудников вне чатов."
+              hint="Сначала показаны сотрудники из ваших личных чатов. Через поиск можно найти остальных пользователей."
               selectedAccountIds={selectedSignerAccountIds}
               contactAccountIds={contactAccountIds}
               profilesById={profilesById}
               onToggle={toggleSigner}
+              onProfilesFound={onProfilesFound}
             />
             <AccountPicker
               title="Наблюдатели"
@@ -305,6 +323,7 @@ export function DocumentCreationModal({
               contactAccountIds={contactAccountIds}
               profilesById={profilesById}
               onToggle={toggleObserver}
+              onProfilesFound={onProfilesFound}
             />
           </div>
         </div>
@@ -377,6 +396,22 @@ export function DocumentsPanel({
   const [verificationMessage, setVerificationMessage] = useState<string | null>(null);
   const [verificationDocumentId, setVerificationDocumentId] = useState<string | null>(null);
 
+  function clearVerificationResult() {
+    setVerificationMessage(null);
+    setVerificationDocumentId(null);
+  }
+
+  useEffect(() => {
+    if (!isOpen) {
+      setRejectingDocument(null);
+      setCancellingDocument(null);
+      setObserverTargetDocument(null);
+      setSelectedObserverAccountIds([]);
+      setWorkflowReason('');
+      clearVerificationResult();
+    }
+  }, [isOpen]);
+
   if (!isOpen) {
     return null;
   }
@@ -422,24 +457,24 @@ export function DocumentsPanel({
           <div className="flex flex-wrap items-center justify-end gap-2">
             <label className="inline-flex h-10 min-w-36 cursor-pointer items-center justify-center rounded-2xl bg-violet-500 px-5 text-sm font-semibold text-white transition hover:bg-violet-400">
               Создать
-              <input type="file" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) { onCreateDocument(file); } }} />
+              <input type="file" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) { clearVerificationResult(); onCreateDocument(file); } }} />
             </label>
             {onVerifyFile && (
               <label className="inline-flex h-10 min-w-36 cursor-pointer items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] px-5 text-sm font-semibold text-zinc-300 transition hover:border-violet-300/30 hover:text-zinc-100">
                 Проверить
-                <input type="file" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file && onVerifyFile) { void onVerifyFile(file).then((documentItem) => { if (documentItem) { setVerificationDocumentId(documentItem.documentId); setVerificationMessage(`Файл совпадает с документом: ${documentItem.title || documentItem.fileName}. Статус: ${getDocumentStatusLabel(documentItem.status)}.`); } else { setVerificationDocumentId(null); setVerificationMessage('Совпадений среди доступных документов не найдено.'); } }); } }} />
+                <input type="file" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file && onVerifyFile) { clearVerificationResult(); void onVerifyFile(file).then((documentItem) => { if (documentItem) { setVerificationDocumentId(documentItem.documentId); setVerificationMessage(`Файл совпадает с документом: ${documentItem.title || documentItem.fileName}. Статус: ${getDocumentStatusLabel(documentItem.status)}.`); } else { setVerificationDocumentId(null); setVerificationMessage('Совпадений среди доступных документов не найдено.'); } }); } }} />
               </label>
             )}
             <button
-              onClick={() => onShowHiddenDocumentsChange(!showHiddenDocuments)}
+              onClick={() => { clearVerificationResult(); onShowHiddenDocumentsChange(!showHiddenDocuments); }}
               className={`inline-flex h-10 min-w-36 items-center justify-center rounded-2xl border px-5 text-sm font-semibold transition ${showHiddenDocuments ? 'border-amber-300/25 bg-amber-500/10 text-amber-100' : 'border-white/10 bg-white/[0.04] text-zinc-300 hover:border-white/20 hover:text-zinc-100'}`}
             >
               {showHiddenDocuments ? 'Видно скрытые' : 'Скрытые'}
             </button>
-            <button onClick={() => void onRefresh()} className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-zinc-400 transition hover:text-zinc-100" title="Обновить">
+            <button onClick={() => { clearVerificationResult(); void onRefresh(); }} className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-zinc-400 transition hover:text-zinc-100" title="Обновить">
               <RefreshCw size={18} />
             </button>
-            <button onClick={onClose} className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-zinc-400 transition hover:text-zinc-100" title="Закрыть">
+            <button onClick={() => { clearVerificationResult(); onClose(); }} className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-zinc-400 transition hover:text-zinc-100" title="Закрыть">
               <X size={18} />
             </button>
           </div>

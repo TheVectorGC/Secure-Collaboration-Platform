@@ -62,7 +62,7 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
 
   const visibleChatDocuments = useMemo(() => chatDocuments, [chatDocuments]);
 
-  const loadWorkspaceDocuments = useCallback(async () => {
+  const loadWorkspaceDocuments = useCallback(async (showErrorMessage = false) => {
     if (!currentAccountId) {
       setChatDocuments([]);
       setDocumentNotificationCount(0);
@@ -70,7 +70,9 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
     }
 
     setIsLoadingDocuments(true);
-    setErrorMessage(null);
+    if (showErrorMessage) {
+      setErrorMessage(null);
+    }
 
     try {
       const loadedDocuments = await getDocuments(includeHiddenDocuments);
@@ -79,7 +81,9 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
     }
     catch (error) {
       console.error(error);
-      setErrorMessage('Не удалось загрузить документы.');
+      if (showErrorMessage) {
+        setErrorMessage('Не удалось загрузить документы.');
+      }
     }
     finally {
       setIsLoadingDocuments(false);
@@ -134,7 +138,7 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
 
   async function openDocumentsWorkspace() {
     setIsDocumentsPanelOpen(true);
-    await loadWorkspaceDocuments();
+    await loadWorkspaceDocuments(true);
   }
 
   function handleStartDocumentCreation(file: File | null | undefined) {
@@ -478,10 +482,7 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
       const loadedDocuments = await getDocuments(true);
       const matchingDocument = loadedDocuments.find((documentItem) => documentItem.plaintextSha256Base64 === plaintextSha256Base64) ?? null;
 
-      if (!matchingDocument) {
-        setErrorMessage('Документ с таким содержимым не найден среди доступных вам документов.');
-      }
-      else {
+      if (matchingDocument) {
         setChatDocuments(loadedDocuments);
         setDocumentNotificationCount(calculatePendingDocumentCount(loadedDocuments, currentAccountId));
       }

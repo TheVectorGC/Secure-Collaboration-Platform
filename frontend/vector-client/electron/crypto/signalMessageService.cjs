@@ -200,11 +200,12 @@ function buildPreKeyBundle(SignalClient, preKeyBundle) {
   );
 }
 
-async function ensureSessionForTargetDevice(database, stores, targetDeviceId, preKeyBundle) {
+async function ensureSessionForTargetDevice(stores, localDeviceId, targetDeviceId, preKeyBundle) {
+  const localAddress = toAddress(stores.SignalClient, localDeviceId);
   const protocolAddress = toAddress(stores.SignalClient, targetDeviceId);
   const existingSession = await stores.sessionStore.getSession(protocolAddress);
 
-  if (existingSession && existingSession.hasCurrentState(new Date())) {
+  if (existingSession && existingSession.hasCurrentState(0, new Date())) {
     return protocolAddress;
   }
 
@@ -213,9 +214,9 @@ async function ensureSessionForTargetDevice(database, stores, targetDeviceId, pr
   await stores.SignalClient.processPreKeyBundle(
     signalPreKeyBundle,
     protocolAddress,
+    localAddress,
     stores.sessionStore,
     stores.identityStore,
-    stores.SignalClient.UsePQRatchet.No,
     new Date()
   );
 
@@ -230,15 +231,17 @@ async function encryptMessage(request) {
   try {
     const stores = await createSignalStores(database, request.accountId, request.deviceId);
     const protocolAddress = await ensureSessionForTargetDevice(
-      database,
       stores,
+      request.deviceId,
       request.targetDeviceId,
       request.preKeyBundle
     );
 
+    const localAddress = toAddress(stores.SignalClient, request.deviceId);
     const ciphertextMessage = await stores.SignalClient.signalEncrypt(
       Buffer.from(request.plainText, 'utf8'),
       protocolAddress,
+      localAddress,
       stores.sessionStore,
       stores.identityStore,
       new Date()
@@ -262,6 +265,7 @@ async function decryptMessage(request) {
   try {
     const stores = await createSignalStores(database, request.accountId, request.deviceId);
     const protocolAddress = toAddress(stores.SignalClient, request.remoteDeviceId);
+    const localAddress = toAddress(stores.SignalClient, request.deviceId);
     const serializedCiphertext = fromBase64(request.encryptedPayload);
     let plainTextBuffer;
 
@@ -276,12 +280,12 @@ async function decryptMessage(request) {
       plainTextBuffer = await stores.SignalClient.signalDecryptPreKey(
         preKeySignalMessage,
         protocolAddress,
+        localAddress,
         stores.sessionStore,
         stores.identityStore,
         stores.preKeyStore,
         stores.signedPreKeyStore,
-        stores.kyberPreKeyStore,
-        stores.SignalClient.UsePQRatchet.No
+        stores.kyberPreKeyStore
       );
     }
     else if (request.ciphertextType === 'SIGNAL') {
@@ -289,6 +293,7 @@ async function decryptMessage(request) {
       plainTextBuffer = await stores.SignalClient.signalDecrypt(
         signalMessage,
         protocolAddress,
+        localAddress,
         stores.sessionStore,
         stores.identityStore
       );

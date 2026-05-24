@@ -259,6 +259,22 @@ export function MessengerPage() {
     closeMessageContextMenu();
   }, [profile?.accountId]);
 
+  useEffect(() => {
+    setErrorMessage(null);
+    setReadDetailsMessageId(null);
+    closeMessageContextMenu();
+    setIsChatActionsMenuOpen(false);
+  }, [selectedChatId]);
+
+  useEffect(() => {
+    if (!errorMessage) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => setErrorMessage(null), 7000);
+    return () => window.clearTimeout(timeoutId);
+  }, [errorMessage]);
+
   function setLocalMessageReaction(messageId: string, emoji: string) {
     updateLocalMessageReaction(messageId, emoji);
     closeMessageContextMenu();
@@ -296,6 +312,7 @@ export function MessengerPage() {
     handleUnblockSelectedDirectChat,
   } = useDirectChatBlockController({
     selectedChat,
+    currentAccountId: profile?.accountId,
     selectedDirectCompanionAccountId,
     upsertChat,
     updateLocalChatState,
@@ -559,6 +576,7 @@ export function MessengerPage() {
         currentAccountId={profile?.accountId}
         onClose={cancelPendingDocumentCreation}
         onConfirm={confirmDocumentCreation}
+        onProfilesFound={upsertProfiles}
       />
 
       <MessengerOverlays
@@ -644,6 +662,7 @@ export function MessengerPage() {
               directBlockNotice={directBlockNotice}
               canUnblockDirectChat={isSelectedDirectChatBlockedByCurrentAccount}
               onUnblockDirectChat={() => void handleUnblockSelectedDirectChat()}
+              onDismissError={() => setErrorMessage(null)}
             />
 
             <MessageTimeline
