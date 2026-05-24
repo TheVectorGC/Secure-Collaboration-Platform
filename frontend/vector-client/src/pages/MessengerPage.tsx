@@ -91,7 +91,7 @@ export function MessengerPage() {
   const { localChatState, updateLocalChatState } = usePersistentLocalChatState(profile?.accountId);
   const { localReactionsByMessageId, setLocalMessageReaction: updateLocalMessageReaction } = useLocalMessageReactions(profile?.accountId);
 
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageElementRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const deliveredMarkersRef = useRef<Set<string>>(new Set());
   const readMarkersRef = useRef<Set<string>>(new Set());

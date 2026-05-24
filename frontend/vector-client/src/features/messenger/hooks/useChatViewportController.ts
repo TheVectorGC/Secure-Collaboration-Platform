@@ -13,7 +13,7 @@ type UseChatViewportControllerParams = {
   localChatState: LocalChatState;
   isSelectedChatWritable: boolean;
   updateLocalChatState: UpdateLocalChatState;
-  messagesEndRef: RefObject<HTMLDivElement | null>;
+  messagesEndRef: RefObject<HTMLDivElement>;
   messageElementRefs: MutableRefObject<Record<string, HTMLDivElement | null>>;
   readMarkersRef: MutableRefObject<Set<string>>;
 };
@@ -42,7 +42,7 @@ export function useChatViewportController(params: UseChatViewportControllerParam
     readMarkersRef,
   } = params;
 
-  const timelineScrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const timelineScrollContainerRef = useRef<HTMLDivElement>(null);
   const visibleIncomingMessageIdsRef = useRef<Set<string>>(new Set());
   const previousChatIdRef = useRef<string | null>(null);
   const previousLastMessageIdRef = useRef<string | null>(null);

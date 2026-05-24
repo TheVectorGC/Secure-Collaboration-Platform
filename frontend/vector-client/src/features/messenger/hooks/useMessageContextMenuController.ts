@@ -59,7 +59,7 @@ export function useMessageContextMenuController({
   onContextMenuOpen,
 }: UseMessageContextMenuControllerParams) {
   const [messageContextMenu, setMessageContextMenu] = useState<MessageContextMenuState | null>(null);
-  const messageContextMenuRef = useRef<HTMLDivElement | null>(null);
+  const messageContextMenuRef = useRef<HTMLDivElement>(null);
 
   const closeMessageContextMenu = useCallback(() => {
     setMessageContextMenu(null);

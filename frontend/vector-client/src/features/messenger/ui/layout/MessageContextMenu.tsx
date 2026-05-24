@@ -6,7 +6,7 @@ import { QUICK_REACTION_ITEMS, type MessageContextMenuState } from '../../lib/me
 
 type MessageContextMenuProps = {
   contextMenu: MessageContextMenuState | null;
-  contextMenuRef: RefObject<HTMLDivElement | null>;
+  contextMenuRef: RefObject<HTMLDivElement>;
   contextMessage: MessageResponseDto | null;
   currentReaction: string | null;
   downloadableAttachment: FileAttachmentMessageContent | DocumentAttachmentMessageContent | null;

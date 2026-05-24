@@ -1,26 +1,23 @@
 {
   "name": "vector-client",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.8.81",
   "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "electron": "wait-on http://localhost:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
+    "electron": "wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
     "dev:electron": "concurrently \"npm run dev\" \"npm run electron\"",
     "build": "tsc -b && vite build",
-    "lint": "eslint .",
-    "preview": "vite preview",
     "rebuild:electron": "electron-rebuild -f -w better-sqlite3-multiple-ciphers -w @signalapp/libsignal-client",
-    "electron:admin": "wait-on http://localhost:5173 && cross-env VECTOR_PROFILE=admin-device VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
-    "electron:ivan": "wait-on http://localhost:5173 && cross-env VECTOR_PROFILE=ivan-device VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
-    "electron:petr": "wait-on http://localhost:5173 && cross-env VECTOR_PROFILE=petr-device VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
-    "electron:prod": "npm run build && cross-env NODE_ENV=production electron ."
+    "package:win": "npm run build && npm run rebuild:electron && powershell -ExecutionPolicy Bypass -File scripts/package-windows.ps1",
+    "installer:win": "npm run package:win && powershell -ExecutionPolicy Bypass -File scripts/build-inno-installer.ps1",
+    "installer:clean": "node -e \"const fs=require('fs'); for (const dir of ['dist','release','out']) fs.rmSync(dir,{recursive:true,force:true});\""
   },
   "dependencies": {
-    "@signalapp/libsignal-client": "^0.94.0",
+    "@signalapp/libsignal-client": "^0.94.1",
     "axios": "^1.16.1",
-    "better-sqlite3-multiple-ciphers": "^12.9.0",
+    "better-sqlite3-multiple-ciphers": "^12.10.0",
     "clsx": "^2.1.1",
     "date-fns": "^4.3.0",
     "lucide-react": "^1.16.0",
@@ -38,10 +35,12 @@
     "@vitejs/plugin-react": "^6.0.2",
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
-    "electron": "^42.2.0",
+    "electron": "41.7.0",
     "tailwindcss": "^4.3.0",
     "typescript": "~5.9.3",
     "vite": "^8.0.14",
     "wait-on": "^9.0.10"
-  }
+  },
+  "description": "Защищённый корпоративный desktop-мессенджер",
+  "author": "Vector"
 }

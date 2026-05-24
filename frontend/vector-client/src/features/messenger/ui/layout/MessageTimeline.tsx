@@ -32,8 +32,8 @@ type MessageTimelineProps = {
   forwardSelectionSelectedMessageIds: string[] | null;
   selectedTypingText: string | null;
   messageElementRefs: MutableRefObject<Record<string, HTMLDivElement | null>>;
-  messagesEndRef: RefObject<HTMLDivElement | null>;
-  timelineScrollContainerRef: RefObject<HTMLDivElement | null>;
+  messagesEndRef: RefObject<HTMLDivElement>;
+  timelineScrollContainerRef: RefObject<HTMLDivElement>;
   unreadIncomingCount: number;
   isJumpToBottomVisible: boolean;
   onToggleForwardSelectedMessage: (message: MessageResponseDto) => void;

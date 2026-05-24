@@ -11,8 +11,19 @@ node_modules
 dist
 dist-ssr
 release
+out
 *.local
 *.zip
+
+# Build artifacts
+*.exe
+*.msi
+*.blockmap
+*.dmg
+*.AppImage
+builder-debug.yml
+builder-debug.yaml
+builder-effective-config.yaml
 
 # Editor directories and files
 .vscode/*
@@ -24,3 +35,5 @@ release
 *.njsproj
 *.sln
 *.sw?
+installer-output
+*.iss.bak
