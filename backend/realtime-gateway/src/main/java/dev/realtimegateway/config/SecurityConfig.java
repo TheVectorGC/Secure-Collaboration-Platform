@@ -16,7 +16,7 @@ public class SecurityConfig {
     private final WebSocketProperties webSocketProperties;
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) {
         String webSocketEndpoint = webSocketProperties.endpoint();
         String webSocketEndpointPattern = webSocketEndpoint.endsWith("/")
                 ? webSocketEndpoint + "**"

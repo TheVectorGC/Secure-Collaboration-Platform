@@ -6,7 +6,7 @@ import { useCryptoBootstrap } from '../features/crypto/useCryptoBootstrap';
 import { useCryptoStore } from '../features/crypto/model/cryptoStore';
 import { BackupUnlockModal } from '../features/crypto/ui/BackupUnlockModal';
 import { useDirectoryStore } from '../features/directory/model/directoryStore';
-import { updateGroupChatAvatar } from '../features/chats/api/chatsApi';
+import { updateGroupChatAvatar } from '../features/chats/api/groupChatsApi';
 import { useMessengerStore } from '../features/messenger/model/messengerStore';
 import { useRealtimeConnection } from '../features/realtime/useRealtimeConnection';
 import { useRealtimeStore } from '../features/realtime/model/realtimeStore';

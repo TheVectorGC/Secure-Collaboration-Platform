@@ -49,7 +49,7 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(
         HttpSecurity httpSecurity,
         ObjectProvider<RateLimitingFilter> rateLimitingFilterProvider
-    ) throws Exception {
+    ) {
         String[] publicPaths = securityProperties.publicPaths().toArray(String[]::new);
 
         httpSecurity
