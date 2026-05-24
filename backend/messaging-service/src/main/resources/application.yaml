@@ -5,7 +5,7 @@ spring:
   application:
     name: messaging-service
   profiles:
-    active: ${SPRING_PROFILES_ACTIVE:local}
+    active: ${SPRING_PROFILES_ACTIVE:dev}
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -14,7 +14,6 @@ spring:
       timeout: ${REDIS_TIMEOUT:2s}
     repositories:
       enabled: false
-
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5435/messaging_db}
     username: ${DB_USERNAME:postgres}
@@ -46,6 +45,9 @@ application:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
   security:
+    public-paths:
+      - /actuator/health
+      - /actuator/info
     jwt:
       issuer: ${JWT_ISSUER:identity-service}
       key-name: ${JWT_KEY_NAME:identity-service-jwt-ed25519}
@@ -56,38 +58,38 @@ application:
   outbox:
     enabled: ${OUTBOX_ENABLED:true}
     batch-size: ${OUTBOX_BATCH_SIZE:100}
-    dispatch-interval-ms: ${OUTBOX_DISPATCH_INTERVAL_MS:1000}
-    retry-delay-seconds: ${OUTBOX_RETRY_DELAY_SECONDS:10}
+    dispatch-interval: ${OUTBOX_DISPATCH_INTERVAL:PT1S}
+    retry-delay: ${OUTBOX_RETRY_DELAY:PT10S}
     max-attempts: ${OUTBOX_MAX_ATTEMPTS:20}
-
   rate-limit:
-    enabled: ${RATE_LIMIT_ENABLED:false}
+    enabled: ${RATE_LIMIT_ENABLED:true}
     redis-key-prefix: ${RATE_LIMIT_REDIS_KEY_PREFIX:vector:messaging-service:rate-limit}
-    max-requests: ${RATE_LIMIT_MAX_REQUESTS:300}
+    max-requests: ${RATE_LIMIT_MAX_REQUESTS:3000}
     window: ${RATE_LIMIT_WINDOW:60s}
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: ${MANAGEMENT_ENDPOINTS:health,info}
   endpoint:
     health:
-      show-details: never
+      show-details: ${MANAGEMENT_HEALTH_DETAILS:never}
 
 springdoc:
   api-docs:
-    enabled: true
+    enabled: ${SPRINGDOC_ENABLED:false}
   swagger-ui:
-    enabled: true
+    enabled: ${SPRINGDOC_ENABLED:false}
     path: /swagger-ui.html
 
 logging:
-  pattern:
-    level: "%5p [${spring.application.name:messaging-service}] [requestId=%X{requestId:-none}]"
   level:
     org.springframework.data.repository.config: WARN
     org.springframework.data.redis.repository.configuration: WARN
     org.apache.kafka: WARN
     org.springframework.kafka: WARN
-    dev.messagingservice: INFO
+    root: ${LOGGING_LEVEL_ROOT:INFO}
+    dev.messagingservice: ${LOGGING_LEVEL_APP:INFO}
+  pattern:
+    level: "%5p [${spring.application.name}] [requestId:%X{requestId:-none}]"

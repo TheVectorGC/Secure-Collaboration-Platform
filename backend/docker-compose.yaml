@@ -151,6 +151,21 @@ services:
       timeout: 5s
       retries: 30
 
+  kafka-init:
+    image: apache/kafka:3.9.1
+    container_name: vector-kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        set -eu
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists --topic identity.events --partitions 1 --replication-factor 1
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists --topic messaging.events --partitions 1 --replication-factor 1
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists --topic document.events --partitions 1 --replication-factor 1
+
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: vector-kafka-ui
@@ -188,10 +203,12 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
       vault-init:
         condition: service_completed_successfully
     environment:
-      SPRING_PROFILES_ACTIVE: local
+      SPRING_PROFILES_ACTIVE: dev
       SERVER_PORT: 8085
       DB_URL: jdbc:postgresql://identity-db:5432/identity_db
       DB_USERNAME: postgres
@@ -222,7 +239,7 @@ services:
       vault-init:
         condition: service_completed_successfully
     environment:
-      SPRING_PROFILES_ACTIVE: local
+      SPRING_PROFILES_ACTIVE: dev
       SERVER_PORT: 8086
       DB_URL: jdbc:postgresql://crypto-db:5432/crypto_db
       DB_USERNAME: postgres
@@ -250,10 +267,12 @@ services:
         condition: service_started
       kafka:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
       vault-init:
         condition: service_completed_successfully
     environment:
-      SPRING_PROFILES_ACTIVE: local
+      SPRING_PROFILES_ACTIVE: dev
       SERVER_PORT: 8087
       DB_URL: jdbc:postgresql://messaging-db:5432/messaging_db
       DB_USERNAME: postgres
@@ -277,12 +296,14 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       vault-init:
         condition: service_completed_successfully
     environment:
-      SPRING_PROFILES_ACTIVE: local
+      SPRING_PROFILES_ACTIVE: dev
       SERVER_PORT: 8088
       VAULT_URI: http://vault:8200
       VAULT_TOKEN: root
@@ -308,7 +329,7 @@ services:
       vault-init:
         condition: service_completed_successfully
     environment:
-      SPRING_PROFILES_ACTIVE: local
+      SPRING_PROFILES_ACTIVE: dev
       SERVER_PORT: 8089
       DB_URL: jdbc:postgresql://media-db:5432/media_db
       DB_USERNAME: postgres
@@ -343,10 +364,12 @@ services:
         condition: service_started
       kafka:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
       vault-init:
         condition: service_completed_successfully
     environment:
-      SPRING_PROFILES_ACTIVE: local
+      SPRING_PROFILES_ACTIVE: dev
       SERVER_PORT: 8090
       DB_URL: jdbc:postgresql://document-db:5432/document_db
       DB_USERNAME: postgres

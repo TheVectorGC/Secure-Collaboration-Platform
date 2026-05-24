@@ -1,0 +1,41 @@
+spring:
+  config:
+    activate:
+      on-profile: dev
+  cloud:
+    vault:
+      enabled: ${VAULT_ENABLED:true}
+      uri: ${VAULT_URI:http://localhost:8200}
+      token: ${VAULT_TOKEN:root}
+
+application:
+  security:
+    public-paths:
+      - /actuator/**
+      - /swagger-ui/**
+      - /swagger-ui.html
+      - /v3/api-docs/**
+  rate-limit:
+    enabled: ${RATE_LIMIT_ENABLED:true}
+    redis-key-prefix: ${RATE_LIMIT_REDIS_KEY_PREFIX:vector:media-service:rate-limit}
+    max-requests: ${RATE_LIMIT_MAX_REQUESTS:10000}
+    window: ${RATE_LIMIT_WINDOW:60s}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,env,beans,loggers
+  endpoint:
+    health:
+      show-details: always
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+
+logging:
+  level:
+    dev.mediaservice: DEBUG

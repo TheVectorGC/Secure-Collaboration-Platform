@@ -10,33 +10,33 @@ spring:
       timeout: ${REDIS_TIMEOUT:2s}
     repositories:
       enabled: false
-
   datasource:
     url: ${DB_URL}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
-
   cloud:
     vault:
-      enabled: true
+      enabled: ${VAULT_ENABLED:true}
       uri: ${VAULT_URI}
       token: ${VAULT_TOKEN}
 
 application:
-  rate-limit:
-    enabled: ${RATE_LIMIT_ENABLED:true}
-    key-prefix: ${RATE_LIMIT_KEY_PREFIX:vector:identity:rate-limit}
-    requests-per-window: ${RATE_LIMIT_REQUESTS_PER_WINDOW:120}
-    window: ${RATE_LIMIT_WINDOW:PT1M}
-
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS}
-
+  security:
+    public-paths:
+      - /api/v1/auth/**
+      - /actuator/health
+      - /actuator/info
   initial-admin:
     enabled: ${INITIAL_ADMIN_ENABLED:false}
-
   outbox:
     enabled: ${OUTBOX_ENABLED:true}
+  rate-limit:
+    enabled: ${RATE_LIMIT_ENABLED:true}
+    redis-key-prefix: ${RATE_LIMIT_REDIS_KEY_PREFIX:vector:identity-service:rate-limit}
+    max-requests: ${RATE_LIMIT_MAX_REQUESTS:3000}
+    window: ${RATE_LIMIT_WINDOW:60s}
 
 management:
   endpoints:
@@ -55,9 +55,5 @@ springdoc:
 
 logging:
   level:
-    org.springframework.data.repository.config: WARN
-    org.springframework.data.redis.repository.configuration: WARN
-    org.apache.kafka: WARN
-    org.springframework.kafka: WARN
     root: INFO
     dev.identityservice: INFO

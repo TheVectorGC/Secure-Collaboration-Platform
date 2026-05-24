@@ -8,7 +8,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 @EnableKafka
 @EnableScheduling
-@SpringBootApplication
+@SpringBootApplication(excludeName = "org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration")
 @ConfigurationPropertiesScan
 public class MessagingServiceApplication {
     public static void main(String[] args) {

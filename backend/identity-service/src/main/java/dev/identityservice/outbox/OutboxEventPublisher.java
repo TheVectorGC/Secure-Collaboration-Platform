@@ -29,7 +29,7 @@ public class OutboxEventPublisher {
     private final OutboxEventRepository outboxEventRepository;
     private final ObjectMapper objectMapper;
 
-    @Scheduled(fixedDelayString = "${application.outbox.publish-interval:PT5S}")
+    @Scheduled(fixedDelayString = "${application.outbox.dispatch-interval:PT5S}")
     @Transactional
     public void publishPendingEvents() {
         List<OutboxEventEntity> pendingEvents = outboxEventRepository

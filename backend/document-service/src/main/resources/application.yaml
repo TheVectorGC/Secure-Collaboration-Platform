@@ -5,7 +5,7 @@ spring:
   application:
     name: document-service
   profiles:
-    active: ${SPRING_PROFILES_ACTIVE:local}
+    active: ${SPRING_PROFILES_ACTIVE:dev}
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -14,7 +14,6 @@ spring:
       timeout: ${REDIS_TIMEOUT:2s}
     repositories:
       enabled: false
-
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5437/document_db}
     username: ${DB_USERNAME:postgres}
@@ -32,7 +31,7 @@ spring:
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
   cloud:
     vault:
-      enabled: true
+      enabled: ${VAULT_ENABLED:true}
       uri: ${VAULT_URI:http://localhost:8200}
       token: ${VAULT_TOKEN:root}
       kv:
@@ -42,6 +41,9 @@ application:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
   security:
+    public-paths:
+      - /actuator/health
+      - /actuator/info
     jwt:
       issuer: ${JWT_ISSUER:identity-service}
       key-name: ${JWT_KEY_NAME:identity-service-jwt-ed25519}
@@ -51,7 +53,7 @@ application:
   outbox:
     enabled: ${DOCUMENT_OUTBOX_ENABLED:true}
     batch-size: ${DOCUMENT_OUTBOX_BATCH_SIZE:50}
-    dispatch-interval-ms: ${DOCUMENT_OUTBOX_DISPATCH_INTERVAL_MS:1000}
+    dispatch-interval: ${DOCUMENT_OUTBOX_DISPATCH_INTERVAL:PT1S}
     max-attempts: ${DOCUMENT_OUTBOX_MAX_ATTEMPTS:10}
   messaging-service:
     base-url: ${MESSAGING_SERVICE_BASE_URL:http://localhost:8087}
@@ -63,27 +65,26 @@ application:
   identity-service:
     base-url: ${IDENTITY_SERVICE_BASE_URL:http://localhost:8085}
     internal-device-path: ${IDENTITY_SERVICE_INTERNAL_DEVICE_PATH:/api/v1/devices/{deviceId}/internal}
-
   rate-limit:
-    enabled: ${RATE_LIMIT_ENABLED:false}
+    enabled: ${RATE_LIMIT_ENABLED:true}
     redis-key-prefix: ${RATE_LIMIT_REDIS_KEY_PREFIX:vector:document-service:rate-limit}
-    max-requests: ${RATE_LIMIT_MAX_REQUESTS:300}
+    max-requests: ${RATE_LIMIT_MAX_REQUESTS:3000}
     window: ${RATE_LIMIT_WINDOW:60s}
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: ${MANAGEMENT_ENDPOINTS:health,info}
   endpoint:
     health:
-      show-details: never
+      show-details: ${MANAGEMENT_HEALTH_DETAILS:never}
 
 springdoc:
   api-docs:
-    enabled: true
+    enabled: ${SPRINGDOC_ENABLED:false}
   swagger-ui:
-    enabled: true
+    enabled: ${SPRINGDOC_ENABLED:false}
     path: /swagger-ui.html
 
 logging:
@@ -92,7 +93,7 @@ logging:
     org.springframework.data.redis.repository.configuration: WARN
     org.apache.kafka: WARN
     org.springframework.kafka: WARN
-    root: INFO
-    dev.documentservice: INFO
+    root: ${LOGGING_LEVEL_ROOT:INFO}
+    dev.documentservice: ${LOGGING_LEVEL_APP:INFO}
   pattern:
-    level: "%5p [requestId=%X{requestId:-}]"
+    level: "%5p [${spring.application.name}] [requestId:%X{requestId:-none}]"

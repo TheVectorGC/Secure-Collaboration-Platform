@@ -2,12 +2,21 @@ spring:
   config:
     activate:
       on-profile: prod
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: ${REDIS_TIMEOUT:2s}
+    repositories:
+      enabled: false
   datasource:
     url: ${DB_URL}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
   cloud:
     vault:
+      enabled: ${VAULT_ENABLED:true}
       uri: ${VAULT_URI}
       token: ${VAULT_TOKEN}
 
@@ -16,8 +25,17 @@ application:
     base-url: ${IDENTITY_SERVICE_BASE_URL}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS}
+  security:
+    public-paths:
+      - /actuator/health
+      - /actuator/info
   outbox:
-    enabled: true
+    enabled: ${OUTBOX_ENABLED:true}
+  rate-limit:
+    enabled: ${RATE_LIMIT_ENABLED:true}
+    redis-key-prefix: ${RATE_LIMIT_REDIS_KEY_PREFIX:vector:messaging-service:rate-limit}
+    max-requests: ${RATE_LIMIT_MAX_REQUESTS:3000}
+    window: ${RATE_LIMIT_WINDOW:60s}
 
 management:
   endpoints:
@@ -36,9 +54,5 @@ springdoc:
 
 logging:
   level:
-    org.springframework.data.repository.config: WARN
-    org.springframework.data.redis.repository.configuration: WARN
-    org.apache.kafka: WARN
-    org.springframework.kafka: WARN
+    root: INFO
     dev.messagingservice: INFO
-    org.springframework.kafka: WARN

@@ -28,7 +28,7 @@ public class KafkaOutboxEventDispatcher {
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final ObjectMapper objectMapper;
 
-    @Scheduled(fixedDelayString = "${application.outbox.dispatch-interval-ms:1000}")
+    @Scheduled(fixedDelayString = "${application.outbox.dispatch-interval:PT1S}")
     @Transactional
     public void dispatchPendingEvents() {
         if (!outboxProperties.enabled()) {

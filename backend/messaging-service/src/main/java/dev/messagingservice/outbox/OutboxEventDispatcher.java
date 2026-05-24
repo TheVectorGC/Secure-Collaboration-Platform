@@ -23,7 +23,7 @@ public class OutboxEventDispatcher {
     private final ObjectMapper objectMapper;
     private final OutboxProperties outboxProperties;
 
-    @Scheduled(fixedDelayString = "${application.outbox.dispatch-interval-ms:1000}")
+    @Scheduled(fixedDelayString = "${application.outbox.dispatch-interval:PT1S}")
     @Transactional
     public void dispatchPendingEvents() {
         if (!outboxProperties.enabled()) {
@@ -65,7 +65,7 @@ public class OutboxEventDispatcher {
                 log.error("Outbox event permanently failed. Outbox event ID: {}, attempts: {}.", eventEntity.getId(), attempts, exception);
             }
             else {
-                eventEntity.setNextAttemptAt(now.plusSeconds(outboxProperties.retryDelaySeconds()));
+                eventEntity.setNextAttemptAt(now.plus(outboxProperties.retryDelay()));
                 log.warn("Outbox event publish failed. Outbox event ID: {}, attempts: {}.", eventEntity.getId(), attempts);
             }
 
