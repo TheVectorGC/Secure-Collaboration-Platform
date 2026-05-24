@@ -37,6 +37,16 @@ export async function removeGroupParticipant(chatId: string, participantAccountI
   return response.data;
 }
 
+export async function leaveGroupChat(chatId: string): Promise<ChatResponseDto> {
+  const response = await messagingHttpClient.post<ChatResponseDto>(`/api/v1/chats/${chatId}/leave`);
+  return response.data;
+}
+
+export async function rejoinGroupChat(chatId: string): Promise<ChatResponseDto> {
+  const response = await messagingHttpClient.post<ChatResponseDto>(`/api/v1/chats/${chatId}/rejoin`);
+  return response.data;
+}
+
 export async function updateGroupChatAvatar(chatId: string, request: UpdateGroupAvatarRequestDto): Promise<ChatResponseDto> {
   const response = await messagingHttpClient.put<ChatResponseDto>(`/api/v1/chats/${chatId}/avatar`, request);
   return response.data;

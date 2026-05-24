@@ -6,6 +6,7 @@ import {
   getAccountActivityLabel,
   getActiveGroupParticipantAccountIds,
   getChatPresentation,
+  getCurrentGroupParticipant,
   getLastPeerActivityAt,
   getVisibleChatMessages,
   isCurrentAccountActiveInChat,
@@ -67,6 +68,11 @@ export function useSelectedChatViewModel(params: UseSelectedChatViewModelParams)
   const selectedDirectCompanionAccountId = selectedChat?.type === 'DIRECT'
     ? getDirectCompanionAccountId(selectedChat, currentProfile?.accountId)
     : null;
+  const selectedGroupParticipant = selectedChat?.type === 'GROUP'
+    ? getCurrentGroupParticipant(selectedChat, currentProfile?.accountId)
+    : null;
+  const isSelectedGroupChatLeft = selectedGroupParticipant?.status === 'LEFT';
+  const isSelectedGroupChatRemoved = selectedGroupParticipant?.status === 'REMOVED';
   const isSelectedDirectChatBlockedByCurrentAccount = Boolean(selectedChat?.currentAccountBlockedCompanion);
   const isSelectedDirectChatBlockedByCompanion = Boolean(selectedChat?.companionBlockedCurrentAccount);
   const isSelectedDirectChatBlocked = selectedChat?.type === 'DIRECT'
@@ -104,6 +110,9 @@ export function useSelectedChatViewModel(params: UseSelectedChatViewModelParams)
     selectedDirectCompanionAccountId,
     isSelectedDirectChatBlockedByCurrentAccount,
     isSelectedChatWritable,
+    isSelectedGroupChatLeft,
+    isSelectedGroupChatRemoved,
+    selectedGroupParticipant,
     selectedChatPresentation,
     directBlockNotice,
     selectedTypingText,

@@ -1,6 +1,6 @@
 import { getDisplayName } from '../../../shared/lib/profile';
 import type { ProfileResponseDto } from '../../../shared/types/api';
-export type GroupSystemEventType = 'GROUP_CREATED' | 'MEMBER_ADDED' | 'MEMBER_REMOVED';
+export type GroupSystemEventType = 'GROUP_CREATED' | 'MEMBER_ADDED' | 'MEMBER_REMOVED' | 'MEMBER_LEFT' | 'MEMBER_REJOINED';
 
 export type GroupSystemMessagePayload = {
   kind: 'GROUP_SYSTEM_EVENT';
@@ -75,6 +75,14 @@ export function formatGroupSystemMessage(payload: GroupSystemMessagePayload | nu
 
   if (payload.type === 'MEMBER_REMOVED') {
     return `${actorDisplayName} удалил(а) ${targetDisplayName}`;
+  }
+
+  if (payload.type === 'MEMBER_LEFT') {
+    return `${actorDisplayName} покинул(а) группу`;
+  }
+
+  if (payload.type === 'MEMBER_REJOINED') {
+    return `${actorDisplayName} вернулся(лась) в группу`;
   }
 
   return 'Системное событие';

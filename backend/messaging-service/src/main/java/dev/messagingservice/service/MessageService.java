@@ -1,5 +1,6 @@
 package dev.messagingservice.service;
 
+import dev.messagingservice.model.dto.request.EditMessageRequestDto;
 import dev.messagingservice.model.dto.request.MarkChatReadRequestDto;
 import dev.messagingservice.model.dto.request.SendMessageRequestDto;
 import dev.messagingservice.model.dto.request.SetMessageReactionRequestDto;
@@ -10,6 +11,8 @@ import java.util.UUID;
 
 public interface MessageService {
     MessageResponseDto sendMessage(UUID currentAccountId, UUID chatId, SendMessageRequestDto sendMessageRequestDto);
+
+    MessageResponseDto editMessage(UUID currentAccountId, UUID chatId, UUID messageId, EditMessageRequestDto editMessageRequestDto);
 
     List<MessageResponseDto> getChatMessages(UUID currentAccountId, UUID chatId);
 

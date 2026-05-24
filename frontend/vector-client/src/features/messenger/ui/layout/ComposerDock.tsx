@@ -1,5 +1,5 @@
 import { Send } from 'lucide-react';
-import { ChatComposer, type ChatAttachmentDisplayMode, type ComposerForwardPreview, type ComposerPendingAttachment, type ComposerReplyPreview } from '../ChatComposer';
+import { ChatComposer, type ChatAttachmentDisplayMode, type ComposerEditPreview, type ComposerForwardPreview, type ComposerPendingAttachment, type ComposerReplyPreview } from '../ChatComposer';
 import type { ForwardSelectionState, PendingAttachmentDraft, ReplyDraft, ForwardedMessageSnapshot } from '../../lib/messengerCore';
 
 type ComposerDockProps = {
@@ -11,11 +11,13 @@ type ComposerDockProps = {
   forwardSelection: ForwardSelectionState | null;
   forwardDraftItems: ForwardedMessageSnapshot[];
   replyDraft: ReplyDraft | null;
+  editPreviewText: string | null;
   pendingAttachments: PendingAttachmentDraft[];
   onCancelForwardSelection: () => void;
   onOpenForwardChatPicker: () => void;
   onCancelReply: () => void;
   onCancelForwardDraft: () => void;
+  onCancelEdit: () => void;
   onRemovePendingAttachment: (attachmentId: string) => void;
   onMessageTextChange: (value: string) => void;
   onMessageBlur: () => void;
@@ -34,11 +36,13 @@ export function ComposerDock({
   forwardSelection,
   forwardDraftItems,
   replyDraft,
+  editPreviewText,
   pendingAttachments,
   onCancelForwardSelection,
   onOpenForwardChatPicker,
   onCancelReply,
   onCancelForwardDraft,
+  onCancelEdit,
   onRemovePendingAttachment,
   onMessageTextChange,
   onMessageBlur,
@@ -85,6 +89,7 @@ export function ComposerDock({
       isWritable={isWritable}
       replyPreview={replyDraft ? ({ senderName: replyDraft.senderName, preview: replyDraft.preview } satisfies ComposerReplyPreview) : null}
       forwardPreview={forwardDraftItems.length > 0 ? ({ count: forwardDraftItems.length } satisfies ComposerForwardPreview) : null}
+      editPreview={editPreviewText ? ({ preview: editPreviewText } satisfies ComposerEditPreview) : null}
       pendingAttachments={pendingAttachments.map((attachment) => ({
         id: attachment.id,
         fileName: attachment.file.name,
@@ -94,6 +99,7 @@ export function ComposerDock({
       canSendWithoutText={forwardDraftItems.length > 0 || pendingAttachments.length > 0}
       onCancelReply={onCancelReply}
       onCancelForward={onCancelForwardDraft}
+      onCancelEdit={onCancelEdit}
       onRemovePendingAttachment={onRemovePendingAttachment}
       onMessageTextChange={onMessageTextChange}
       onMessageBlur={onMessageBlur}

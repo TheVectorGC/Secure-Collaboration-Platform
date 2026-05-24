@@ -43,6 +43,18 @@ function isNotFoundError(error: unknown): boolean {
   return (error as { response?: { status?: number } })?.response?.status === 404;
 }
 
+
+function buildMessageDecryptionFingerprint(message: MessageResponseDto): string {
+  return [
+    message.encryptedPayload ?? '',
+    message.contentInitializationVectorBase64 ?? '',
+    message.contentAuthenticationTagBase64 ?? '',
+    String(message.groupKeyEpoch ?? ''),
+    String(message.editVersion ?? 0),
+    message.editedAt ?? '',
+  ].join('|');
+}
+
 function buildMessageDiagnostics(message: MessageResponseDto, accountId: string, deviceId: string | null) {
   return {
     messageId: message.messageId,
@@ -74,6 +86,7 @@ export function useMessageDecryptionController({
   const failedAttemptsByMessageIdRef = useRef<Map<string, number>>(new Map());
   const retryTimersByMessageIdRef = useRef<Map<string, number>>(new Map());
   const backupPrivateKeyUnlockedRef = useRef<boolean | null>(null);
+  const messageFingerprintsByIdRef = useRef<Map<string, string>>(new Map());
 
   function clearRetryTimer(messageId: string) {
     const existingTimerId = retryTimersByMessageIdRef.current.get(messageId);
@@ -111,6 +124,7 @@ export function useMessageDecryptionController({
     failedMessageIdsRef.current.clear();
     decryptingMessageIdsRef.current.clear();
     backupPrivateKeyUnlockedRef.current = null;
+    messageFingerprintsByIdRef.current.clear();
     setDecryptedMessagesById({});
   }
 
@@ -559,9 +573,27 @@ export function useMessageDecryptionController({
 
     loadedMessages.forEach((message) => {
       const messageId = message.messageId;
+      const currentFingerprint = buildMessageDecryptionFingerprint(message);
+      const previousFingerprint = messageFingerprintsByIdRef.current.get(messageId);
       const cachedPlainText = decryptedMessagesById[messageId];
 
-      if (cachedPlainText && !isDecryptionPlaceholder(cachedPlainText)) {
+      if (previousFingerprint && previousFingerprint !== currentFingerprint) {
+        clearRetryTimer(messageId);
+        failedMessageIdsRef.current.delete(messageId);
+        failedAttemptsByMessageIdRef.current.delete(messageId);
+        decryptingMessageIdsRef.current.delete(messageId);
+        messageFingerprintsByIdRef.current.delete(messageId);
+        setDecryptedMessagesById((previousValue) => {
+          if (!(messageId in previousValue)) {
+            return previousValue;
+          }
+
+          const nextValue = { ...previousValue };
+          delete nextValue[messageId];
+          return nextValue;
+        });
+      }
+      else if (cachedPlainText && !isDecryptionPlaceholder(cachedPlainText)) {
         return;
       }
 
@@ -587,6 +619,7 @@ export function useMessageDecryptionController({
           clearRetryTimer(messageId);
           failedAttemptsByMessageIdRef.current.delete(messageId);
           failedMessageIdsRef.current.delete(messageId);
+          messageFingerprintsByIdRef.current.set(messageId, currentFingerprint);
           setDecryptedMessagesById((previousValue) => ({
             ...previousValue,
             [messageId]: plainText,

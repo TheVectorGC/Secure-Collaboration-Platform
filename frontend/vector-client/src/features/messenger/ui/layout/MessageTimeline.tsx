@@ -253,6 +253,9 @@ export function MessageTimeline({
 
                       <div className={`mt-2 flex items-center gap-2 text-[11px] ${isOwnMessage ? 'justify-end text-violet-100/80' : 'justify-end text-zinc-500'}`}>
                         <span>{formatMessageTime(message.createdAt)}</span>
+                        {message.editedAt && (
+                          <span className="opacity-80">изменено</span>
+                        )}
                         {shouldShowMessageReadReceipt && selectedChat.type !== 'GROUP' && (
                           <span className="inline-flex items-center gap-1">
                             {hasMessageBeenRead ? <CheckCheck size={13} /> : <Check size={13} />}

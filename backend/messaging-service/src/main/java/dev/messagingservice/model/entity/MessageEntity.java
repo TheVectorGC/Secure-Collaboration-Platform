@@ -67,4 +67,11 @@ public class MessageEntity {
 
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
+
+    @Column(name = "edited_at")
+    private OffsetDateTime editedAt;
+
+    @Builder.Default
+    @Column(name = "edit_version", nullable = false)
+    private Integer editVersion = 0;
 }

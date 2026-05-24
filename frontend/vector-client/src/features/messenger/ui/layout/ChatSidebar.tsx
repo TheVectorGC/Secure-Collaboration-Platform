@@ -1,4 +1,4 @@
-import { Check, CheckCheck, FileText, Plus, Search, Star, Wrench } from 'lucide-react';
+import { Check, CheckCheck, FileText, Pin, Plus, Search, Star, Wrench } from 'lucide-react';
 import { formatChatTime } from '../../../../shared/lib/dateFormat';
 import { getDirectCompanionAccountId, getDisplayName } from '../../../../shared/lib/profile';
 import type { ChatResponseDto, MessageResponseDto, ProfileResponseDto } from '../../../../shared/types/api';
@@ -115,6 +115,7 @@ export function ChatSidebar({
             const lastMessageStatus = lastTimelineMessage && isOwnLastMessage ? getOutgoingMessageStatus(lastTimelineMessage, currentProfile?.accountId) : null;
             const companionAccountId = chat.type === 'DIRECT' ? getDirectCompanionAccountId(chat, currentProfile?.accountId) : null;
             const companionPresence = companionAccountId ? presenceByAccountId[companionAccountId] : null;
+            const isPinned = Boolean((localChatState.pinnedChatIds ?? []).includes(chat.chatId));
 
             return (
               <button
@@ -145,7 +146,10 @@ export function ChatSidebar({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-3">
                     <div className="truncate text-sm font-semibold text-zinc-100">{presentation.title}</div>
-                    <div className="shrink-0 text-[11px] text-zinc-600">{formatChatTime(lastTimelineMessage?.createdAt ?? chat.lastMessageCreatedAt ?? chat.updatedAt)}</div>
+                    <div className="flex shrink-0 items-center gap-1.5 text-[11px] text-zinc-600">
+                      {isPinned && <Pin size={12} className="rotate-45 text-zinc-500" />}
+                      <span>{formatChatTime(lastTimelineMessage?.createdAt ?? chat.lastMessageCreatedAt ?? chat.updatedAt)}</span>
+                    </div>
                   </div>
                   <div className="mt-1 flex items-center gap-2">
                     {chat.type !== 'SELF' && isOwnLastMessage && lastMessageStatus && (

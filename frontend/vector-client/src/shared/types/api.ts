@@ -213,6 +213,18 @@ export type AccountKeyEnvelopeRequestDto = {
   encryptedKeyBase64: string;
 };
 
+export type EditMessageRequestDto = {
+  senderDeviceId: string;
+  encryptionType: MessageEncryptionType;
+  encryptedPayload: string;
+  contentAlgorithm: 'AES-256-GCM';
+  contentInitializationVectorBase64: string;
+  contentAuthenticationTagBase64: string;
+  groupKeyEpoch?: number | null;
+  devicePayloads: DeviceMessagePayloadRequestDto[];
+  accountKeyEnvelopes: AccountKeyEnvelopeRequestDto[];
+};
+
 export type SendMessageRequestDto = {
   senderDeviceId: string;
   clientMessageId: string;
@@ -279,6 +291,8 @@ export type MessageResponseDto = {
   accountKeyEnvelopes: AccountKeyEnvelopeResponseDto[];
   groupEpochKeyEnvelope: AccountKeyEnvelopeResponseDto | null;
   createdAt: string;
+  editedAt?: string | null;
+  editVersion?: number | null;
   deliveryStates: MessageDeliveryStateResponseDto[];
   reactions: MessageReactionResponseDto[];
 };
@@ -467,7 +481,7 @@ export type SignDocumentRequestDto = {
   signatureBase64: string;
 };
 
-export type RealtimeEventType = 'MESSAGE_CREATED' | 'MESSAGE_DELIVERED' | 'MESSAGE_READ' | 'MESSAGE_REACTION_UPDATED' | 'GROUP_EPOCH_KEYS_AVAILABLE' | 'CHAT_UPDATED' | 'TYPING' | 'PRESENCE_UPDATED' | 'PRESENCE_SNAPSHOT' | 'DOCUMENT_CREATED' | 'DOCUMENT_UPDATED' | 'DOCUMENT_SIGNED' | 'DOCUMENT_REJECTED' | 'DOCUMENT_CANCELLED' | 'DOCUMENT_HIDDEN' | 'DOCUMENT_OBSERVERS_ADDED' | 'PROFILE_UPDATED' | 'DEVICE_REVOKED';
+export type RealtimeEventType = 'MESSAGE_CREATED' | 'MESSAGE_EDITED' | 'MESSAGE_DELIVERED' | 'MESSAGE_READ' | 'MESSAGE_REACTION_UPDATED' | 'GROUP_EPOCH_KEYS_AVAILABLE' | 'CHAT_UPDATED' | 'TYPING' | 'PRESENCE_UPDATED' | 'PRESENCE_SNAPSHOT' | 'DOCUMENT_CREATED' | 'DOCUMENT_UPDATED' | 'DOCUMENT_SIGNED' | 'DOCUMENT_REJECTED' | 'DOCUMENT_CANCELLED' | 'DOCUMENT_HIDDEN' | 'DOCUMENT_OBSERVERS_ADDED' | 'PROFILE_UPDATED' | 'DEVICE_REVOKED';
 
 export type RealtimeEventDto = {
   eventId: string;
@@ -515,6 +529,11 @@ export type GroupEpochKeysAvailablePayload = {
   chatId: string;
   epoch: number;
   targetAccountId: string;
+};
+
+export type MessageEditedPayload = MessageCreatedPayload & {
+  editedAt: string;
+  editVersion: number;
 };
 
 export type MessageReactionUpdatedPayload = {

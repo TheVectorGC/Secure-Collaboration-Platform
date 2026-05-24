@@ -1,5 +1,5 @@
 import { type Dispatch, type SetStateAction } from 'react';
-import { addGroupParticipant, createDirectChat, createGroupChat, getCurrentAccountGroupEpochKeyEnvelope, removeGroupParticipant, upsertGroupEpochKeyEnvelope } from '../../chats/api/chatsApi';
+import { addGroupParticipant, createDirectChat, createGroupChat, getCurrentAccountGroupEpochKeyEnvelope, leaveGroupChat, rejoinGroupChat, removeGroupParticipant, upsertGroupEpochKeyEnvelope } from '../../chats/api/chatsApi';
 import { unblockAccount } from '../../account-blocks/api/accountBlocksApi';
 import { getAccountBackupPublicKey } from '../../crypto/api/accountBackupProfileApi';
 import type { ChatResponseDto, ProfileResponseDto } from '../../../shared/types/api';
@@ -221,11 +221,38 @@ export function useGroupChatController(params: UseGroupChatControllerParams) {
     setDecryptedMessagesById((previousValue) => ({ ...previousValue }));
   }
 
+  async function handleLeaveGroup() {
+    if (!selectedChat || selectedChat.type !== 'GROUP') {
+      return;
+    }
+
+    setErrorMessage(null);
+    const updatedChat = await leaveGroupChat(selectedChat.chatId);
+    upsertChat(updatedChat);
+    clearTemporarilyMissingGroupKeys();
+    setDecryptedMessagesById((previousValue) => ({ ...previousValue }));
+  }
+
+  async function handleRejoinGroup() {
+    if (!selectedChat || selectedChat.type !== 'GROUP') {
+      return;
+    }
+
+    setErrorMessage(null);
+    const updatedChat = await rejoinGroupChat(selectedChat.chatId);
+    upsertChat(updatedChat);
+    clearTemporarilyMissingGroupKeys();
+    await shareCurrentGroupEpochKeyWithAccounts(updatedChat, getActiveGroupParticipantAccountIds(updatedChat));
+    setDecryptedMessagesById((previousValue) => ({ ...previousValue }));
+  }
+
   return {
     handleCreateDirectChat,
     handleUnblockProfile,
     handleCreateGroupChat,
     handleAddGroupParticipant,
     handleRemoveGroupParticipant,
+    handleLeaveGroup,
+    handleRejoinGroup,
   };
 }

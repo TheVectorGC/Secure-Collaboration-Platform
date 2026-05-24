@@ -58,6 +58,8 @@ public class MessageMapper {
                 accountKeyEnvelopeResponses,
                 groupEpochKeyEnvelopeEntity == null ? null : toGroupEpochKeyEnvelopeResponse(groupEpochKeyEnvelopeEntity),
                 messageEntity.getCreatedAt(),
+                messageEntity.getEditedAt(),
+                messageEntity.getEditVersion(),
                 deliveryStateResponses,
                 reactionResponses
         );

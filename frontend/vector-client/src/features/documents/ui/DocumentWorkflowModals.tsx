@@ -238,6 +238,14 @@ export function DocumentCreationModal({
     setSelectedObserverAccountIds([]);
   }, [currentAccountId, file]);
 
+  const signerPickerAccountIds = useMemo(() => {
+    if (!currentAccountId) {
+      return contactAccountIds;
+    }
+
+    return Array.from(new Set([currentAccountId, ...contactAccountIds]));
+  }, [contactAccountIds, currentAccountId]);
+
   if (!file) {
     return null;
   }
@@ -310,7 +318,7 @@ export function DocumentCreationModal({
               title="Подписанты"
               hint="Сначала показаны сотрудники из ваших личных чатов. Через поиск можно найти остальных пользователей."
               selectedAccountIds={selectedSignerAccountIds}
-              contactAccountIds={contactAccountIds}
+              contactAccountIds={signerPickerAccountIds}
               profilesById={profilesById}
               onToggle={toggleSigner}
               onProfilesFound={onProfilesFound}

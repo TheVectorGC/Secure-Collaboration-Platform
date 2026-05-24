@@ -50,9 +50,50 @@ public class MessagingEventFactoryImpl implements MessagingEventFactory {
         payload.put("accountKeyEnvelopes", createAccountKeyEnvelopes(accountKeyEnvelopeEntities));
         payload.put("groupEpochKeyEnvelope", groupEpochKeyEnvelopeEntity == null ? null : createGroupEpochKeyEnvelope(groupEpochKeyEnvelopeEntity));
         payload.put("createdAt", messageEntity.getCreatedAt());
+        payload.put("editedAt", messageEntity.getEditedAt());
+        payload.put("editVersion", messageEntity.getEditVersion());
 
         return createEvent(
                 MessagingEventType.MESSAGE_CREATED,
+                messageEntity.getChatId(),
+                messageEntity.getId(),
+                messageEntity.getSenderAccountId(),
+                recipientAccountIds,
+                payload
+        );
+    }
+
+
+    @Override
+    public MessagingEventDto createMessageEditedEvent(
+            MessageEntity messageEntity,
+            List<MessageDevicePayloadEntity> payloadEntities,
+            List<MessageAccountKeyEnvelopeEntity> accountKeyEnvelopeEntities,
+            GroupEpochKeyEnvelopeEntity groupEpochKeyEnvelopeEntity,
+            List<UUID> recipientAccountIds
+    ) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("chatId", messageEntity.getChatId());
+        payload.put("messageId", messageEntity.getId());
+        payload.put("senderAccountId", messageEntity.getSenderAccountId());
+        payload.put("senderDeviceId", messageEntity.getSenderDeviceId());
+        payload.put("clientMessageId", messageEntity.getClientMessageId());
+        payload.put("messageType", messageEntity.getMessageType());
+        payload.put("encryptionType", messageEntity.getEncryptionType());
+        payload.put("encryptedPayload", messageEntity.getEncryptedPayload());
+        payload.put("contentAlgorithm", messageEntity.getContentAlgorithm());
+        payload.put("contentInitializationVectorBase64", messageEntity.getContentInitializationVectorBase64());
+        payload.put("contentAuthenticationTagBase64", messageEntity.getContentAuthenticationTagBase64());
+        payload.put("groupKeyEpoch", messageEntity.getGroupKeyEpoch());
+        payload.put("devicePayloads", createDevicePayloads(payloadEntities));
+        payload.put("accountKeyEnvelopes", createAccountKeyEnvelopes(accountKeyEnvelopeEntities));
+        payload.put("groupEpochKeyEnvelope", groupEpochKeyEnvelopeEntity == null ? null : createGroupEpochKeyEnvelope(groupEpochKeyEnvelopeEntity));
+        payload.put("createdAt", messageEntity.getCreatedAt());
+        payload.put("editedAt", messageEntity.getEditedAt());
+        payload.put("editVersion", messageEntity.getEditVersion());
+
+        return createEvent(
+                MessagingEventType.MESSAGE_EDITED,
                 messageEntity.getChatId(),
                 messageEntity.getId(),
                 messageEntity.getSenderAccountId(),

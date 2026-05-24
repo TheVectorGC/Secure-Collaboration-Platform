@@ -57,6 +57,12 @@ public record MessageResponseDto(
     @Schema(description = "Creation datetime.")
     OffsetDateTime createdAt,
 
+    @Schema(description = "Last edit datetime.")
+    OffsetDateTime editedAt,
+
+    @Schema(description = "Edit version.")
+    Integer editVersion,
+
     @Schema(description = "Delivery states.")
     List<MessageDeliveryStateResponseDto> deliveryStates,
 

@@ -1,4 +1,4 @@
-import { Ban, Eraser, MoreVertical, Pin, PinOff, ShieldCheck, Star, Trash2, Users } from 'lucide-react';
+import { Ban, Eraser, LogOut, MoreVertical, Pin, PinOff, ShieldCheck, Star, Trash2, Users } from 'lucide-react';
 import { getAccountAvatarUrl, type ChatPresentation, UserAvatar } from '../../lib/messengerCore';
 import type { ChatResponseDto } from '../../../../shared/types/api';
 
@@ -8,6 +8,7 @@ type ChatHeaderProps = {
   selectedChatSubtitle: string;
   isChatActionsMenuOpen: boolean;
   isPinned: boolean;
+  canLeaveGroup: boolean;
   onOpenGroupManagement: () => void;
   onOpenDirectProfile: () => void;
   onToggleChatActionsMenu: () => void;
@@ -16,6 +17,7 @@ type ChatHeaderProps = {
   onOpenDeleteChatConfirm: () => void;
   onBlockDirectCompanion: () => void;
   onUnblockDirectCompanion: () => void;
+  onLeaveGroup: () => void;
 };
 
 export function ChatHeader({
@@ -24,6 +26,7 @@ export function ChatHeader({
   selectedChatSubtitle,
   isChatActionsMenuOpen,
   isPinned,
+  canLeaveGroup,
   onOpenGroupManagement,
   onOpenDirectProfile,
   onToggleChatActionsMenu,
@@ -32,6 +35,7 @@ export function ChatHeader({
   onOpenDeleteChatConfirm,
   onBlockDirectCompanion,
   onUnblockDirectCompanion,
+  onLeaveGroup,
 }: ChatHeaderProps) {
   function handleOpenChatInfo() {
     if (selectedChat.type === 'GROUP') {
@@ -110,6 +114,16 @@ export function ChatHeader({
                 <Eraser size={17} className="text-zinc-400" />
                 Очистить историю
               </button>
+              {selectedChat.type === 'GROUP' && canLeaveGroup && (
+                <button
+                  type="button"
+                  onClick={onLeaveGroup}
+                  className="flex min-h-12 w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-amber-100 transition hover:bg-amber-500/10"
+                >
+                  <LogOut size={17} />
+                  Покинуть группу
+                </button>
+              )}
               {selectedChat.type === 'DIRECT' && !selectedChat.currentAccountBlockedCompanion && (
                 <button
                   type="button"

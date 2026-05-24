@@ -19,6 +19,14 @@ public interface MessagingEventFactory {
             List<UUID> recipientAccountIds
     );
 
+    MessagingEventDto createMessageEditedEvent(
+            MessageEntity messageEntity,
+            List<MessageDevicePayloadEntity> payloadEntities,
+            List<MessageAccountKeyEnvelopeEntity> accountKeyEnvelopeEntities,
+            GroupEpochKeyEnvelopeEntity groupEpochKeyEnvelopeEntity,
+            List<UUID> recipientAccountIds
+    );
+
     MessagingEventDto createMessageDeliveredEvent(
             UUID chatId,
             UUID messageId,

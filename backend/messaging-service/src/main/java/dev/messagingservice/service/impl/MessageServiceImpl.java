@@ -5,6 +5,7 @@ import dev.messagingservice.exception.ChatNotFoundException;
 import dev.messagingservice.exception.MessageNotFoundException;
 import dev.messagingservice.exception.MessagePayloadValidationException;
 import dev.messagingservice.model.dto.request.AccountKeyEnvelopeRequestDto;
+import dev.messagingservice.model.dto.request.EditMessageRequestDto;
 import dev.messagingservice.model.dto.request.DeviceMessagePayloadRequestDto;
 import dev.messagingservice.model.dto.request.MarkChatReadRequestDto;
 import dev.messagingservice.model.dto.request.SendMessageRequestDto;
@@ -24,6 +25,7 @@ import dev.messagingservice.model.enumeration.ChatParticipantStatus;
 import dev.messagingservice.model.enumeration.ChatType;
 import dev.messagingservice.model.enumeration.MessageDeliveryStatus;
 import dev.messagingservice.model.enumeration.MessageEncryptionType;
+import dev.messagingservice.model.enumeration.MessageType;
 import dev.messagingservice.repository.ChatParticipantRepository;
 import dev.messagingservice.repository.ChatParticipantVisibilityWindowRepository;
 import dev.messagingservice.repository.ChatRepository;
@@ -41,6 +43,7 @@ import dev.messagingservice.mapper.ChatMapper;
 import dev.messagingservice.mapper.MessageMapper;
 import dev.messagingservice.service.validation.MessagePayloadValidator;
 import dev.messagingservice.util.TextNormalizer;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
@@ -55,6 +58,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class MessageServiceImpl implements MessageService {
+    private static final Duration MESSAGE_EDIT_WINDOW = Duration.ofMinutes(15);
+
     private final ChatRepository chatRepository;
     private final ChatParticipantRepository chatParticipantRepository;
     private final ChatParticipantVisibilityWindowRepository chatParticipantVisibilityWindowRepository;
@@ -95,6 +100,68 @@ public class MessageServiceImpl implements MessageService {
         publishChatUpdatedEvent(updatedChatEntity, activeParticipants);
         publishMessageCreatedEvent(savedMessageEntity, savedPayloadEntities, savedEnvelopeEntities, recipientAccountIds);
         log.info("Message created. Message ID: {}, chat ID: {}, sender account ID: {}.", savedMessageEntity.getId(), chatId, currentAccountId);
+
+        return messageMapper.toMessageResponse(
+                savedMessageEntity,
+                filterPayloadsForAccount(savedPayloadEntities, currentAccountId),
+                filterAccountKeyEnvelopesForAccount(savedEnvelopeEntities, currentAccountId),
+                findGroupEpochEnvelope(savedMessageEntity, currentAccountId),
+                messageDeliveryStateRepository.findByMessageId(savedMessageEntity.getId()),
+                messageReactionRepository.findByMessageId(savedMessageEntity.getId()),
+                currentAccountId
+        );
+    }
+
+    @Override
+    @Transactional
+    public MessageResponseDto editMessage(UUID currentAccountId, UUID chatId, UUID messageId, EditMessageRequestDto requestDto) {
+        getChatForMessaging(currentAccountId, chatId);
+        MessageEntity messageEntity = getMessageInChat(chatId, messageId);
+        ChatParticipantEntity currentParticipant = getKnownParticipant(chatId, currentAccountId);
+
+        if (!isVisibleToParticipant(messageEntity, currentParticipant)) {
+            throw new MessageNotFoundException("Message with ID '" + messageId + "' was not found in this chat.");
+        }
+
+        validateMessageEditable(currentAccountId, messageEntity);
+
+        List<ChatParticipantEntity> activeParticipants = chatParticipantRepository.findByChatIdAndStatus(chatId, ChatParticipantStatus.ACTIVE);
+        SendMessageRequestDto validationRequestDto = new SendMessageRequestDto(
+                requestDto.senderDeviceId(),
+                messageEntity.getClientMessageId(),
+                messageEntity.getMessageType(),
+                requestDto.encryptionType(),
+                requestDto.encryptedPayload(),
+                requestDto.contentAlgorithm(),
+                requestDto.contentInitializationVectorBase64(),
+                requestDto.contentAuthenticationTagBase64(),
+                requestDto.groupKeyEpoch(),
+                requestDto.devicePayloads(),
+                requestDto.accountKeyEnvelopes()
+        );
+        messagePayloadValidator.validate(currentAccountId, validationRequestDto, activeParticipants);
+
+        OffsetDateTime now = OffsetDateTime.now();
+        messageEntity.setSenderDeviceId(requestDto.senderDeviceId());
+        messageEntity.setEncryptionType(requestDto.encryptionType());
+        messageEntity.setEncryptedPayload(TextNormalizer.trimToNull(requestDto.encryptedPayload()));
+        messageEntity.setContentAlgorithm(TextNormalizer.trimToNull(requestDto.contentAlgorithm()));
+        messageEntity.setContentInitializationVectorBase64(TextNormalizer.trimToNull(requestDto.contentInitializationVectorBase64()));
+        messageEntity.setContentAuthenticationTagBase64(TextNormalizer.trimToNull(requestDto.contentAuthenticationTagBase64()));
+        messageEntity.setGroupKeyEpoch(requestDto.groupKeyEpoch());
+        messageEntity.setEditedAt(now);
+        messageEntity.setEditVersion((messageEntity.getEditVersion() == null ? 0 : messageEntity.getEditVersion()) + 1);
+
+        MessageEntity savedMessageEntity = messageRepository.save(messageEntity);
+        messageDevicePayloadRepository.deleteByMessageId(savedMessageEntity.getId());
+        messageAccountKeyEnvelopeRepository.deleteByMessageId(savedMessageEntity.getId());
+        messageDevicePayloadRepository.flush();
+        messageAccountKeyEnvelopeRepository.flush();
+        List<MessageDevicePayloadEntity> savedPayloadEntities = saveDevicePayloads(savedMessageEntity.getId(), requestDto.devicePayloads(), now);
+        List<MessageAccountKeyEnvelopeEntity> savedEnvelopeEntities = saveAccountKeyEnvelopes(savedMessageEntity.getId(), requestDto.accountKeyEnvelopes(), now);
+
+        publishMessageEditedEvent(savedMessageEntity, savedPayloadEntities, savedEnvelopeEntities, activeParticipants);
+        log.info("Message edited. Message ID: {}, chat ID: {}, sender account ID: {}, version: {}.", savedMessageEntity.getId(), chatId, currentAccountId, savedMessageEntity.getEditVersion());
 
         return messageMapper.toMessageResponse(
                 savedMessageEntity,
@@ -199,6 +266,7 @@ public class MessageServiceImpl implements MessageService {
     @Override
     @Transactional
     public MessageReactionResponseDto setMessageReaction(UUID currentAccountId, UUID chatId, UUID messageId, SetMessageReactionRequestDto requestDto) {
+        validateActiveParticipant(chatId, currentAccountId);
         ChatParticipantEntity currentParticipant = getKnownParticipant(chatId, currentAccountId);
         MessageEntity messageEntity = getMessageInChat(chatId, messageId);
 
@@ -225,6 +293,7 @@ public class MessageServiceImpl implements MessageService {
     @Override
     @Transactional
     public void removeMessageReaction(UUID currentAccountId, UUID chatId, UUID messageId) {
+        validateActiveParticipant(chatId, currentAccountId);
         ChatParticipantEntity currentParticipant = getKnownParticipant(chatId, currentAccountId);
         MessageEntity messageEntity = getMessageInChat(chatId, messageId);
 
@@ -258,6 +327,22 @@ public class MessageServiceImpl implements MessageService {
                 .createdAt(now)
                 .updatedAt(now)
                 .build();
+    }
+
+    private void validateMessageEditable(UUID currentAccountId, MessageEntity messageEntity) {
+        if (!messageEntity.getSenderAccountId().equals(currentAccountId)) {
+            throw new ChatAccessDeniedException("Only message author can edit this message.");
+        }
+
+        if (messageEntity.getMessageType() != MessageType.TEXT) {
+            throw new MessagePayloadValidationException("Only text messages can be edited.");
+        }
+
+        OffsetDateTime editDeadline = messageEntity.getCreatedAt().plus(MESSAGE_EDIT_WINDOW);
+
+        if (OffsetDateTime.now().isAfter(editDeadline)) {
+            throw new MessagePayloadValidationException("Message edit window has expired.");
+        }
     }
 
     private ChatEntity getChatForMessaging(UUID currentAccountId, UUID chatId) {
@@ -317,6 +402,7 @@ public class MessageServiceImpl implements MessageService {
                 .contentAuthenticationTagBase64(TextNormalizer.trimToNull(requestDto.contentAuthenticationTagBase64()))
                 .groupKeyEpoch(requestDto.groupKeyEpoch())
                 .createdAt(now)
+                .editVersion(0)
                 .build();
     }
 
@@ -329,14 +415,8 @@ public class MessageServiceImpl implements MessageService {
     }
 
     private ChatParticipantEntity getKnownParticipant(UUID chatId, UUID accountId) {
-        ChatParticipantEntity participantEntity = chatParticipantRepository.findByChatIdAndAccountId(chatId, accountId)
+        return chatParticipantRepository.findByChatIdAndAccountId(chatId, accountId)
                 .orElseThrow(() -> new ChatAccessDeniedException("Current account does not have access to this chat."));
-
-        if (participantEntity.getStatus() == ChatParticipantStatus.LEFT) {
-            throw new ChatAccessDeniedException("Current account does not have access to this chat.");
-        }
-
-        return participantEntity;
     }
 
     private boolean isVisibleToParticipant(MessageEntity messageEntity, ChatParticipantEntity participantEntity) {
@@ -495,6 +575,25 @@ public class MessageServiceImpl implements MessageService {
             List<UUID> recipientAccountIds
     ) {
         messagingEventPublisher.publish(messagingEventFactory.createMessageCreatedEvent(
+                messageEntity,
+                payloadEntities,
+                accountKeyEnvelopeEntities,
+                null,
+                recipientAccountIds
+        ));
+    }
+
+
+    private void publishMessageEditedEvent(
+            MessageEntity messageEntity,
+            List<MessageDevicePayloadEntity> payloadEntities,
+            List<MessageAccountKeyEnvelopeEntity> accountKeyEnvelopeEntities,
+            List<ChatParticipantEntity> activeParticipants
+    ) {
+        List<UUID> recipientAccountIds = activeParticipants.stream()
+                .map(ChatParticipantEntity::getAccountId)
+                .toList();
+        messagingEventPublisher.publish(messagingEventFactory.createMessageEditedEvent(
                 messageEntity,
                 payloadEntities,
                 accountKeyEnvelopeEntities,

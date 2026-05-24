@@ -21,6 +21,10 @@ public interface ChatService {
 
     ChatResponseDto removeGroupParticipant(UUID currentAccountId, UUID chatId, UUID participantAccountId);
 
+    ChatResponseDto leaveGroup(UUID currentAccountId, UUID chatId);
+
+    ChatResponseDto rejoinGroup(UUID currentAccountId, UUID chatId);
+
     ChatResponseDto updateGroupAvatar(UUID currentAccountId, UUID chatId, UpdateGroupAvatarRequestDto updateGroupAvatarRequestDto);
 
     void upsertGroupEpochKeyEnvelope(UUID currentAccountId, UUID chatId, UpsertGroupEpochKeyEnvelopeRequestDto requestDto);

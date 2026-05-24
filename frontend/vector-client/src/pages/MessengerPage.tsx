@@ -15,6 +15,9 @@ import {
   createLocalAvatarDataUrl,
   getDownloadableAttachmentFromPlainText,
   getLocalAvatarStorageKey,
+  getMessageContentPreview,
+  isDecryptionPlaceholder,
+  parseRichMessageContent,
 } from '../features/messenger/lib/messengerCore';
 import { NewChatModal } from '../features/messenger/ui/modals/NewChatModal';
 import { SettingsModal } from '../features/settings/ui/SettingsModal';
@@ -48,6 +51,42 @@ import { useSelectedChatViewModel } from '../features/messenger/hooks/useSelecte
 import { useMessengerDirectoryController } from '../features/messenger/hooks/useMessengerDirectoryController';
 import { useDirectChatBlockController } from '../features/messenger/hooks/useDirectChatBlockController';
 import { useChatListsViewModel } from '../features/messenger/hooks/useChatListsViewModel';
+import type { MessageResponseDto } from '../shared/types/api';
+
+const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
+
+function getEditableMessageText(plainText: string): string {
+  const richMessageContent = parseRichMessageContent(plainText);
+  return richMessageContent ? richMessageContent.text : plainText;
+}
+
+function isMessageEditable(message: MessageResponseDto | null, currentAccountId: string | undefined, plainText: string | undefined): boolean {
+  if (!message || !currentAccountId || !plainText || isDecryptionPlaceholder(plainText) || plainText === 'Расшифровка…') {
+    return false;
+  }
+
+  if (message.senderAccountId !== currentAccountId || message.messageType !== 'TEXT') {
+    return false;
+  }
+
+  const createdAtMs = Date.parse(message.createdAt);
+
+  if (!Number.isFinite(createdAtMs) || Date.now() - createdAtMs > MESSAGE_EDIT_WINDOW_MS) {
+    return false;
+  }
+
+  if (getDownloadableAttachmentFromPlainText(plainText)) {
+    return false;
+  }
+
+  const richMessageContent = parseRichMessageContent(plainText);
+
+  if (richMessageContent) {
+    return richMessageContent.text.trim().length > 0;
+  }
+
+  return plainText.trim().length > 0;
+}
 
 export function MessengerPage() {
   const navigate = useNavigate();
@@ -90,6 +129,8 @@ export function MessengerPage() {
   const [isDeleteChatConfirmOpen, setIsDeleteChatConfirmOpen] = useState(false);
   const [isBlockUserConfirmOpen, setIsBlockUserConfirmOpen] = useState(false);
   const [isClearHistoryConfirmOpen, setIsClearHistoryConfirmOpen] = useState(false);
+  const [isLeaveGroupConfirmOpen, setIsLeaveGroupConfirmOpen] = useState(false);
+  const [editDraft, setEditDraft] = useState<{ message: MessageResponseDto; plainText: string } | null>(null);
   const { localChatState, updateLocalChatState } = usePersistentLocalChatState(profile?.accountId);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -141,6 +182,8 @@ export function MessengerPage() {
     selectedDirectCompanionAccountId,
     isSelectedDirectChatBlockedByCurrentAccount,
     isSelectedChatWritable,
+    isSelectedGroupChatLeft,
+    selectedGroupParticipant,
     selectedChatPresentation,
     directBlockNotice,
     selectedTypingText,
@@ -267,6 +310,8 @@ export function MessengerPage() {
     setIsChatActionsMenuOpen(false);
     setIsDeleteChatConfirmOpen(false);
     setIsBlockUserConfirmOpen(false);
+    setIsLeaveGroupConfirmOpen(false);
+    setEditDraft(null);
   }, [selectedChatId]);
 
   useEffect(() => {
@@ -291,6 +336,27 @@ export function MessengerPage() {
     currentProfile: profile,
     profilesById,
   });
+
+
+  function startEditFromContextMenu(message: MessageResponseDto | null) {
+    if (!message) {
+      return;
+    }
+
+    const plainText = decryptedMessagesById[message.messageId];
+
+    if (!isMessageEditable(message, profile?.accountId, plainText)) {
+      closeMessageContextMenu();
+      return;
+    }
+
+    setEditDraft({ message, plainText });
+    setMessageText(getEditableMessageText(plainText));
+    setReplyDraft(null);
+    setForwardDraftItems([]);
+    setPendingAttachments([]);
+    closeMessageContextMenu();
+  }
 
   const {
     handleClearSelectedChatHistory,
@@ -374,11 +440,13 @@ export function MessengerPage() {
     replyDraft,
     forwardDraftItems,
     pendingAttachments,
+    editDraft,
     isSelectedChatWritable,
     setMessageText,
     setReplyDraft,
     setForwardDraftItems,
     setPendingAttachments,
+    setEditDraft,
     setIsUploadingFile,
     setErrorMessage,
     uploadPendingAttachment,
@@ -484,6 +552,8 @@ export function MessengerPage() {
     handleUnblockProfile,
     handleAddGroupParticipant,
     handleRemoveGroupParticipant,
+    handleLeaveGroup,
+    handleRejoinGroup,
   } = useGroupChatController({
     selectedChatId,
     selectedChat,
@@ -613,6 +683,7 @@ export function MessengerPage() {
         isDeleteChatConfirmOpen={isDeleteChatConfirmOpen}
         isBlockUserConfirmOpen={isBlockUserConfirmOpen}
         isClearHistoryConfirmOpen={isClearHistoryConfirmOpen}
+        isLeaveGroupConfirmOpen={isLeaveGroupConfirmOpen}
         droppedImageFiles={droppedImageFiles}
         isDraggingFileOverChat={isDraggingFileOverChat}
         isSelectedChatWritable={isSelectedChatWritable}
@@ -621,9 +692,11 @@ export function MessengerPage() {
         onCloseDeleteChatConfirm={() => setIsDeleteChatConfirmOpen(false)}
         onCloseBlockUserConfirm={() => setIsBlockUserConfirmOpen(false)}
         onCloseClearHistoryConfirm={() => setIsClearHistoryConfirmOpen(false)}
+        onCloseLeaveGroupConfirm={() => setIsLeaveGroupConfirmOpen(false)}
         onClearSelectedChatHistory={handleClearSelectedChatHistory}
         onDeleteSelectedChatLocally={(options) => void handleDeleteSelectedChat(options)}
         onBlockDirectCompanion={() => void handleBlockSelectedDirectChat()}
+        onLeaveGroup={() => void handleLeaveGroup()}
         onSendDroppedImages={(attachmentDisplayMode) => void sendDroppedImages(attachmentDisplayMode)}
         onClearDroppedImageFiles={() => setDroppedImageFiles([])}
         onCloseDraggingFileOverlay={() => setIsDraggingFileOverChat(false)}
@@ -670,6 +743,7 @@ export function MessengerPage() {
               onOpenDirectProfile={() => selectedChatPresentation.companionProfile && setMiniProfile(selectedChatPresentation.companionProfile)}
               onToggleChatActionsMenu={() => setIsChatActionsMenuOpen((previousValue) => !previousValue)}
               isPinned={Boolean((localChatState.pinnedChatIds ?? []).includes(selectedChat.chatId))}
+              canLeaveGroup={selectedChat.type === 'GROUP' && selectedGroupParticipant?.status === 'ACTIVE' && selectedGroupParticipant.role !== 'OWNER'}
               onTogglePinned={handleToggleSelectedChatPinned}
               onClearSelectedChatHistory={() => {
                 setIsChatActionsMenuOpen(false);
@@ -687,11 +761,17 @@ export function MessengerPage() {
                 setIsChatActionsMenuOpen(false);
                 void handleUnblockSelectedDirectChat();
               }}
+              onLeaveGroup={() => {
+                setIsChatActionsMenuOpen(false);
+                setIsLeaveGroupConfirmOpen(true);
+              }}
             />
 
             <ChatAlerts
               errorMessage={errorMessage}
               isGroupChatReadOnly={selectedChat.type === 'GROUP' && !isSelectedChatWritable}
+              isGroupChatLeft={isSelectedGroupChatLeft}
+              onRejoinGroup={() => void handleRejoinGroup()}
               directBlockNotice={directBlockNotice}
               canUnblockDirectChat={isSelectedDirectChatBlockedByCurrentAccount}
               onUnblockDirectChat={() => void handleUnblockSelectedDirectChat()}
@@ -754,6 +834,8 @@ export function MessengerPage() {
                   downloadableAttachment={contextDownloadableAttachment}
                   onReply={startReplyFromContextMenu}
                   onForward={startForwardFromContextMenu}
+                  onEdit={startEditFromContextMenu}
+                  canEdit={isMessageEditable(contextMessage, profile?.accountId, contextMessage ? decryptedMessagesById[contextMessage.messageId] : undefined)}
                   onDownload={(attachment) => {
                     closeMessageContextMenu();
                     void handleDownloadAttachment(attachment);
@@ -772,11 +854,16 @@ export function MessengerPage() {
               forwardSelection={forwardSelection}
               forwardDraftItems={forwardDraftItems}
               replyDraft={replyDraft}
+              editPreviewText={editDraft ? getMessageContentPreview(editDraft.plainText) : null}
               pendingAttachments={pendingAttachments}
               onCancelForwardSelection={cancelForwardSelection}
               onOpenForwardChatPicker={openForwardChatPicker}
               onCancelReply={() => setReplyDraft(null)}
               onCancelForwardDraft={() => setForwardDraftItems([])}
+              onCancelEdit={() => {
+                setEditDraft(null);
+                setMessageText('');
+              }}
               onRemovePendingAttachment={removePendingAttachment}
               onMessageTextChange={handleMessageTextChange}
               onMessageBlur={() => sendCurrentTypingState(false)}

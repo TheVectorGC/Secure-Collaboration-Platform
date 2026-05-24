@@ -84,6 +84,18 @@ public class ChatController {
         return ResponseEntity.ok(chatService.removeGroupParticipant(currentAccountService.getCurrentAccountId(), chatId, participantAccountId));
     }
 
+    @Operation(summary = "Leave a group", description = "Marks the current account as left and closes access to future group messages.")
+    @PostMapping("/{chatId}/leave")
+    public ResponseEntity<ChatResponseDto> leaveGroup(@PathVariable UUID chatId) {
+        return ResponseEntity.ok(chatService.leaveGroup(currentAccountService.getCurrentAccountId(), chatId));
+    }
+
+    @Operation(summary = "Return to a group", description = "Reactivates the current account after self-leaving the group. History is visible only from the return moment.")
+    @PostMapping("/{chatId}/rejoin")
+    public ResponseEntity<ChatResponseDto> rejoinGroup(@PathVariable UUID chatId) {
+        return ResponseEntity.ok(chatService.rejoinGroup(currentAccountService.getCurrentAccountId(), chatId));
+    }
+
     @Operation(summary = "Update group avatar", description = "Updates or clears the group avatar data URL.")
     @PutMapping("/{chatId}/avatar")
     public ResponseEntity<ChatResponseDto> updateGroupAvatar(

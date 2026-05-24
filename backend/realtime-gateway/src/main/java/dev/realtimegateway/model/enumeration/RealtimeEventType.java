@@ -2,6 +2,7 @@ package dev.realtimegateway.model.enumeration;
 
 public enum RealtimeEventType {
     MESSAGE_CREATED,
+    MESSAGE_EDITED,
     MESSAGE_DELIVERED,
     MESSAGE_READ,
     MESSAGE_REACTION_UPDATED,

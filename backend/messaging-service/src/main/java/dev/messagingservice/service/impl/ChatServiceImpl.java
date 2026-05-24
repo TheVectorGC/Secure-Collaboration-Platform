@@ -223,6 +223,80 @@ public class ChatServiceImpl implements ChatService {
 
     @Override
     @Transactional
+    public ChatResponseDto leaveGroup(UUID currentAccountId, UUID chatId) {
+        ChatEntity chatEntity = getGroupChatForMembershipChange(chatId);
+        ChatParticipantEntity participantEntity = chatParticipantRepository.findByChatIdAndAccountId(chatId, currentAccountId)
+                .orElseThrow(() -> new ChatAccessDeniedException("Current account is not a group participant."));
+
+        if (participantEntity.getStatus() == ChatParticipantStatus.LEFT) {
+            return chatMapper.toChatResponse(chatEntity, loadParticipantsForResponse(chatId));
+        }
+
+        if (participantEntity.getStatus() != ChatParticipantStatus.ACTIVE) {
+            throw new ChatAccessDeniedException("Only active group participants can leave the group.");
+        }
+
+        if (participantEntity.getRole() == ChatParticipantRole.OWNER) {
+            throw new ChatAccessDeniedException("Group owner cannot leave the group until ownership transfer is implemented.");
+        }
+
+        OffsetDateTime now = OffsetDateTime.now();
+        List<UUID> recipientAccountIdsBeforeLeave = activeRecipientAccountIds(chatParticipantRepository.findByChatIdAndStatus(chatId, ChatParticipantStatus.ACTIVE));
+        createAndPublishSystemMessage(chatEntity, currentAccountId, "MEMBER_LEFT", currentAccountId, recipientAccountIdsBeforeLeave, now);
+
+        participantEntity.setStatus(ChatParticipantStatus.LEFT);
+        participantEntity.setRemovedAt(now);
+        chatParticipantRepository.save(participantEntity);
+        closeOpenVisibilityWindow(participantEntity, now);
+        rotateGroupKeyEpoch(chatEntity, now);
+
+        List<ChatParticipantEntity> participantEntities = chatParticipantRepository.findByChatId(chatId);
+        List<UUID> recipientAccountIdsAfterLeave = participantEntities.stream()
+                .filter(participant -> participant.getStatus() == ChatParticipantStatus.ACTIVE || participant.getAccountId().equals(currentAccountId))
+                .map(ChatParticipantEntity::getAccountId)
+                .toList();
+        ChatResponseDto responseDto = chatMapper.toChatResponse(chatEntity, participantEntities);
+        publishChatUpdatedEvent(responseDto, recipientAccountIdsAfterLeave);
+        log.info("Group participant left. Chat ID: {}, account ID: {}.", chatId, currentAccountId);
+        return responseDto;
+    }
+
+    @Override
+    @Transactional
+    public ChatResponseDto rejoinGroup(UUID currentAccountId, UUID chatId) {
+        ChatEntity chatEntity = getGroupChatForMembershipChange(chatId);
+        ChatParticipantEntity participantEntity = chatParticipantRepository.findByChatIdAndAccountId(chatId, currentAccountId)
+                .orElseThrow(() -> new ChatAccessDeniedException("Current account is not a group participant."));
+
+        if (participantEntity.getStatus() == ChatParticipantStatus.ACTIVE) {
+            return chatMapper.toChatResponse(chatEntity, loadParticipantsForResponse(chatId));
+        }
+
+        if (participantEntity.getStatus() != ChatParticipantStatus.LEFT) {
+            throw new ChatAccessDeniedException("Only participants who left the group themselves can return.");
+        }
+
+        OffsetDateTime now = OffsetDateTime.now();
+        participantEntity.setStatus(ChatParticipantStatus.ACTIVE);
+        participantEntity.setJoinedAt(now);
+        participantEntity.setRemovedAt(null);
+        participantEntity.setHistoryVisibleFromMessageId(null);
+        participantEntity.setHistoryVisibleFromCreatedAt(now);
+        chatParticipantRepository.save(participantEntity);
+        openVisibilityWindow(chatId, currentAccountId, now, now);
+        rotateGroupKeyEpoch(chatEntity, now);
+
+        List<ChatParticipantEntity> participantEntities = chatParticipantRepository.findByChatId(chatId);
+        List<UUID> recipientAccountIds = activeRecipientAccountIds(participantEntities);
+        createAndPublishSystemMessage(chatEntity, currentAccountId, "MEMBER_REJOINED", currentAccountId, recipientAccountIds, now.plusNanos(1L));
+        ChatResponseDto responseDto = chatMapper.toChatResponse(chatEntity, participantEntities);
+        publishChatUpdatedEvent(responseDto, recipientAccountIds);
+        log.info("Group participant returned. Chat ID: {}, account ID: {}.", chatId, currentAccountId);
+        return responseDto;
+    }
+
+    @Override
+    @Transactional
     public ChatResponseDto updateGroupAvatar(UUID currentAccountId, UUID chatId, UpdateGroupAvatarRequestDto requestDto) {
         ChatEntity chatEntity = getGroupChatForAdministration(currentAccountId, chatId);
         OffsetDateTime now = OffsetDateTime.now();
@@ -239,7 +313,7 @@ public class ChatServiceImpl implements ChatService {
     @Override
     @Transactional
     public void upsertGroupEpochKeyEnvelope(UUID currentAccountId, UUID chatId, UpsertGroupEpochKeyEnvelopeRequestDto requestDto) {
-        ChatEntity chatEntity = getGroupChatForAdministration(currentAccountId, chatId);
+        ChatEntity chatEntity = getGroupChatForEpochEnvelopeSharing(currentAccountId, chatId);
         validateGroupEpochEnvelopeRequest(chatEntity, chatId, requestDto);
         GroupEpochKeyEnvelopeEntity existingEnvelopeEntity = groupEpochKeyEnvelopeRepository
                 .findByChatIdAndEpochAndTargetAccountId(chatId, requestDto.epoch(), requestDto.targetAccountId())
@@ -378,6 +452,10 @@ public class ChatServiceImpl implements ChatService {
     }
 
     private ChatParticipantEntity reactivateParticipant(ChatParticipantEntity existingParticipant, HistoryBoundary historyBoundary, OffsetDateTime now) {
+        if (existingParticipant.getStatus() == ChatParticipantStatus.LEFT) {
+            throw new ChatAccessDeniedException("Participant left the group and must return by themselves.");
+        }
+
         existingParticipant.setStatus(ChatParticipantStatus.ACTIVE);
         existingParticipant.setJoinedAt(now);
         existingParticipant.setRemovedAt(null);
@@ -445,6 +523,29 @@ public class ChatServiceImpl implements ChatService {
         return chatEntity;
     }
 
+    private ChatEntity getGroupChatForMembershipChange(UUID chatId) {
+        ChatEntity chatEntity = chatRepository.findById(chatId)
+                .orElseThrow(() -> new ChatNotFoundException("Chat with ID '" + chatId + "' not found."));
+
+        if (chatEntity.getType() != ChatType.GROUP) {
+            throw new ChatAccessDeniedException("This operation is available only for group chats.");
+        }
+
+        return chatEntity;
+    }
+
+    private ChatEntity getGroupChatForEpochEnvelopeSharing(UUID currentAccountId, UUID chatId) {
+        ChatEntity chatEntity = getGroupChatForMembershipChange(chatId);
+        ChatParticipantEntity currentParticipant = chatParticipantRepository.findByChatIdAndAccountId(chatId, currentAccountId)
+                .orElseThrow(() -> new ChatAccessDeniedException("Current account is not a group participant."));
+
+        if (currentParticipant.getStatus() != ChatParticipantStatus.ACTIVE) {
+            throw new ChatAccessDeniedException("Only active group participants can share group epoch keys.");
+        }
+
+        return chatEntity;
+    }
+
     private void rotateGroupKeyEpoch(ChatEntity chatEntity, OffsetDateTime now) {
         chatEntity.setCurrentKeyEpoch((chatEntity.getCurrentKeyEpoch() == null ? 1 : chatEntity.getCurrentKeyEpoch()) + 1);
         chatEntity.setUpdatedAt(now);
@@ -452,12 +553,8 @@ public class ChatServiceImpl implements ChatService {
     }
 
     private void validateKnownParticipant(UUID chatId, UUID accountId) {
-        ChatParticipantEntity participantEntity = chatParticipantRepository.findByChatIdAndAccountId(chatId, accountId)
+        chatParticipantRepository.findByChatIdAndAccountId(chatId, accountId)
                 .orElseThrow(() -> new ChatAccessDeniedException("Current account does not have access to this chat."));
-
-        if (participantEntity.getStatus() == ChatParticipantStatus.LEFT) {
-            throw new ChatAccessDeniedException("Current account does not have access to this chat.");
-        }
     }
 
     private void updateVisibilityWindows(UUID chatId, AddGroupParticipantRequestDto requestDto, HistoryBoundary historyBoundary, OffsetDateTime now) {
@@ -537,6 +634,7 @@ public class ChatServiceImpl implements ChatService {
                 .encryptionType(MessageEncryptionType.NONE)
                 .encryptedPayload(createSystemMessagePayload(chatEntity, actorAccountId, systemEventType, targetAccountId))
                 .createdAt(now)
+                .editVersion(0)
                 .build();
         MessageEntity savedMessageEntity = messageRepository.save(messageEntity);
         chatEntity.setUpdatedAt(now);

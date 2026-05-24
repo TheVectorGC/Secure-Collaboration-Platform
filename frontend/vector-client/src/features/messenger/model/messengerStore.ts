@@ -33,6 +33,7 @@ type MessengerState = {
   selectChat: (chatId: string) => void;
   setMessages: (chatId: string, messages: MessageResponseDto[]) => void;
   upsertMessage: (message: MessageResponseDto) => void;
+  applyMessageEdited: (message: MessageResponseDto) => void;
   applyMessageDelivered: (chatId: string, messageId: string, accountId: string, deliveredAt: string) => void;
   applyMessageRead: (chatId: string, lastReadMessageId: string, readMessageIds: string[], accountId: string, readAt: string) => void;
   applyMessageReaction: (chatId: string, messageId: string, accountId: string, emoji: string | null, updatedAt: string) => void;
@@ -92,6 +93,39 @@ export const useMessengerStore = create<MessengerState>((set) => ({
         messagesByChatId: {
           ...state.messagesByChatId,
           [message.chatId]: sortMessages(nextMessages),
+        },
+      };
+    }),
+
+
+  applyMessageEdited: (message) =>
+    set((state) => {
+      const currentMessages = state.messagesByChatId[message.chatId] ?? [];
+
+      return {
+        messagesByChatId: {
+          ...state.messagesByChatId,
+          [message.chatId]: currentMessages.map((currentMessage) => {
+            if (currentMessage.messageId !== message.messageId) {
+              return currentMessage;
+            }
+
+            return {
+              ...currentMessage,
+              senderDeviceId: message.senderDeviceId,
+              encryptionType: message.encryptionType,
+              encryptedPayload: message.encryptedPayload,
+              contentAlgorithm: message.contentAlgorithm,
+              contentInitializationVectorBase64: message.contentInitializationVectorBase64,
+              contentAuthenticationTagBase64: message.contentAuthenticationTagBase64,
+              groupKeyEpoch: message.groupKeyEpoch,
+              devicePayloads: message.devicePayloads,
+              accountKeyEnvelopes: message.accountKeyEnvelopes,
+              groupEpochKeyEnvelope: message.groupEpochKeyEnvelope,
+              editedAt: message.editedAt ?? null,
+              editVersion: message.editVersion ?? ((currentMessage.editVersion ?? 0) + 1),
+            };
+          }),
         },
       };
     }),

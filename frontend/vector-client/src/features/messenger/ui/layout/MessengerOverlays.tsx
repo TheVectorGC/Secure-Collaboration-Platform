@@ -11,6 +11,7 @@ type MessengerOverlaysProps = {
   isDeleteChatConfirmOpen: boolean;
   isBlockUserConfirmOpen: boolean;
   isClearHistoryConfirmOpen: boolean;
+  isLeaveGroupConfirmOpen: boolean;
   droppedImageFiles: File[];
   isDraggingFileOverChat: boolean;
   isSelectedChatWritable: boolean;
@@ -19,9 +20,11 @@ type MessengerOverlaysProps = {
   onCloseDeleteChatConfirm: () => void;
   onCloseBlockUserConfirm: () => void;
   onCloseClearHistoryConfirm: () => void;
+  onCloseLeaveGroupConfirm: () => void;
   onClearSelectedChatHistory: () => void;
   onDeleteSelectedChatLocally: (options?: { blockedAccountId?: string | null }) => void | Promise<void>;
   onBlockDirectCompanion: () => void | Promise<void>;
+  onLeaveGroup: () => void | Promise<void>;
   onSendDroppedImages: (attachmentDisplayMode: ChatAttachmentDisplayMode) => void;
   onClearDroppedImageFiles: () => void;
   onCloseDraggingFileOverlay: () => void;
@@ -34,6 +37,7 @@ export function MessengerOverlays({
   isDeleteChatConfirmOpen,
   isBlockUserConfirmOpen,
   isClearHistoryConfirmOpen,
+  isLeaveGroupConfirmOpen,
   droppedImageFiles,
   isDraggingFileOverChat,
   isSelectedChatWritable,
@@ -42,9 +46,11 @@ export function MessengerOverlays({
   onCloseDeleteChatConfirm,
   onCloseBlockUserConfirm,
   onCloseClearHistoryConfirm,
+  onCloseLeaveGroupConfirm,
   onClearSelectedChatHistory,
   onDeleteSelectedChatLocally,
   onBlockDirectCompanion,
+  onLeaveGroup,
   onSendDroppedImages,
   onClearDroppedImageFiles,
   onCloseDraggingFileOverlay,
@@ -68,6 +74,11 @@ export function MessengerOverlays({
   function confirmBlockUser() {
     void onBlockDirectCompanion();
     onCloseBlockUserConfirm();
+  }
+
+  function confirmLeaveGroup() {
+    void onLeaveGroup();
+    onCloseLeaveGroupConfirm();
   }
 
   return (
@@ -121,6 +132,33 @@ export function MessengerOverlays({
                 className="rounded-2xl bg-amber-500/90 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-400"
               >
                 Заблокировать
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isLeaveGroupConfirmOpen && selectedChat?.type === 'GROUP' && (
+        <div className="absolute inset-0 z-[110] flex items-center justify-center bg-black/60 p-4 backdrop-blur-md">
+          <div className="vector-surface-card w-full max-w-md p-5">
+            <div className="text-lg font-semibold text-white">Покинуть группу?</div>
+            <div className="mt-2 text-sm leading-6 text-zinc-400">
+              Новые сообщения станут недоступны. Чат останется в списке, и вы сможете вернуться позже самостоятельно.
+            </div>
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={onCloseLeaveGroupConfirm}
+                className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-zinc-300 transition hover:bg-white/[0.06] hover:text-white"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                onClick={confirmLeaveGroup}
+                className="rounded-2xl bg-amber-500/90 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-400"
+              >
+                Покинуть
               </button>
             </div>
           </div>

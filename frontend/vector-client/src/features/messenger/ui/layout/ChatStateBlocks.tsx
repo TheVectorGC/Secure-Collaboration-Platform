@@ -19,6 +19,8 @@ export function EmptyChatState() {
 type ChatAlertsProps = {
   errorMessage: string | null;
   isGroupChatReadOnly: boolean;
+  isGroupChatLeft?: boolean;
+  onRejoinGroup?: () => void;
   directBlockNotice?: string | null;
   canUnblockDirectChat?: boolean;
   onUnblockDirectChat?: () => void;
@@ -28,6 +30,8 @@ type ChatAlertsProps = {
 export function ChatAlerts({
   errorMessage,
   isGroupChatReadOnly,
+  isGroupChatLeft = false,
+  onRejoinGroup,
   directBlockNotice,
   canUnblockDirectChat = false,
   onUnblockDirectChat,
@@ -52,8 +56,21 @@ export function ChatAlerts({
       )}
 
       {isGroupChatReadOnly && (
-        <div className="border-b border-amber-300/20 bg-amber-500/10 px-7 py-3 text-sm text-amber-100 shadow-lg shadow-amber-950/10">
-          Вы исключены из группы. Вы можете читать доступную историю, но отправка сообщений, файлов и документов отключена.
+        <div className="flex items-center justify-between gap-4 border-b border-amber-300/20 bg-amber-500/10 px-7 py-3 text-sm text-amber-100 shadow-lg shadow-amber-950/10">
+          <span>
+            {isGroupChatLeft
+              ? 'Вы покинули группу. Новые сообщения недоступны, но вы можете вернуться в чат.'
+              : 'Вы исключены из группы. Вы можете читать доступную историю, но отправка сообщений, файлов и документов отключена.'}
+          </span>
+          {isGroupChatLeft && onRejoinGroup && (
+            <button
+              type="button"
+              onClick={onRejoinGroup}
+              className="rounded-2xl border border-amber-200/20 px-3 py-1.5 text-xs font-semibold text-amber-50 transition hover:bg-amber-200/10"
+            >
+              Вернуться
+            </button>
+          )}
         </div>
       )}
 

@@ -1,5 +1,5 @@
 import { KeyboardEvent, useMemo, useState } from 'react';
-import { FileText, Image as ImageIcon, LoaderCircle, MessageSquare, Paperclip, Send, Smile, Sparkles, X } from 'lucide-react';
+import { Edit3, FileText, Image as ImageIcon, LoaderCircle, MessageSquare, Paperclip, Send, Smile, Sparkles, X } from 'lucide-react';
 
 export type ChatAttachmentDisplayMode = 'FILE' | 'IMAGE';
 
@@ -10,6 +10,10 @@ export type ComposerReplyPreview = {
 
 export type ComposerForwardPreview = {
   count: number;
+};
+
+export type ComposerEditPreview = {
+  preview: string;
 };
 
 export type ComposerPendingAttachment = {
@@ -66,10 +70,12 @@ type ChatComposerProps = {
   onAppendEmoji: (emoji: string) => void;
   replyPreview?: ComposerReplyPreview | null;
   forwardPreview?: ComposerForwardPreview | null;
+  editPreview?: ComposerEditPreview | null;
   pendingAttachments?: ComposerPendingAttachment[];
   canSendWithoutText?: boolean;
   onCancelReply?: () => void;
   onCancelForward?: () => void;
+  onCancelEdit?: () => void;
   onRemovePendingAttachment?: (attachmentId: string) => void;
   onSendCurrentMessage: () => Promise<void>;
 };
@@ -111,10 +117,12 @@ export function ChatComposer({
   onAppendEmoji,
   replyPreview,
   forwardPreview,
+  editPreview,
   pendingAttachments = [],
   canSendWithoutText = false,
   onCancelReply,
   onCancelForward,
+  onCancelEdit,
   onRemovePendingAttachment,
   onSendCurrentMessage,
 }: ChatComposerProps) {
@@ -159,8 +167,27 @@ export function ChatComposer({
           id="vector-composer-image-input"
         />
 
-        {(replyPreview || forwardPreview || pendingAttachments.length > 0) && (
+        {(replyPreview || forwardPreview || editPreview || pendingAttachments.length > 0) && (
           <div className="mb-3 space-y-2">
+            {editPreview && (
+              <div className="flex items-center gap-3 rounded-3xl border border-sky-300/18 bg-sky-500/10 px-4 py-3 shadow-lg shadow-sky-950/10">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-sky-400/15 text-sky-200">
+                  <Edit3 size={18} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-200/80">Редактирование</div>
+                  <div className="mt-0.5 truncate text-xs text-zinc-400">{editPreview.preview}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={onCancelEdit}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl text-zinc-400 transition hover:bg-white/[0.08] hover:text-white"
+                  title="Отменить редактирование"
+                >
+                  <X size={17} />
+                </button>
+              </div>
+            )}
             {replyPreview && (
               <div className="flex items-center gap-3 rounded-3xl border border-violet-300/18 bg-violet-500/10 px-4 py-3 shadow-lg shadow-violet-950/10">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-violet-400/15 text-violet-200">

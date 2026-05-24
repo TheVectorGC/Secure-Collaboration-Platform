@@ -1,6 +1,6 @@
 import type { RefObject } from 'react';
 import { createPortal } from 'react-dom';
-import { Download, MessageSquare, Send } from 'lucide-react';
+import { Download, Edit3, MessageSquare, Send } from 'lucide-react';
 import type { DocumentAttachmentMessageContent, FileAttachmentMessageContent, MessageResponseDto } from '../../../../shared/types/api';
 import { QUICK_REACTION_ITEMS, type MessageContextMenuState } from '../../lib/messengerCore';
 
@@ -12,6 +12,8 @@ type MessageContextMenuProps = {
   downloadableAttachment: FileAttachmentMessageContent | DocumentAttachmentMessageContent | null;
   onReply: (message: MessageResponseDto | null) => void;
   onForward: (message: MessageResponseDto | null) => void;
+  onEdit: (message: MessageResponseDto | null) => void;
+  canEdit: boolean;
   onDownload: (attachment: FileAttachmentMessageContent | DocumentAttachmentMessageContent) => void;
   onReact: (messageId: string, emoji: string) => void;
 };
@@ -24,6 +26,8 @@ export function MessageContextMenu({
   downloadableAttachment,
   onReply,
   onForward,
+  onEdit,
+  canEdit,
   onDownload,
   onReact,
 }: MessageContextMenuProps) {
@@ -59,6 +63,16 @@ export function MessageContextMenu({
         <MessageSquare size={17} className="text-violet-200" />
         <span>Ответить</span>
       </button>
+      {canEdit && (
+        <button
+          type="button"
+          onClick={() => onEdit(contextMessage)}
+          className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition hover:bg-white/[0.08]"
+        >
+          <Edit3 size={17} className="text-sky-200" />
+          <span>Редактировать</span>
+        </button>
+      )}
       <button
         type="button"
         onClick={() => onForward(contextMessage)}

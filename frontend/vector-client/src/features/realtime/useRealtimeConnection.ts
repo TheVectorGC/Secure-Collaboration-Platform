@@ -5,6 +5,7 @@ import type {
   ChatUpdatedPayload,
   DocumentChangedPayload,
   MessageCreatedPayload,
+  MessageEditedPayload,
   MessageDeliveredPayload,
   MessageReadPayload,
   MessageReactionUpdatedPayload,
@@ -46,6 +47,12 @@ function isMessageCreatedPayload(payload: unknown): payload is MessageCreatedPay
       || payload.encryptedPayload === null
       || Array.isArray(payload.devicePayloads)
     );
+}
+
+function isMessageEditedPayload(payload: unknown): payload is MessageEditedPayload {
+  return isMessageCreatedPayload(payload)
+    && typeof payload.editedAt === 'string'
+    && typeof payload.editVersion === 'number';
 }
 
 function isChatUpdatedPayload(payload: unknown): payload is ChatUpdatedPayload {
@@ -190,6 +197,7 @@ export function useRealtimeConnection() {
   const setChats = useMessengerStore((state) => state.setChats);
   const setMessages = useMessengerStore((state) => state.setMessages);
   const touchChat = useMessengerStore((state) => state.touchChat);
+  const applyMessageEdited = useMessengerStore((state) => state.applyMessageEdited);
   const applyMessageDelivered = useMessengerStore((state) => state.applyMessageDelivered);
   const applyMessageRead = useMessengerStore((state) => state.applyMessageRead);
   const applyMessageReaction = useMessengerStore((state) => state.applyMessageReaction);
@@ -307,34 +315,44 @@ export function useRealtimeConnection() {
       }
     }
 
+    function buildMessageFromRealtimePayload(payload: MessageCreatedPayload | MessageEditedPayload): MessageResponseDto {
+      return {
+        messageId: payload.messageId,
+        chatId: payload.chatId,
+        senderAccountId: payload.senderAccountId,
+        senderDeviceId: payload.senderDeviceId,
+        clientMessageId: payload.clientMessageId ?? null,
+        messageType: payload.messageType,
+        encryptionType: payload.encryptionType,
+        encryptedPayload: payload.encryptedPayload ?? null,
+        contentAlgorithm: payload.contentAlgorithm ?? null,
+        contentInitializationVectorBase64: payload.contentInitializationVectorBase64 ?? null,
+        contentAuthenticationTagBase64: payload.contentAuthenticationTagBase64 ?? null,
+        groupKeyEpoch: payload.groupKeyEpoch ?? null,
+        devicePayloads: payload.devicePayloads ?? [],
+        accountKeyEnvelopes: payload.accountKeyEnvelopes ?? [],
+        groupEpochKeyEnvelope: payload.groupEpochKeyEnvelope ?? null,
+        createdAt: payload.createdAt,
+        editedAt: 'editedAt' in payload ? payload.editedAt : null,
+        editVersion: 'editVersion' in payload ? payload.editVersion : 0,
+        deliveryStates: [],
+        reactions: [],
+      };
+    }
+
     function handleRealtimeEvent(realtimeEvent: RealtimeEventDto) {
       if (realtimeEvent.type === 'MESSAGE_CREATED' && isMessageCreatedPayload(realtimeEvent.payload)) {
         const payload = realtimeEvent.payload;
-        const devicePayloads = payload.devicePayloads ?? [];
-        const message: MessageResponseDto = {
-          messageId: payload.messageId,
-          chatId: payload.chatId,
-          senderAccountId: payload.senderAccountId,
-          senderDeviceId: payload.senderDeviceId,
-          clientMessageId: payload.clientMessageId ?? null,
-          messageType: payload.messageType,
-          encryptionType: payload.encryptionType,
-          encryptedPayload: payload.encryptedPayload ?? null,
-          contentAlgorithm: payload.contentAlgorithm ?? null,
-          contentInitializationVectorBase64: payload.contentInitializationVectorBase64 ?? null,
-          contentAuthenticationTagBase64: payload.contentAuthenticationTagBase64 ?? null,
-          groupKeyEpoch: payload.groupKeyEpoch ?? null,
-          devicePayloads,
-          accountKeyEnvelopes: payload.accountKeyEnvelopes ?? [],
-          groupEpochKeyEnvelope: payload.groupEpochKeyEnvelope ?? null,
-          createdAt: payload.createdAt,
-          deliveryStates: [],
-          reactions: [],
-        };
+        const message = buildMessageFromRealtimePayload(payload);
 
         upsertMessage(message);
         touchChat(payload.chatId, payload.createdAt, payload.messageId);
 
+        return;
+      }
+
+      if (realtimeEvent.type === 'MESSAGE_EDITED' && isMessageEditedPayload(realtimeEvent.payload)) {
+        applyMessageEdited(buildMessageFromRealtimePayload(realtimeEvent.payload));
         return;
       }
 
@@ -486,18 +504,30 @@ export function useRealtimeConnection() {
       };
 
       webSocket.onerror = () => {
+        clientLogger.warn('Realtime WebSocket error.', {}, {
+          dedupeKey: 'realtime-websocket-error',
+          throttleMs: 30000,
+        });
         setLastError('Ошибка realtime-соединения.');
       };
 
       webSocket.onclose = (event) => {
-        if (webSocketRef.current === webSocket) {
+        const isCurrentWebSocket = webSocketRef.current === webSocket;
+
+        if (isCurrentWebSocket) {
           webSocketRef.current = null;
         }
 
         clearHeartbeatTimers();
 
         if (isClosedByEffect) {
-          setStatus('disconnected');
+          if (isCurrentWebSocket) {
+            setStatus('disconnected');
+          }
+          return;
+        }
+
+        if (!isCurrentWebSocket) {
           return;
         }
 
@@ -508,6 +538,14 @@ export function useRealtimeConnection() {
 
         reconnectAttemptRef.current += 1;
         setStatus('reconnecting');
+        clientLogger.warn('Realtime connection closed unexpectedly.', {
+          code: event.code,
+          reason: event.reason,
+          wasClean: event.wasClean,
+        }, {
+          dedupeKey: `realtime-close:${event.code}:${event.reason}`,
+          throttleMs: 30000,
+        });
         const reconnectDelay = Math.min(1000 * reconnectAttemptRef.current, 5000);
         reconnectTimeoutRef.current = window.setTimeout(connect, reconnectDelay);
       };
@@ -558,6 +596,7 @@ export function useRealtimeConnection() {
   }, [
     accessToken,
     accessTokenExpiresAt,
+    applyMessageEdited,
     applyMessageDelivered,
     applyMessageRead,
     applyMessageReaction,

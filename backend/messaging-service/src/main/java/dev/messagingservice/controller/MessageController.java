@@ -1,6 +1,7 @@
 package dev.messagingservice.controller;
 
 import dev.messagingservice.model.dto.error.ApiErrorResponseDto;
+import dev.messagingservice.model.dto.request.EditMessageRequestDto;
 import dev.messagingservice.model.dto.request.MarkChatReadRequestDto;
 import dev.messagingservice.model.dto.request.SendMessageRequestDto;
 import dev.messagingservice.model.dto.request.SetMessageReactionRequestDto;
@@ -62,6 +63,16 @@ public class MessageController {
         return ResponseEntity.ok(messageService.getChatMessages(currentAccountService.getCurrentAccountId(), chatId));
     }
 
+
+    @Operation(summary = "Edit an encrypted text message", description = "Replaces the encrypted payload of the current account text message during the edit window.")
+    @PatchMapping("/{messageId}")
+    public ResponseEntity<MessageResponseDto> editMessage(
+            @PathVariable UUID chatId,
+            @PathVariable UUID messageId,
+            @Valid @RequestBody EditMessageRequestDto requestDto
+    ) {
+        return ResponseEntity.ok(messageService.editMessage(currentAccountService.getCurrentAccountId(), chatId, messageId, requestDto));
+    }
 
     @Operation(summary = "Set message reaction", description = "Creates or replaces the current account reaction for one visible message.")
     @PutMapping("/{messageId}/reaction")

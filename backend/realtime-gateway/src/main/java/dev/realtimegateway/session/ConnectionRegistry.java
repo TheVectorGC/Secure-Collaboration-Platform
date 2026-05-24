@@ -164,8 +164,12 @@ public class ConnectionRegistry {
                 webSocketSession.sendMessage(new TextMessage(serializedEvent));
             }
         }
-        catch (IOException | IllegalStateException exception) {
-            log.warn("Failed to send WebSocket message. sessionId={}.", webSocketSession.getId(), exception);
+        catch (IOException exception) {
+            log.debug("WebSocket message was not sent because the session was already closed. sessionId={}, reason={}.", webSocketSession.getId(), exception.getMessage());
+            unregister(webSocketSession);
+        }
+        catch (IllegalStateException exception) {
+            log.debug("WebSocket message was not sent because the session is not writable. sessionId={}, reason={}.", webSocketSession.getId(), exception.getMessage());
             unregister(webSocketSession);
         }
         finally {
