@@ -76,7 +76,6 @@ public class ChatServiceImpl implements ChatService {
             return createOrGetSelfChat(currentAccountId);
         }
 
-        accountBlockService.ensureDirectMessagingAllowed(currentAccountId, requestDto.recipientAccountId());
         String directChatKey = createDirectChatKey(currentAccountId, requestDto.recipientAccountId());
         return chatRepository.findByDirectChatKey(directChatKey)
                 .map(chatEntity -> withDirectBlockState(currentAccountId, chatMapper.toChatResponse(chatEntity, loadActiveParticipants(chatEntity.getId()))))
@@ -247,6 +246,7 @@ public class ChatServiceImpl implements ChatService {
                 .orElse(null);
 
         if (existingEnvelopeEntity != null) {
+            publishGroupEpochKeysAvailableEvent(chatId, requestDto.epoch(), requestDto.targetAccountId(), currentAccountId);
             log.debug(
                     "Group epoch key envelope already exists. Treating request as idempotent no-op. Chat ID: {}, epoch: {}, target account ID: {}.",
                     chatId,
@@ -268,6 +268,7 @@ public class ChatServiceImpl implements ChatService {
                 .updatedAt(now)
                 .build();
         groupEpochKeyEnvelopeRepository.save(envelopeEntity);
+        publishGroupEpochKeysAvailableEvent(chatId, requestDto.epoch(), requestDto.targetAccountId(), currentAccountId);
         log.debug("Group epoch key envelope stored. Chat ID: {}, epoch: {}, target account ID: {}.", chatId, requestDto.epoch(), requestDto.targetAccountId());
     }
 
@@ -626,6 +627,16 @@ public class ChatServiceImpl implements ChatService {
                 currentAccountBlockedCompanion,
                 companionBlockedCurrentAccount
         );
+    }
+
+    private void publishGroupEpochKeysAvailableEvent(UUID chatId, Integer epoch, UUID targetAccountId, UUID senderAccountId) {
+        messagingEventPublisher.publish(messagingEventFactory.createGroupEpochKeysAvailableEvent(
+                chatId,
+                epoch,
+                targetAccountId,
+                senderAccountId,
+                List.of(targetAccountId)
+        ));
     }
 
     private void publishChatUpdatedEvent(ChatResponseDto chatResponseDto, List<UUID> recipientAccountIds) {

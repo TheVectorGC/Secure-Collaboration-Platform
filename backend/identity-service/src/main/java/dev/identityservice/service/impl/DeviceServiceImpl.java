@@ -128,9 +128,26 @@ public class DeviceServiceImpl implements DeviceService {
             LoginRequestDto loginRequestDto,
             String clientInstallationId
     ) {
-        return deviceRepository.findByAccountIdAndClientInstallationId(accountEntity.getId(), clientInstallationId)
-                .map(deviceEntity -> refreshExistingDevice(deviceEntity, loginRequestDto))
-                .orElseGet(() -> createDevice(accountEntity, loginRequestDto, clientInstallationId));
+        DeviceEntity existingDeviceEntity = deviceRepository.findByAccountIdAndClientInstallationId(accountEntity.getId(), clientInstallationId)
+                .orElse(null);
+
+        if (existingDeviceEntity == null) {
+            return createDevice(accountEntity, loginRequestDto, clientInstallationId);
+        }
+
+        if (existingDeviceEntity.getStatus() == DeviceStatus.REVOKED) {
+            existingDeviceEntity.setClientInstallationId(null);
+            existingDeviceEntity.setUpdatedAt(OffsetDateTime.now());
+            deviceRepository.save(existingDeviceEntity);
+            log.info(
+                    "Revoked device was detached from client installation before new device registration. Device ID: {}, account ID: {}.",
+                    existingDeviceEntity.getId(),
+                    accountEntity.getId()
+            );
+            return createDevice(accountEntity, loginRequestDto, clientInstallationId);
+        }
+
+        return refreshExistingDevice(existingDeviceEntity, loginRequestDto);
     }
 
     private DeviceEntity resolveExistingDevice(
@@ -212,6 +229,7 @@ public class DeviceServiceImpl implements DeviceService {
 
     private void revokeDevice(DeviceEntity deviceEntity) {
         deviceEntity.setStatus(DeviceStatus.REVOKED);
+        deviceEntity.setClientInstallationId(null);
         deviceEntity.setUpdatedAt(OffsetDateTime.now());
         deviceRepository.save(deviceEntity);
         revokeActiveDeviceSessions(deviceEntity.getId());

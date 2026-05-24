@@ -86,10 +86,12 @@ function write(level: LogLevel, message: string, context?: LogContext, options?:
 
   if (sanitizedContext) {
     console[level](`[Vector] ${message}`, sanitizedContext);
+    window.vectorDiagnostics?.log({ level, message, context: sanitizedContext });
     return;
   }
 
   console[level](`[Vector] ${message}`);
+  window.vectorDiagnostics?.log({ level, message });
 }
 
 export const clientLogger = {

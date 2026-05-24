@@ -44,5 +44,13 @@ public interface MessagingEventFactory {
             List<UUID> recipientAccountIds
     );
 
+    MessagingEventDto createGroupEpochKeysAvailableEvent(
+            UUID chatId,
+            Integer epoch,
+            UUID targetAccountId,
+            UUID senderAccountId,
+            List<UUID> recipientAccountIds
+    );
+
     MessagingEventDto createChatUpdatedEvent(ChatResponseDto chatResponseDto, List<UUID> recipientAccountIds);
 }

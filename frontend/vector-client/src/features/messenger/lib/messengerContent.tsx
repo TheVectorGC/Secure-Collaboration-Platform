@@ -218,8 +218,7 @@ export function ForwardedMessageCard({
         <button
           type="button"
           onClick={() => onOpenProfile(forwardedMessage.senderAccountId)}
-          disabled={!senderProfile}
-          className="flex min-w-0 items-center gap-2 rounded-xl transition enabled:hover:bg-white/[0.06]"
+          className="flex min-w-0 items-center gap-2 rounded-xl transition hover:bg-white/[0.06]"
         >
           <UserAvatar label={senderName} imageUrl={getAccountAvatarUrl(senderProfile)} size="sm" />
           <span className="min-w-0 truncate text-xs font-semibold text-violet-100">{senderName}</span>

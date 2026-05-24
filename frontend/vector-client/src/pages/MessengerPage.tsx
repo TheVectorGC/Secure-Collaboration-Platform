@@ -448,6 +448,7 @@ export function MessengerPage() {
     currentAccountId: profile?.accountId,
     chats,
     messagesByChatId,
+    decryptedMessagesById,
     chatDocuments,
     profilesById,
     upsertProfiles,
@@ -529,7 +530,6 @@ export function MessengerPage() {
         onCreateChat={handleCreateDirectChat}
         onCreateGroupChat={handleCreateGroupChat}
         blockedAccountIds={localChatState.blockedAccountIds ?? []}
-        onUnblockProfile={handleUnblockProfile}
         onOpenProfile={(foundProfile) => setMiniProfile(foundProfile)}
       />
 

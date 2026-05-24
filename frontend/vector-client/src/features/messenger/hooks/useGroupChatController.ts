@@ -49,7 +49,7 @@ export function useGroupChatController(params: UseGroupChatControllerParams) {
       setIsCreateChatOpen(false);
     }
     catch (error) {
-      setErrorMessage('Не удалось открыть личный чат. Если пользователь заблокирован, сначала разблокируйте его.');
+      setErrorMessage('Не удалось открыть личный чат.');
       throw error;
     }
   }

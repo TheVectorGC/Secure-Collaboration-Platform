@@ -29,7 +29,13 @@ export function useChatListsViewModel(params: UseChatListsViewModelParams) {
     const normalizedQuery = chatSearchQuery.trim().toLowerCase();
     const visibleChats = chats.filter((chat) => {
       if (hiddenChatIdSet.has(chat.chatId)) {
-        return false;
+        const hiddenAt = localChatState.clearedAtByChatId[chat.chatId];
+        const hiddenAtTime = hiddenAt ? new Date(hiddenAt).getTime() : 0;
+        const lastMessageTime = chat.lastMessageCreatedAt ? new Date(chat.lastMessageCreatedAt).getTime() : 0;
+
+        if (lastMessageTime <= hiddenAtTime) {
+          return false;
+        }
       }
 
       if (chat.type === 'DIRECT') {

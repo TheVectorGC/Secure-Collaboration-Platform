@@ -180,6 +180,24 @@ export function useMessageDecryptionController({
   }, []);
 
   useEffect(() => {
+    function handleGroupEpochKeysAvailable(event: Event) {
+      const payload = (event as CustomEvent<{ chatId?: string; epoch?: number; targetAccountId?: string }>).detail;
+
+      if (!payload || payload.targetAccountId !== accountId || !payload.chatId || typeof payload.epoch !== 'number') {
+        return;
+      }
+
+      releaseFailedGroupEpochMessages(payload.chatId, payload.epoch);
+    }
+
+    window.addEventListener('vector:groupEpochKeysAvailable', handleGroupEpochKeysAvailable);
+
+    return () => {
+      window.removeEventListener('vector:groupEpochKeysAvailable', handleGroupEpochKeysAvailable);
+    };
+  }, [accountId, loadedMessages]);
+
+  useEffect(() => {
     const vectorCrypto = window.vectorCrypto;
 
     if (!accountId || !deviceId || !vectorCrypto || !isCryptoReady) {

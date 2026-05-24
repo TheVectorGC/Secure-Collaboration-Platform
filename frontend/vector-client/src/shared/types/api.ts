@@ -467,7 +467,7 @@ export type SignDocumentRequestDto = {
   signatureBase64: string;
 };
 
-export type RealtimeEventType = 'MESSAGE_CREATED' | 'MESSAGE_DELIVERED' | 'MESSAGE_READ' | 'MESSAGE_REACTION_UPDATED' | 'CHAT_UPDATED' | 'TYPING' | 'PRESENCE_UPDATED' | 'PRESENCE_SNAPSHOT' | 'DOCUMENT_CREATED' | 'DOCUMENT_UPDATED' | 'DOCUMENT_SIGNED' | 'DOCUMENT_REJECTED' | 'DOCUMENT_CANCELLED' | 'DOCUMENT_HIDDEN' | 'DOCUMENT_OBSERVERS_ADDED' | 'PROFILE_UPDATED' | 'DEVICE_REVOKED';
+export type RealtimeEventType = 'MESSAGE_CREATED' | 'MESSAGE_DELIVERED' | 'MESSAGE_READ' | 'MESSAGE_REACTION_UPDATED' | 'GROUP_EPOCH_KEYS_AVAILABLE' | 'CHAT_UPDATED' | 'TYPING' | 'PRESENCE_UPDATED' | 'PRESENCE_SNAPSHOT' | 'DOCUMENT_CREATED' | 'DOCUMENT_UPDATED' | 'DOCUMENT_SIGNED' | 'DOCUMENT_REJECTED' | 'DOCUMENT_CANCELLED' | 'DOCUMENT_HIDDEN' | 'DOCUMENT_OBSERVERS_ADDED' | 'PROFILE_UPDATED' | 'DEVICE_REVOKED';
 
 export type RealtimeEventDto = {
   eventId: string;
@@ -508,6 +508,13 @@ export type MessageReadPayload = {
   readMessageIds: string[];
   readByAccountId: string;
   readAt: string;
+};
+
+
+export type GroupEpochKeysAvailablePayload = {
+  chatId: string;
+  epoch: number;
+  targetAccountId: string;
 };
 
 export type MessageReactionUpdatedPayload = {

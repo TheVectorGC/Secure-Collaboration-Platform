@@ -8,6 +8,9 @@ declare global {
     vectorFile?: {
       saveToDownloads: (request: { fileName: string; bytes: Uint8Array }) => Promise<{ filePath: string }>;
     };
+    vectorDiagnostics?: {
+      log: (entry: { level: 'debug' | 'info' | 'warn' | 'error'; message: string; context?: Record<string, unknown> }) => void;
+    };
   }
 }
 

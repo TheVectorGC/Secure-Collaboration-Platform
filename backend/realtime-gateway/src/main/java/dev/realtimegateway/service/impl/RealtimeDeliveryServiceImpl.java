@@ -25,7 +25,20 @@ public class RealtimeDeliveryServiceImpl implements RealtimeDeliveryService {
             return;
         }
 
-        RealtimeEventType realtimeEventType = RealtimeEventType.valueOf(realtimeDomainEventDto.eventType());
+        RealtimeEventType realtimeEventType;
+
+        try {
+            realtimeEventType = RealtimeEventType.valueOf(realtimeDomainEventDto.eventType());
+        }
+        catch (IllegalArgumentException exception) {
+            log.warn(
+                    "Unknown realtime event type skipped. eventId={}, eventType={}.",
+                    realtimeDomainEventDto.eventId(),
+                    realtimeDomainEventDto.eventType()
+            );
+            return;
+        }
+
         RealtimeEnvelopeDto realtimeEnvelopeDto = new RealtimeEnvelopeDto(
                 realtimeDomainEventDto.eventId(),
                 realtimeEventType,

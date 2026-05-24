@@ -13,7 +13,6 @@ export function NewChatModal({
   onCreateChat,
   onCreateGroupChat,
   blockedAccountIds,
-  onUnblockProfile,
   onOpenProfile,
 }: {
   isOpen: boolean;
@@ -22,7 +21,6 @@ export function NewChatModal({
   onCreateChat: (profile: ProfileResponseDto) => Promise<void>;
   onCreateGroupChat: (name: string, profiles: ProfileResponseDto[]) => Promise<void>;
   blockedAccountIds: string[];
-  onUnblockProfile: (profile: ProfileResponseDto) => Promise<void>;
   onOpenProfile: (profile: ProfileResponseDto) => void;
 }) {
   const upsertProfiles = useDirectoryStore((state) => state.upsertProfiles);
@@ -200,7 +198,10 @@ export function NewChatModal({
                         className="min-w-0 flex-1 text-left"
                       >
                         <div className="truncate text-sm font-semibold text-zinc-100 transition hover:text-violet-100">{displayName}</div>
-                        <div className="mt-1 truncate text-xs text-zinc-500">@{profile.username} · {profile.email}</div>
+                        <div className="mt-1 flex min-w-0 items-center gap-2 text-xs text-zinc-500">
+                          <span className="truncate">@{profile.username} · {profile.email}</span>
+                          {isBlocked && <span className="shrink-0 rounded-full border border-red-300/15 bg-red-500/10 px-2 py-0.5 text-[10px] text-red-200">заблокирован</span>}
+                        </div>
                       </button>
 
                       <button
@@ -210,15 +211,11 @@ export function NewChatModal({
                           setErrorMessage(null);
 
                           try {
-                            if (isBlocked) {
-                              await onUnblockProfile(profile);
-                            }
-
                             await onCreateChat(profile);
                           }
                           catch (error) {
                             console.error(error);
-                            setErrorMessage(isBlocked ? 'Не удалось разблокировать пользователя и открыть чат.' : 'Не удалось открыть личный чат.');
+                            setErrorMessage('Не удалось открыть личный чат.');
                           }
                           finally {
                             setCreatingAccountId(null);
@@ -227,7 +224,7 @@ export function NewChatModal({
                         className="inline-flex items-center gap-2 rounded-2xl border border-violet-300/16 bg-violet-500/10 px-3 py-2 text-xs font-medium text-violet-100 transition hover:border-violet-300/30 hover:bg-violet-500/16"
                       >
                         {isCreating ? <LoaderCircle size={14} className="animate-spin" /> : <MessageCircle size={14} />}
-                        {isBlocked ? 'Разблокировать и написать' : 'Написать'}
+                        Написать
                       </button>
                     </div>
                   );

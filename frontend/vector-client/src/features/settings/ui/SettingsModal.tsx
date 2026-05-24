@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { LogOut, Monitor, RefreshCw, Settings, ShieldCheck, LockKeyhole, Trash2, X } from 'lucide-react';
+import { LogOut, Monitor, RefreshCw, Settings, ShieldCheck, LockKeyhole, Trash2, X, AlertTriangle } from 'lucide-react';
 import { updateCurrentProfileAvatar } from '../../directory/api/profilesApi';
 import { getActiveAccountDevices, revokeCurrentAccountDevice } from '../../devices/api/devicesApi';
 import type { ActiveDeviceResponseDto, ProfileResponseDto } from '../../../shared/types/api';
@@ -128,6 +128,7 @@ export function SettingsModal({
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [deviceActionError, setDeviceActionError] = useState<string | null>(null);
   const [revokingDeviceId, setRevokingDeviceId] = useState<string | null>(null);
+  const [devicePendingDeletionId, setDevicePendingDeletionId] = useState<string | null>(null);
 
   async function handleLocalAvatarSelected(file: File | null | undefined) {
     if (!file || !profile?.accountId) {
@@ -188,19 +189,21 @@ export function SettingsModal({
       return;
     }
 
-    const confirmed = window.confirm(targetDeviceId === deviceId
-      ? 'Удалить текущее устройство? После этого вход будет завершён.'
-      : 'Удалить это устройство? На нём будет завершён вход.');
+    setDevicePendingDeletionId(targetDeviceId);
+  }
 
-    if (!confirmed) {
+  async function confirmRevokePendingDevice() {
+    if (!devicePendingDeletionId) {
       return;
     }
 
+    const targetDeviceId = devicePendingDeletionId;
     setRevokingDeviceId(targetDeviceId);
     setDeviceActionError(null);
 
     try {
       await revokeCurrentAccountDevice(targetDeviceId);
+      setDevicePendingDeletionId(null);
 
       if (targetDeviceId === deviceId) {
         await onLogout();
@@ -443,6 +446,46 @@ export function SettingsModal({
           </div>
         </section>
       </div>
+
+      {devicePendingDeletionId && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/55 p-6 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-[#181922] p-6 shadow-2xl shadow-black/60">
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-500/12 text-red-200">
+                <AlertTriangle size={22} />
+              </div>
+              <div className="min-w-0">
+                <div className="text-lg font-semibold text-zinc-50">Удалить устройство?</div>
+                <div className="mt-2 text-sm leading-6 text-zinc-400">
+                  {devicePendingDeletionId === deviceId
+                    ? 'Это текущее устройство. После удаления будет выполнен выход из аккаунта.'
+                    : 'На выбранном устройстве будет завершён вход, если оно сейчас активно.'}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setDevicePendingDeletionId(null)}
+                disabled={Boolean(revokingDeviceId)}
+                className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-zinc-300 transition hover:border-white/20 hover:text-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmRevokePendingDevice()}
+                disabled={Boolean(revokingDeviceId)}
+                className="inline-flex items-center gap-2 rounded-2xl bg-red-500/85 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {revokingDeviceId ? <RefreshCw size={15} className="animate-spin" /> : <Trash2 size={15} />}
+                Удалить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

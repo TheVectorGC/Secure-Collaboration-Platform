@@ -8,6 +8,7 @@ import type {
   MessageDeliveredPayload,
   MessageReadPayload,
   MessageReactionUpdatedPayload,
+  GroupEpochKeysAvailablePayload,
   MessageResponseDto,
   PresenceSnapshotPayload,
   ProfileUpdatedPayload,
@@ -19,7 +20,7 @@ import type {
 
 import { refreshAuthenticationToken } from '../auth/api/authApi';
 import { getChatMessages } from '../messages/api/messagesApi';
-import { useAuthStore } from '../auth/model/authStore';
+import { forgetRememberedDeviceIdsForProfile, useAuthStore } from '../auth/model/authStore';
 import { useMessengerStore } from '../messenger/model/messengerStore';
 import { useRealtimeStore } from './model/realtimeStore';
 import { useDirectoryStore } from '../directory/model/directoryStore';
@@ -80,6 +81,13 @@ function isMessageReactionUpdatedPayload(payload: unknown): payload is MessageRe
     && typeof payload.accountId === 'string'
     && (typeof payload.emoji === 'string' || payload.emoji === null)
     && typeof payload.updatedAt === 'string';
+}
+
+function isGroupEpochKeysAvailablePayload(payload: unknown): payload is GroupEpochKeysAvailablePayload {
+  return isObjectPayload(payload)
+    && typeof payload.chatId === 'string'
+    && typeof payload.epoch === 'number'
+    && typeof payload.targetAccountId === 'string';
 }
 
 function isDeviceRevokedPayload(payload: unknown): payload is DeviceRevokedPayload {
@@ -374,11 +382,36 @@ export function useRealtimeConnection() {
         return;
       }
 
+      if (realtimeEvent.type === 'GROUP_EPOCH_KEYS_AVAILABLE' && isGroupEpochKeysAvailablePayload(realtimeEvent.payload)) {
+        const payload = realtimeEvent.payload;
+        window.dispatchEvent(new CustomEvent('vector:groupEpochKeysAvailable', { detail: payload }));
+
+        void getChatMessages(payload.chatId)
+          .then((loadedMessages) => {
+            setMessages(payload.chatId, loadedMessages);
+            window.dispatchEvent(new CustomEvent('vector:groupEpochKeysAvailable', { detail: payload }));
+          })
+          .catch((error) => {
+            clientLogger.warn('Failed to refresh group messages after group keys became available.', {
+              chatId: payload.chatId,
+              epoch: payload.epoch,
+              targetAccountId: payload.targetAccountId,
+              error,
+            }, {
+              dedupeKey: `group-keys-message-refresh:${payload.chatId}:${payload.epoch}:${payload.targetAccountId}`,
+              throttleMs: 30000,
+            });
+          });
+
+        return;
+      }
+
       if (realtimeEvent.type === 'DEVICE_REVOKED' && isDeviceRevokedPayload(realtimeEvent.payload)) {
         const currentDeviceId = useAuthStore.getState().deviceId;
 
         if (realtimeEvent.payload.deviceId === currentDeviceId) {
-          useAuthStore.getState().clearAuthentication();
+          forgetRememberedDeviceIdsForProfile(useAuthStore.getState().profile);
+          useAuthStore.getState().clearAuthentication({ rememberDevice: false });
         }
 
         return;

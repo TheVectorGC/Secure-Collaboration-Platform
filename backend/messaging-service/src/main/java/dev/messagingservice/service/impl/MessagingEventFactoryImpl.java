@@ -137,6 +137,30 @@ public class MessagingEventFactoryImpl implements MessagingEventFactory {
         );
     }
 
+
+    @Override
+    public MessagingEventDto createGroupEpochKeysAvailableEvent(
+            UUID chatId,
+            Integer epoch,
+            UUID targetAccountId,
+            UUID senderAccountId,
+            List<UUID> recipientAccountIds
+    ) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("chatId", chatId);
+        payload.put("epoch", epoch);
+        payload.put("targetAccountId", targetAccountId);
+
+        return createEvent(
+                MessagingEventType.GROUP_EPOCH_KEYS_AVAILABLE,
+                chatId,
+                null,
+                senderAccountId,
+                recipientAccountIds,
+                payload
+        );
+    }
+
     @Override
     public MessagingEventDto createChatUpdatedEvent(ChatResponseDto chatResponseDto, List<UUID> recipientAccountIds) {
         Map<String, Object> payload = new LinkedHashMap<>();

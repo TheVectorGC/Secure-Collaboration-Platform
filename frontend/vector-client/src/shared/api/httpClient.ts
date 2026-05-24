@@ -2,6 +2,7 @@ import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import { serviceUrls } from '../config/serviceUrls';
 import { useAuthStore } from '../../features/auth/model/authStore';
 import type { AuthenticationResponseDto } from '../types/api';
+import { clientLogger } from '../lib/clientLogger';
 
 export const identityHttpClient = axios.create({
   baseURL: serviceUrls.identityBaseUrl,
@@ -82,6 +83,16 @@ async function handleUnauthorizedError(error: AxiosError) {
   const originalRequest = error.config as RetriableRequestConfig | undefined;
 
   if (responseStatus !== 401 || !originalRequest || originalRequest._retry || isRefreshEndpoint(originalRequest.url)) {
+    clientLogger.error('HTTP request failed.', {
+      error,
+      status: responseStatus ?? null,
+      requestMethod: originalRequest?.method ?? null,
+      requestUrl: originalRequest?.url ?? null,
+      baseUrl: originalRequest?.baseURL ?? null,
+    }, {
+      dedupeKey: `http-error:${responseStatus ?? 'network'}:${originalRequest?.method ?? 'unknown'}:${originalRequest?.url ?? 'unknown'}`,
+      throttleMs: 10000,
+    });
     throw error;
   }
 
@@ -93,6 +104,15 @@ async function handleUnauthorizedError(error: AxiosError) {
     return axios(originalRequest);
   }
   catch (refreshError) {
+    clientLogger.error('HTTP token refresh failed.', {
+      error: refreshError,
+      originalStatus: responseStatus,
+      requestMethod: originalRequest.method ?? null,
+      requestUrl: originalRequest.url ?? null,
+    }, {
+      dedupeKey: 'http-token-refresh-failed',
+      throttleMs: 15000,
+    });
     useAuthStore.getState().clearAuthentication();
     window.location.href = '/login';
     throw refreshError;

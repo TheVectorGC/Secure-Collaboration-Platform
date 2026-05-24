@@ -119,10 +119,20 @@ export function useChatDataController(params: UseChatDataControllerParams) {
     let isCancelled = false;
 
     async function loadMissingChatMessages() {
-      const chatsWithoutMessages = chats.filter((chat) => (
-        !hiddenChatIdSet.has(chat.chatId)
-        && !messagesByChatId[chat.chatId]
-      ));
+      const chatsWithoutMessages = chats.filter((chat) => {
+        if (messagesByChatId[chat.chatId]) {
+          return false;
+        }
+
+        if (!hiddenChatIdSet.has(chat.chatId)) {
+          return true;
+        }
+
+        const hiddenAt = localChatState.clearedAtByChatId[chat.chatId];
+        const hiddenAtTime = hiddenAt ? new Date(hiddenAt).getTime() : 0;
+        const lastMessageTime = chat.lastMessageCreatedAt ? new Date(chat.lastMessageCreatedAt).getTime() : 0;
+        return lastMessageTime > hiddenAtTime;
+      });
 
       await Promise.all(chatsWithoutMessages.map(async (chat) => {
         try {
@@ -143,7 +153,7 @@ export function useChatDataController(params: UseChatDataControllerParams) {
     return () => {
       isCancelled = true;
     };
-  }, [chats, hiddenChatIdSet, messagesByChatId, setMessages]);
+  }, [chats, hiddenChatIdSet, localChatState.clearedAtByChatId, messagesByChatId, setMessages]);
 
   useEffect(() => {
     if (!currentAccountId || localChatState.hiddenChatIds.length === 0) {
@@ -165,11 +175,9 @@ export function useChatDataController(params: UseChatDataControllerParams) {
       const chatMessages = messagesByChatId[hiddenChatId] ?? [];
       const clearedAt = localChatState.clearedAtByChatId[hiddenChatId];
       const clearedAtTime = clearedAt ? new Date(clearedAt).getTime() : 0;
+      const lastMessageTime = hiddenChat?.lastMessageCreatedAt ? new Date(hiddenChat.lastMessageCreatedAt).getTime() : 0;
 
-      return chatMessages.some((message) => (
-        message.senderAccountId !== currentAccountId
-        && new Date(message.createdAt).getTime() > clearedAtTime
-      ));
+      return lastMessageTime > clearedAtTime || chatMessages.some((message) => new Date(message.createdAt).getTime() > clearedAtTime);
     });
 
     if (hiddenChatIdsToRestore.length === 0) {

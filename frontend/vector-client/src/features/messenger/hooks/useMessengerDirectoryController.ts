@@ -1,12 +1,32 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getProfilesByAccountIds } from '../../directory/api/profilesApi';
 import { getDirectCompanionAccountId } from '../../../shared/lib/profile';
+import { parseRichMessageContent } from '../lib/messengerContent';
 import type { ChatResponseDto, DocumentResponseDto, MessageResponseDto, ProfileResponseDto } from '../../../shared/types/api';
+
+
+function collectForwardedSenderAccountIds(plainText: string | undefined, accountIds: Set<string>, depth = 0) {
+  if (!plainText || depth > 4) {
+    return;
+  }
+
+  const richMessageContent = parseRichMessageContent(plainText);
+
+  if (!richMessageContent) {
+    return;
+  }
+
+  richMessageContent.forwardedMessages.forEach((forwardedMessage) => {
+    accountIds.add(forwardedMessage.senderAccountId);
+    collectForwardedSenderAccountIds(forwardedMessage.plainText, accountIds, depth + 1);
+  });
+}
 
 type UseMessengerDirectoryControllerParams = {
   currentAccountId: string | undefined;
   chats: ChatResponseDto[];
   messagesByChatId: Record<string, MessageResponseDto[]>;
+  decryptedMessagesById: Record<string, string>;
   chatDocuments: DocumentResponseDto[];
   profilesById: Record<string, ProfileResponseDto>;
   upsertProfiles: (profiles: ProfileResponseDto[]) => void;
@@ -17,6 +37,7 @@ export function useMessengerDirectoryController(params: UseMessengerDirectoryCon
     currentAccountId,
     chats,
     messagesByChatId,
+    decryptedMessagesById,
     chatDocuments,
     profilesById,
     upsertProfiles,
@@ -41,6 +62,7 @@ export function useMessengerDirectoryController(params: UseMessengerDirectoryCon
         accountIds.add(message.senderAccountId);
         message.deliveryStates.forEach((deliveryState) => accountIds.add(deliveryState.accountId));
         message.devicePayloads.forEach((devicePayload) => accountIds.add(devicePayload.targetAccountId));
+        collectForwardedSenderAccountIds(decryptedMessagesById[message.messageId], accountIds);
       });
     });
 
@@ -82,7 +104,7 @@ export function useMessengerDirectoryController(params: UseMessengerDirectoryCon
     return () => {
       cancelled = true;
     };
-  }, [chatDocuments, chats, currentAccountId, messagesByChatId, profilesById, upsertProfiles]);
+  }, [chatDocuments, chats, currentAccountId, decryptedMessagesById, messagesByChatId, profilesById, upsertProfiles]);
 
   const documentContactAccountIds = useMemo(() => {
     if (!currentAccountId) {
@@ -100,7 +122,23 @@ export function useMessengerDirectoryController(params: UseMessengerDirectoryCon
 
     if (foundProfile) {
       setMiniProfile(foundProfile);
+      return;
     }
+
+    void getProfilesByAccountIds([accountId])
+      .then((loadedProfiles) => {
+        const loadedProfile = loadedProfiles[0];
+
+        if (!loadedProfile) {
+          return;
+        }
+
+        upsertProfiles([loadedProfile]);
+        setMiniProfile(loadedProfile);
+      })
+      .catch((error) => {
+        console.warn('Не удалось загрузить профиль аккаунта.', error);
+      });
   }
 
   return {

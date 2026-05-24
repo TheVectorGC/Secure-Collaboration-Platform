@@ -2,9 +2,10 @@ import { FormEvent, useState } from 'react';
 import { Lock, MessageCircle, ShieldCheck, UsersRound, FileText, WandSparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { login, getCurrentProfile } from '../features/auth/api/authApi';
-import { getRememberedDeviceIdForLogin, useAuthStore } from '../features/auth/model/authStore';
+import { forgetRememberedDeviceIdForLogin, getRememberedDeviceIdForLogin, useAuthStore } from '../features/auth/model/authStore';
 import { useDirectoryStore } from '../features/directory/model/directoryStore';
 import { prepareAccountBackupUnlockKey } from '../features/crypto/lib/accountBackupProfileOperations';
+import { clientLogger } from '../shared/lib/clientLogger';
 import { GlowButton } from '../shared/ui/GlowButton';
 import { TextInput } from '../shared/ui/TextInput';
 
@@ -83,11 +84,15 @@ export function LoginPage() {
           throw error;
         }
 
-        console.warn('Remembered device login failed. Creating or resolving device by client installation instead.', {
+        clientLogger.warn('Remembered device login failed. Creating or resolving device by client installation instead.', {
           login: loginValue,
           rememberedDeviceId,
           error,
+        }, {
+          dedupeKey: `login-remembered-device-failed:${loginValue}`,
+          throttleMs: 30000,
         });
+        forgetRememberedDeviceIdForLogin(loginValue);
         authenticationResponse = await login({
           ...loginRequest,
           deviceId: null,
@@ -105,7 +110,10 @@ export function LoginPage() {
       navigate('/messenger');
     }
     catch (error) {
-      console.error(error);
+      clientLogger.error('Login failed.', { login: loginValue, error }, {
+        dedupeKey: `login-failed:${loginValue}`,
+        throttleMs: 10000,
+      });
       setErrorMessage('Не удалось войти. Проверьте логин, пароль и запущенные серверные сервисы.');
     }
     finally {

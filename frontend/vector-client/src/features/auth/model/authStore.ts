@@ -19,7 +19,7 @@ type AuthState = {
   setAuthentication: (authenticationResponse: AuthenticationResponseDto, fallbackDeviceId?: string | null) => void;
   setDeviceId: (deviceId: string) => void;
   setProfile: (profile: ProfileResponseDto) => void;
-  clearAuthentication: () => void;
+  clearAuthentication: (options?: { rememberDevice?: boolean }) => void;
 };
 
 
@@ -57,6 +57,26 @@ export function rememberDeviceIdForLogin(login: string | null | undefined, devic
   localStorage.setItem(getRememberedDeviceStorageKey(normalizedLogin), deviceId);
 }
 
+export function forgetRememberedDeviceIdForLogin(login: string | null | undefined) {
+  const normalizedLogin = normalizeAuthIdentifier(login);
+
+  if (!normalizedLogin) {
+    return;
+  }
+
+  localStorage.removeItem(getRememberedDeviceStorageKey(normalizedLogin));
+}
+
+export function forgetRememberedDeviceIdsForProfile(profile: ProfileResponseDto | null | undefined) {
+  if (!profile) {
+    return;
+  }
+
+  forgetRememberedDeviceIdForLogin(profile.accountId);
+  forgetRememberedDeviceIdForLogin(profile.username);
+  forgetRememberedDeviceIdForLogin(profile.email);
+}
+
 export function rememberDeviceIdForProfile(profile: ProfileResponseDto | null | undefined, deviceId: string | null | undefined) {
   if (!profile || !deviceId) {
     return;
@@ -82,8 +102,10 @@ function readProfileFromStorage(): ProfileResponseDto | null {
   }
 }
 
-function clearAuthenticationStorage() {
-  rememberDeviceIdForProfile(readProfileFromStorage(), localStorage.getItem(DEVICE_ID_STORAGE_KEY));
+function clearAuthenticationStorage(options: { rememberDevice?: boolean } = {}) {
+  if (options.rememberDevice !== false) {
+    rememberDeviceIdForProfile(readProfileFromStorage(), localStorage.getItem(DEVICE_ID_STORAGE_KEY));
+  }
 
   localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
   localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
@@ -133,8 +155,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ profile });
   },
 
-  clearAuthentication: () => {
-    clearAuthenticationStorage();
+  clearAuthentication: (options) => {
+    clearAuthenticationStorage(options);
 
     set({
       accessToken: null,

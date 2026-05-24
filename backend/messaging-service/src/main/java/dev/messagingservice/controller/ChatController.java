@@ -42,11 +42,11 @@ public class ChatController {
 
     @Operation(
             summary = "Create or resolve a direct chat",
-            description = "Returns an existing direct chat for the current account and recipient, or creates a new chat when no direct chat exists. Blocked account pairs cannot create or restore direct messaging.",
+            description = "Returns an existing direct chat for the current account and recipient, or creates a new chat when no direct chat exists. Blocked account pairs can open the chat, but cannot send messages until unblocked.",
             responses = {
                     @ApiResponse(responseCode = "200", description = "Direct chat resolved."),
                     @ApiResponse(responseCode = "400", description = "Request validation failed.", content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class))),
-                    @ApiResponse(responseCode = "403", description = "Direct messaging is blocked.", content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
+                    @ApiResponse(responseCode = "403", description = "Direct chat access is denied.", content = @Content(schema = @Schema(implementation = ApiErrorResponseDto.class)))
             }
     )
     @PostMapping("/direct")
