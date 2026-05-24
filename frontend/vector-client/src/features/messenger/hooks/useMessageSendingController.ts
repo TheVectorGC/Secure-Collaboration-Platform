@@ -321,16 +321,18 @@ export function useMessageSendingController(
     plainText: string,
     messageType: "TEXT" | "FILE" = "TEXT",
   ) {
-    if (!selectedChatId || !deviceId || !window.vectorCrypto) {
-      throw new Error("Chat, local device or cryptography is not available.");
+    if (!selectedChatId || !currentAccountId || !deviceId || !window.vectorCrypto) {
+      throw new Error("Chat, account, local device or cryptography is not available.");
     }
+
+    const activeAccountId = currentAccountId;
 
     const currentChatState =
       selectedChat?.type === "GROUP"
         ? ((await refreshSelectedChat({ silent: true })) ?? selectedChat)
         : selectedChat;
 
-    if (!isCurrentAccountActiveInChat(currentChatState, currentAccountId)) {
+    if (!isCurrentAccountActiveInChat(currentChatState, activeAccountId)) {
       throw new Error(
         "Current account is not an active participant of this chat.",
       );
@@ -346,7 +348,7 @@ export function useMessageSendingController(
 
       const groupEncryptedMessage =
         await window.vectorCrypto.encryptGroupMessageV2({
-          accountId: currentAccountId,
+          accountId: activeAccountId,
           deviceId,
           chatId: selectedChatId,
           epoch: groupEpoch,
@@ -446,9 +448,11 @@ export function useMessageSendingController(
     messageToEdit: MessageResponseDto,
     chatForRecipients: ChatResponseDto,
   ) {
-    if (!selectedChatId || !deviceId || !window.vectorCrypto) {
-      throw new Error("Chat, local device or cryptography is not available.");
+    if (!selectedChatId || !currentAccountId || !deviceId || !window.vectorCrypto) {
+      throw new Error("Chat, account, local device or cryptography is not available.");
     }
+
+    const activeAccountId = currentAccountId;
 
     if (chatForRecipients.type === "GROUP") {
       const groupEpoch =
@@ -456,7 +460,7 @@ export function useMessageSendingController(
       await ensureCurrentGroupEpochKeyAvailable(chatForRecipients, groupEpoch);
       const groupEncryptedMessage =
         await window.vectorCrypto.encryptGroupMessageV2({
-          accountId: currentAccountId,
+          accountId: activeAccountId,
           deviceId,
           chatId: selectedChatId,
           epoch: groupEpoch,

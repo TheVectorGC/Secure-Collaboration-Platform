@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Download, FileCheck2, FileText, LoaderCircle, Plus, RefreshCw, Search, UserPlus, X } from 'lucide-react';
+import { FileCheck2, FileText, LoaderCircle, Plus, RefreshCw, Search, UserPlus, X } from 'lucide-react';
 import { searchProfiles } from '../../directory/api/profilesApi';
 import { formatFileSize } from '../../media/lib/fileCrypto';
 import { formatMessageTime } from '../../../shared/lib/dateFormat';
 import { getAccountDisplayName, getAccountUsernameLabel } from '../../../shared/lib/profile';
 import type { DocumentResponseDto, ProfileResponseDto } from '../../../shared/types/api';
 import { getAccountAvatarUrl, type DocumentCreationDraft, UserAvatar } from '../../messenger/lib/messengerCore';
+import { DownloadActionButton } from '../../messenger/ui/MessageAttachments';
+import { createMediaDownloadPersistenceKey, type DownloadActionResult } from '../../media/lib/downloadState';
 
 function getDocumentStatusLabel(status: DocumentResponseDto['status']): string {
   if (status === 'FULLY_SIGNED') {
@@ -384,7 +386,7 @@ export function DocumentsPanel({
   onClose: () => void;
   onRefresh: () => Promise<void>;
   onCreateDocument: (file: File | null | undefined) => void;
-  onDownload: (document: DocumentResponseDto) => Promise<void>;
+  onDownload: (document: DocumentResponseDto) => Promise<DownloadActionResult>;
   onSign: (document: DocumentResponseDto) => Promise<void>;
   onReject: (document: DocumentResponseDto, reason: string | null) => Promise<void>;
   onCancel: (document: DocumentResponseDto, reason: string | null) => Promise<void>;
@@ -596,9 +598,12 @@ export function DocumentsPanel({
                     )}
 
                     <div className="mt-4 flex flex-wrap gap-2">
-                      <button onClick={() => void onDownload(documentItem)} className="inline-flex h-9 min-w-28 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 text-xs font-semibold text-zinc-200 transition hover:bg-white/[0.08]">
-                        <Download size={14} /> Скачать
-                      </button>
+                      <DownloadActionButton
+                        onDownload={() => onDownload(documentItem)}
+                        persistenceKey={createMediaDownloadPersistenceKey(documentItem.mediaFileId)}
+                        showLabel
+                        className="inline-flex h-9 min-w-28 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 text-xs font-semibold text-zinc-200 transition hover:bg-white/[0.08] disabled:cursor-wait disabled:opacity-70"
+                      />
                       <button onClick={() => void onSign(documentItem)} disabled={!canSign} className="inline-flex h-9 min-w-28 items-center justify-center rounded-2xl border border-emerald-300/20 bg-emerald-500/10 px-4 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-500/15 disabled:cursor-not-allowed disabled:opacity-45">
                         {currentSigner?.status === 'SIGNED' ? 'Подписано' : 'Подписать'}
                       </button>

@@ -50,9 +50,14 @@ function isMessageCreatedPayload(payload: unknown): payload is MessageCreatedPay
 }
 
 function isMessageEditedPayload(payload: unknown): payload is MessageEditedPayload {
-  return isMessageCreatedPayload(payload)
-    && typeof payload.editedAt === 'string'
-    && typeof payload.editVersion === 'number';
+  if (!isMessageCreatedPayload(payload)) {
+    return false;
+  }
+
+  const messagePayload = payload as Record<string, unknown>;
+
+  return typeof messagePayload.editedAt === 'string'
+    && typeof messagePayload.editVersion === 'number';
 }
 
 function isChatUpdatedPayload(payload: unknown): payload is ChatUpdatedPayload {

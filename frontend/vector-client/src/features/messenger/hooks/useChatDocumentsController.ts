@@ -3,6 +3,7 @@ import { addDocumentObservers, cancelDocument, createDocument, getDocument, getD
 import { getAccountBackupPublicKey } from '../../crypto/api/accountBackupProfileApi';
 import { downloadEncryptedMediaFile, uploadEncryptedMediaFile } from '../../media/api/mediaApi';
 import { decryptDownloadedFile, encryptFileForUpload, parseDocumentAttachmentMessageContent } from '../../media/lib/fileCrypto';
+import type { DownloadActionResult } from '../../media/lib/downloadState';
 import type { DocumentAttachmentMessageContent, DocumentKeyEnvelopeRequestDto, DocumentResponseDto, FileAttachmentMessageContent } from '../../../shared/types/api';
 import type { DocumentCreationDraft } from '../lib/messengerCore';
 
@@ -274,7 +275,7 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
     }
   }
 
-  async function handleDownloadAttachment(attachment: FileAttachmentMessageContent | DocumentAttachmentMessageContent) {
+  async function handleDownloadAttachment(attachment: FileAttachmentMessageContent | DocumentAttachmentMessageContent): Promise<DownloadActionResult> {
     setErrorMessage(null);
 
     try {
@@ -283,11 +284,10 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
 
       if (window.vectorFile) {
         const decryptedBytes = new Uint8Array(await decryptedBlob.arrayBuffer());
-        await window.vectorFile.saveToDownloads({
+        return await window.vectorFile.saveToDownloads({
           fileName: attachment.fileName,
           bytes: decryptedBytes,
         });
-        return;
       }
 
       const objectUrl = URL.createObjectURL(decryptedBlob);
@@ -298,14 +298,16 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
       downloadLink.click();
       downloadLink.remove();
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+      return null;
     }
     catch (error) {
       console.error(error);
       setErrorMessage('Не удалось скачать или расшифровать файл.');
+      throw error;
     }
   }
 
-  async function handleDownloadDocument(documentItem: DocumentResponseDto) {
+  async function handleDownloadDocument(documentItem: DocumentResponseDto): Promise<DownloadActionResult> {
     try {
       const attachmentFromDocument = await buildAttachmentFromDocument(documentItem);
       const matchingMessage = attachmentFromDocument ?? Object.entries(decryptedMessagesById)
@@ -314,14 +316,15 @@ export function useChatDocumentsController(params: UseChatDocumentsControllerPar
 
       if (!matchingMessage) {
         setErrorMessage('Ключ документа недоступен. Проверьте доступ к документу или обратитесь к автору.');
-        return;
+        return null;
       }
 
-      await handleDownloadAttachment(matchingMessage);
+      return await handleDownloadAttachment(matchingMessage);
     }
     catch (error) {
       console.error(error);
       setErrorMessage('Не удалось подготовить ключ документа.');
+      throw error;
     }
   }
 

@@ -1,9 +1,10 @@
-import { Download, FileText } from 'lucide-react';
+import { FileText } from 'lucide-react';
 import { formatFileSize, parseDocumentAttachmentMessageContent, parseFileAttachmentMessageContent } from '../../media/lib/fileCrypto';
-import { DocumentAttachmentPreview, ImageAttachmentPreview } from '../ui/MessageAttachments';
+import { DocumentAttachmentPreview, DownloadActionButton, ImageAttachmentPreview } from '../ui/MessageAttachments';
 import { formatMessageTime } from '../../../shared/lib/dateFormat';
 import { getDisplayName } from '../../../shared/lib/profile';
 import type { DocumentAttachmentMessageContent, FileAttachmentMessageContent, MessageResponseDto, ProfileResponseDto } from '../../../shared/types/api';
+import { createMediaDownloadPersistenceKey, type DownloadActionResult } from '../../media/lib/downloadState';
 import { UserAvatar, getAccountAvatarUrl } from './messengerProfileVisual';
 import { type ForwardedMessageSnapshot, type ReplyDraft, type RichMessageContent } from './messengerTypes';
 
@@ -199,7 +200,7 @@ export function ForwardedMessageCard({
   forwardedMessage: ForwardedMessageSnapshot;
   profilesById: Record<string, ProfileResponseDto>;
   onOpenProfile: (accountId: string) => void;
-  onDownload: (attachment: FileAttachmentMessageContent | DocumentAttachmentMessageContent) => Promise<void>;
+  onDownload: (attachment: FileAttachmentMessageContent | DocumentAttachmentMessageContent) => Promise<DownloadActionResult>;
   depth?: number;
 }) {
   const senderProfile = profilesById[forwardedMessage.senderAccountId] ?? null;
@@ -245,14 +246,11 @@ export function ForwardedMessageCard({
                       <div className="truncate text-sm font-medium text-zinc-100">{attachment.fileName}</div>
                       <div className="mt-0.5 text-xs text-zinc-500">{formatFileSize(attachment.sizeBytes)}</div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => void onDownload(attachment)}
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-zinc-200 transition hover:bg-white/[0.1]"
-                      title="Скачать"
-                    >
-                      <Download size={16} />
-                    </button>
+                    <DownloadActionButton
+                      onDownload={() => onDownload(attachment)}
+                      persistenceKey={createMediaDownloadPersistenceKey(attachment.mediaFileId)}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-zinc-200 transition hover:bg-white/[0.1] disabled:cursor-wait disabled:opacity-70"
+                    />
                   </div>
                 )}
               </div>
@@ -273,14 +271,11 @@ export function ForwardedMessageCard({
                 <div className="truncate text-sm font-medium text-zinc-100">{fileAttachment.fileName}</div>
                 <div className="mt-0.5 text-xs text-zinc-500">{formatFileSize(fileAttachment.sizeBytes)}</div>
               </div>
-              <button
-                type="button"
-                onClick={() => void onDownload(fileAttachment)}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-zinc-200 transition hover:bg-white/[0.1]"
-                title="Скачать"
-              >
-                <Download size={16} />
-              </button>
+                    <DownloadActionButton
+                      onDownload={() => onDownload(fileAttachment)}
+                      persistenceKey={createMediaDownloadPersistenceKey(fileAttachment.mediaFileId)}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-zinc-200 transition hover:bg-white/[0.1] disabled:cursor-wait disabled:opacity-70"
+                    />
             </div>
           )
         ) : null}

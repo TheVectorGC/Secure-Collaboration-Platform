@@ -32,6 +32,9 @@ contextBridge.exposeInMainWorld('vectorCrypto', {
 
 contextBridge.exposeInMainWorld('vectorFile', {
   saveToDownloads: (request) => ipcRenderer.invoke('vectorFile:saveToDownloads', request),
+  openPath: (filePath) => ipcRenderer.invoke('vectorFile:openPath', filePath),
+  showInFolder: (filePath) => ipcRenderer.invoke('vectorFile:showInFolder', filePath),
+  existsPath: (filePath) => ipcRenderer.invoke('vectorFile:existsPath', filePath),
 });
 
 

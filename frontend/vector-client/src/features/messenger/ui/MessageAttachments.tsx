@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
-import { Download, Image as ImageIcon, LoaderCircle, ShieldCheck } from 'lucide-react';
+import { useEffect, useState, type MouseEvent } from 'react';
+import { Check, Download, FolderOpen, Image as ImageIcon, LoaderCircle, RotateCcw, ShieldCheck } from 'lucide-react';
 import { downloadEncryptedMediaFile } from '../../media/api/mediaApi';
 import { decryptDownloadedFile, formatFileSize } from '../../media/lib/fileCrypto';
+import { createMediaDownloadPersistenceKey, forgetDownloadedFile, getDownloadStatusLabel, getStoredDownloadedFile, rememberDownloadedFile, type DownloadActionResult, type DownloadStatusValue, type DownloadedFile } from '../../media/lib/downloadState';
 import type { DocumentAttachmentMessageContent, FileAttachmentMessageContent } from '../../../shared/types/api';
 
 const imagePreviewUrlCache = new Map<string, string>();
@@ -41,12 +42,137 @@ async function loadImagePreviewUrl(attachment: FileAttachmentMessageContent): Pr
   return previewPromise;
 }
 
+function getDownloadIcon(status: DownloadStatusValue) {
+  if (status === 'downloading') {
+    return <LoaderCircle size={16} className="animate-spin" />;
+  }
+
+  if (status === 'downloaded') {
+    return <Check size={16} />;
+  }
+
+  if (status === 'failed') {
+    return <RotateCcw size={16} />;
+  }
+
+  return <Download size={16} />;
+}
+
+export function DownloadActionButton({
+  onDownload,
+  className,
+  showLabel = false,
+  label,
+  persistenceKey,
+}: {
+  onDownload: () => Promise<DownloadActionResult>;
+  className: string;
+  showLabel?: boolean;
+  label?: string;
+  persistenceKey?: string;
+}) {
+  const [downloadedFile, setDownloadedFile] = useState<DownloadedFile | null>(() => getStoredDownloadedFile(persistenceKey));
+  const [status, setStatus] = useState<DownloadStatusValue>(() => downloadedFile?.filePath ? 'downloaded' : 'idle');
+  const filePath = downloadedFile?.filePath;
+  const buttonLabel = status === 'idle' && label ? label : getDownloadStatusLabel(status, Boolean(filePath));
+
+  useEffect(() => {
+    const storedDownloadedFile = getStoredDownloadedFile(persistenceKey);
+    const storedFilePath = storedDownloadedFile?.filePath;
+
+    if (!storedFilePath) {
+      return;
+    }
+
+    const validatedStoredFilePath: string = storedFilePath;
+    let isCancelled = false;
+
+    async function validateStoredDownloadedFile() {
+      const exists = window.vectorFile?.existsPath ? await window.vectorFile.existsPath(validatedStoredFilePath) : true;
+
+      if (isCancelled) {
+        return;
+      }
+
+      if (exists) {
+        setDownloadedFile(storedDownloadedFile);
+        setStatus('downloaded');
+        return;
+      }
+
+      forgetDownloadedFile(persistenceKey);
+      setDownloadedFile(null);
+      setStatus('idle');
+    }
+
+    void validateStoredDownloadedFile();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [persistenceKey]);
+
+  async function handleDownloadClick(event: MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation();
+
+    if (status === 'downloading') {
+      return;
+    }
+
+    if (status === 'downloaded' && filePath && window.vectorFile?.openPath) {
+      await window.vectorFile.openPath(filePath);
+      return;
+    }
+
+    setStatus('downloading');
+    setDownloadedFile(null);
+
+    try {
+      const result = await onDownload();
+      setDownloadedFile(result ?? null);
+      rememberDownloadedFile(persistenceKey, result);
+      setStatus('downloaded');
+    }
+    catch {
+      setStatus('failed');
+    }
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <button
+        type="button"
+        onClick={handleDownloadClick}
+        disabled={status === 'downloading'}
+        className={className}
+        title={buttonLabel}
+      >
+        {getDownloadIcon(status)}
+        {showLabel && <span>{buttonLabel}</span>}
+      </button>
+      {status === 'downloaded' && filePath && window.vectorFile?.showInFolder && (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            void window.vectorFile?.showInFolder?.(filePath);
+          }}
+          className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] text-zinc-200 transition hover:bg-white/[0.09]"
+          title="Показать в папке"
+        >
+          <FolderOpen size={15} />
+        </button>
+      )}
+    </span>
+  );
+}
+
 export function ImageAttachmentPreview({
   attachment,
   onDownload,
 }: {
   attachment: FileAttachmentMessageContent;
-  onDownload: (attachment: FileAttachmentMessageContent) => Promise<void>;
+  onDownload: (attachment: FileAttachmentMessageContent) => Promise<DownloadActionResult>;
 }) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(() => imagePreviewUrlCache.get(buildPreviewCacheKey(attachment)) ?? null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(!previewUrl);
@@ -131,16 +257,12 @@ export function ImageAttachmentPreview({
           onClick={() => setIsViewerOpen(false)}
         >
           <div className="absolute right-5 top-5 flex gap-2">
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                void onDownload(attachment);
-              }}
-              className="rounded-2xl border border-white/10 bg-white/[0.08] px-4 py-2 text-sm font-medium text-white transition hover:bg-white/[0.14]"
-            >
-              Скачать
-            </button>
+            <DownloadActionButton
+              onDownload={() => onDownload(attachment)}
+              persistenceKey={createMediaDownloadPersistenceKey(attachment.mediaFileId)}
+              showLabel
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.08] px-4 text-sm font-medium text-white transition hover:bg-white/[0.14] disabled:cursor-wait disabled:opacity-70"
+            />
             <button
               type="button"
               onClick={(event) => {
@@ -172,7 +294,7 @@ export function DocumentAttachmentPreview({
 }: {
   attachment: DocumentAttachmentMessageContent;
   isOwnMessage: boolean;
-  onDownload: (attachment: DocumentAttachmentMessageContent) => Promise<void>;
+  onDownload: (attachment: DocumentAttachmentMessageContent) => Promise<DownloadActionResult>;
 }) {
   return (
     <div className="min-w-[280px] max-w-[380px]">
@@ -186,14 +308,11 @@ export function DocumentAttachmentPreview({
             {formatFileSize(attachment.sizeBytes)} • защищённый документ
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => void onDownload(attachment)}
-          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition ${isOwnMessage ? 'bg-white/15 hover:bg-white/25' : 'bg-white/[0.06] hover:bg-white/[0.1]'}`}
-          title="Скачать и расшифровать"
-        >
-          <Download size={17} />
-        </button>
+        <DownloadActionButton
+          onDownload={() => onDownload(attachment)}
+          persistenceKey={createMediaDownloadPersistenceKey(attachment.mediaFileId)}
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition ${isOwnMessage ? 'bg-white/15 hover:bg-white/25' : 'bg-white/[0.06] hover:bg-white/[0.1]'} disabled:cursor-wait disabled:opacity-70`}
+        />
       </div>
     </div>
   );

@@ -1,9 +1,10 @@
 import type { MutableRefObject, RefObject } from 'react';
-import { ArrowDown, Check, CheckCheck, Download, FileText } from 'lucide-react';
+import { ArrowDown, Check, CheckCheck, FileText } from 'lucide-react';
 import { getAccountDisplayName } from '../../../../shared/lib/profile';
 import { formatFileSize, parseDocumentAttachmentMessageContent, parseFileAttachmentMessageContent } from '../../../media/lib/fileCrypto';
-import { DocumentAttachmentPreview, ImageAttachmentPreview } from '../MessageAttachments';
+import { DocumentAttachmentPreview, DownloadActionButton, ImageAttachmentPreview } from '../MessageAttachments';
 import type { ChatResponseDto, DocumentAttachmentMessageContent, FileAttachmentMessageContent, MessageResponseDto, ProfileResponseDto } from '../../../../shared/types/api';
+import { createMediaDownloadPersistenceKey, type DownloadActionResult } from '../../../media/lib/downloadState';
 import {
   ForwardedMessageCard,
   ReplyReferenceBlock,
@@ -40,7 +41,7 @@ type MessageTimelineProps = {
   onJumpToBottom: () => void;
   onOpenMessageContextMenu: (event: React.MouseEvent<HTMLElement>, messageId: string) => void;
   onScrollToMessage: (messageId: string) => void;
-  onDownloadAttachment: (attachment: FileAttachmentMessageContent | DocumentAttachmentMessageContent) => Promise<void>;
+  onDownloadAttachment: (attachment: FileAttachmentMessageContent | DocumentAttachmentMessageContent) => Promise<DownloadActionResult>;
   onOpenProfile: (accountId: string) => void;
   onSetReadDetailsMessageId: (messageId: string | null) => void;
   onSetMessageReaction: (messageId: string, emoji: string) => void;
@@ -377,7 +378,7 @@ function ForwardSelectButton({ isForwardSelected, onClick }: { isForwardSelected
   );
 }
 
-function FileAttachmentBlock({ attachment, isOwnMessage, onDownload }: { attachment: FileAttachmentMessageContent; isOwnMessage: boolean; onDownload: (attachment: FileAttachmentMessageContent) => Promise<void> }) {
+function FileAttachmentBlock({ attachment, isOwnMessage, onDownload }: { attachment: FileAttachmentMessageContent; isOwnMessage: boolean; onDownload: (attachment: FileAttachmentMessageContent) => Promise<DownloadActionResult> }) {
   return (
     <div className="min-w-[240px] max-w-[360px]">
       <div className={`flex items-center gap-3 rounded-2xl border p-3 ${isOwnMessage ? 'border-white/20 bg-white/10' : 'border-white/10 bg-black/15'}`}>
@@ -390,17 +391,11 @@ function FileAttachmentBlock({ attachment, isOwnMessage, onDownload }: { attachm
             {formatFileSize(attachment.sizeBytes)} • защищённый файл
           </div>
         </div>
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onDownload(attachment);
-          }}
-          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition ${isOwnMessage ? 'bg-white/15 hover:bg-white/25' : 'bg-white/[0.06] hover:bg-white/[0.1]'}`}
-          title="Скачать"
-        >
-          <Download size={17} />
-        </button>
+        <DownloadActionButton
+          onDownload={() => onDownload(attachment)}
+          persistenceKey={createMediaDownloadPersistenceKey(attachment.mediaFileId)}
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition ${isOwnMessage ? 'bg-white/15 hover:bg-white/25' : 'bg-white/[0.06] hover:bg-white/[0.1]'} disabled:cursor-wait disabled:opacity-70`}
+        />
       </div>
     </div>
   );
