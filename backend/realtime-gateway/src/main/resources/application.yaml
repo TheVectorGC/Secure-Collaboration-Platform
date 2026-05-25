@@ -36,7 +36,7 @@ application:
       key-name: ${JWT_KEY_NAME:identity-service-jwt-ed25519}
   websocket:
     endpoint: ${WEBSOCKET_ENDPOINT:/ws}
-    allowed-origins: ${WEBSOCKET_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
+    allowed-origins: ${WEBSOCKET_ALLOWED_ORIGINS:*}
   kafka:
     topics:
       messaging-events: ${MESSAGING_EVENTS_TOPIC:messaging.events}

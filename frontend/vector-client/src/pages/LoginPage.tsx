@@ -8,6 +8,7 @@ import { prepareAccountBackupUnlockKey } from '../features/crypto/lib/accountBac
 import { clientLogger } from '../shared/lib/clientLogger';
 import { GlowButton } from '../shared/ui/GlowButton';
 import { TextInput } from '../shared/ui/TextInput';
+import { VectorTitle } from '../shared/ui/VectorTitle';
 
 const LOGIN_FEATURES = [
   {
@@ -132,13 +133,8 @@ export function LoginPage() {
           </div>
 
           <div className="mt-24 max-w-2xl">
-            <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-3xl bg-gradient-to-br from-violet-500 to-fuchsia-500 shadow-2xl shadow-violet-950/40">
-              <MessageCircle size={32} />
-            </div>
-            <h1 className="text-6xl font-semibold tracking-tight text-zinc-50">
-              Vector
-            </h1>
-            <p className="mt-6 text-xl leading-8 text-zinc-400">
+            <VectorTitle variant="login" />
+            <p className="mt-8 max-w-xl text-xl leading-8 text-zinc-400">
               Защищённое пространство для рабочих диалогов, групп и документов.
             </p>
           </div>
@@ -171,6 +167,8 @@ export function LoginPage() {
           onSubmit={handleSubmit}
           className="w-full max-w-md rounded-[2rem] border border-white/10 bg-[#191a1f]/92 p-8 shadow-2xl shadow-black/40 backdrop-blur-xl"
         >
+          <VectorTitle variant="mobile" className="mb-8 lg:hidden" />
+
           <div className="mb-8 flex items-start justify-between gap-4">
             <div>
               <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/[0.06] text-violet-300">

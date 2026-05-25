@@ -72,7 +72,25 @@
         "dir"
       ],
       "icon": "resources/icon.ico",
-      "executableName": "Vector"      
-    }
+      "executableName": "Vector"
+    },
+    "extraResources": [
+      {
+        "from": "resources/icon.ico",
+        "to": "icon.ico"
+      },
+      {
+        "from": "resources/icon.png",
+        "to": "icon.png"
+      },
+      {
+        "from": "resources/icon.ico",
+        "to": "resources/icon.ico"
+      },
+      {
+        "from": "resources/icon.png",
+        "to": "resources/icon.png"
+      }
+    ]
   }
 }

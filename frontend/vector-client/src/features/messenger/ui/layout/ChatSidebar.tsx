@@ -57,11 +57,8 @@ export function ChatSidebar({
   return (
     <aside className="vector-panel relative z-10 flex w-[398px] shrink-0 flex-col border-y-0 border-l-0 shadow-2xl shadow-black/35">
       <div className="border-b border-white/10 p-5">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-violet-300/70">VECTOR</div>
-            <div className="mt-1 text-2xl font-semibold tracking-tight text-zinc-50">Чаты</div>
-          </div>
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <div className="text-2xl font-semibold tracking-tight text-zinc-50">Чаты</div>
 
           <div className="flex items-center gap-2">
             <button
