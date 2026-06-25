@@ -14,6 +14,7 @@ release
 out
 *.local
 *.zip
+audit.json
 
 # Build artifacts
 *.exe

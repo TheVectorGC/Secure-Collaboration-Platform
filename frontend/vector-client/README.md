@@ -107,15 +107,15 @@ npm run installer:clean
 
 ## Запуск в режиме разработки через VS Code
 
-Открой папку `frontend/vector-client` в VS Code.
+Откройте папку `frontend/vector-client` в VS Code.
 
-В первом терминале запусти Vite:
+В первом терминале запустите Vite:
 
 ```powershell
 npm run dev
 ```
 
-Во втором терминале запусти Electron:
+Во втором терминале запустите Electron:
 
 ```powershell
 npm run electron
@@ -128,108 +128,6 @@ npm run dev:electron
 ```
 
 Если Electron открыл экран с сообщением, что Vite dev-server не запущен, значит `npm run electron` был запущен раньше, чем поднялся Vite, или порт `5173` недоступен.
-
-## Запуск отдельных профилей в режиме разработки
-
-Для тестирования multi-device на одном компьютере используются разные Electron-профили. Каждый профиль имеет отдельную папку `userData`, отдельное локальное crypto-хранилище, отдельные ключи и отдельную сессию.
-
-Запуск профиля администратора:
-
-```powershell
-npm run electron:admin
-```
-
-Запуск профиля Ивана:
-
-```powershell
-npm run electron:ivan
-```
-
-Запуск профиля Петра:
-
-```powershell
-npm run electron:petr
-```
-
-Эти команды используют переменную окружения `VECTOR_PROFILE`:
-
-- `admin-device`
-- `ivan-device`
-- `petr-device`
-
-На Windows данные профилей будут храниться примерно здесь:
-
-```text
-%APPDATA%\vector-client-admin-device
-%APPDATA%\vector-client-ivan-device
-%APPDATA%\vector-client-petr-device
-```
-
-Внутри каждого профиля есть своё локальное состояние приложения, включая crypto-данные.
-
-Важно: имя профиля не равно имени аккаунта. Например, можно войти аккаунтом `ivan` сразу в три профиля. Тогда это будет один аккаунт на трёх разных устройствах.
-
-## Обычный запуск без профиля
-
-Команда:
-
-```powershell
-npm run electron
-```
-
-запускает приложение без `VECTOR_PROFILE`. В этом случае используется обычный Electron userData-профиль приложения.
-
-В установленной версии обычный запуск через ярлык или `Vector.exe` тоже идёт без `VECTOR_PROFILE`.
-
-Обычная папка данных на Windows:
-
-```text
-%APPDATA%\Vector
-```
-
-## Локальные пользовательские данные
-
-Клиент использует Electron `app.getPath('userData')`. Внутри userData хранится локальное состояние, включая crypto-данные.
-
-Примерные пути:
-
-```text
-%APPDATA%\Vector
-%APPDATA%\vector-client-admin-device
-%APPDATA%\vector-client-ivan-device
-%APPDATA%\vector-client-petr-device
-```
-
-Папка `crypto` внутри профиля содержит локальные защищённые данные клиента. Не удаляй её без необходимости, если нужно сохранить устройство, ключи и сессию.
-
-Logout внутри приложения не должен удалять локальное устройство и ключи. Повторный login того же аккаунта в тот же профиль должен использовать существующее локальное устройство.
-
-## Проверка multi-device
-
-Для проверки одного аккаунта на нескольких устройствах:
-
-1. Запусти Vite:
-
-```powershell
-npm run dev
-```
-
-2. В разных терминалах запусти несколько профилей:
-
-```powershell
-npm run electron:admin
-npm run electron:ivan
-npm run electron:petr
-```
-
-3. Войди одним и тем же аккаунтом в несколько профилей.
-
-Каждый профиль будет отдельным устройством одного аккаунта.
-
-Для проверки нескольких аккаунтов:
-
-1. Запусти несколько профилей.
-2. Войди в них разными аккаунтами, например `admin`, `ivan`, `petr`.
 
 ## Сборка production frontend
 
@@ -244,27 +142,6 @@ dist
 ```
 
 В ней лежит production-версия React-приложения.
-
-## Сборка Windows-приложения без установщика
-
-```powershell
-npm run installer:clean
-npm run package:win
-```
-
-Результат:
-
-```text
-release\win-unpacked\Vector.exe
-```
-
-Проверять electron-builder-сборку можно напрямую запуском:
-
-```powershell
-.\release\win-unpacked\Vector.exe
-```
-
-Это нормальный способ быстро проверить production Electron build без установки через Inno Setup.
 
 ## Сборка Windows-установщика
 
@@ -298,60 +175,6 @@ VectorSetup-<version>.exe
 ```text
 VectorSetup-0.8.89.exe
 ```
-
-## Роль electron-builder и Inno Setup
-
-В проекте используются оба инструмента, но они отвечают за разные задачи.
-
-`electron-builder` собирает само Electron-приложение:
-
-```text
-release\win-unpacked\Vector.exe
-```
-
-`Inno Setup` создаёт установщик:
-
-```text
-release\VectorSetup-<version>.exe
-```
-
-В `electron-builder` используется target `dir`, поэтому он не создаёт свой NSIS-установщик. Это сделано специально, чтобы не было двух разных установщиков одновременно.
-
-## Запуск установленной версии с разными профилями
-
-После установки через `VectorSetup` обычный запуск через ярлык использует основной профиль:
-
-```text
-%APPDATA%\Vector
-```
-
-Для тестирования нескольких устройств можно запускать установленный `Vector.exe` с разными значениями `VECTOR_PROFILE`.
-
-Пример для PowerShell:
-
-```powershell
-$env:VECTOR_PROFILE="admin-device"
-& "$env:LOCALAPPDATA\Programs\Vector\Vector.exe"
-```
-
-```powershell
-$env:VECTOR_PROFILE="ivan-device"
-& "$env:LOCALAPPDATA\Programs\Vector\Vector.exe"
-```
-
-```powershell
-$env:VECTOR_PROFILE="petr-device"
-& "$env:LOCALAPPDATA\Programs\Vector\Vector.exe"
-```
-
-Если приложение установлено в `Program Files`, путь может быть таким:
-
-```powershell
-$env:VECTOR_PROFILE="admin-device"
-& "C:\Program Files\Vector\Vector.exe"
-```
-
-Для передачи проекта на тесты удобно использовать отдельные `.cmd` или `.ps1` запускатели, которые выставляют `VECTOR_PROFILE` и запускают установленный `Vector.exe`.
 
 ## Очистка пользовательских данных
 
